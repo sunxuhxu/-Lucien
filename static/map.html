@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>恋语�?· 交互地图</title>
+<style>
+  :root {
+    --purple: #7c3aed;
+    --purple-light: #a78bfa;
+    --pink: #db2777;
+    --bg: #f6f3fc;
+    --bg2: #faf8ff;
+    --panel: #ffffff;
+    --panel2: #f0eafb;
+    --line: rgba(124,58,237,.18);
+    --text: #2b2140;
+    --text-dim: #6f6785;
+    --gold: #b8863b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: grid; grid-template-rows: 56px 1fr;
+    grid-template-columns: 280px 1fr;
+    grid-template-areas: "header header" "list main";
+  }
+
+  /* ===== 顶栏 ===== */
+  header {
+    grid-area: header; display: flex; align-items: center; gap: 14px;
+    padding: 0 16px; background: rgba(255,255,255,.92);
+    border-bottom: 1px solid var(--line); z-index: 20; backdrop-filter: blur(10px);
+  }
+  .logo { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .logo .mark {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--purple), var(--pink));
+    font-size: 18px; box-shadow: 0 2px 12px rgba(124,58,237,.45);
+  }
+  .logo h1 { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+  .logo h1 small { display: block; font-size: 10px; color: var(--text-dim); font-weight: 400; letter-spacing: 2px; }
+  .search-box { position: relative; flex: 0 1 260px; }
+  .search-box input {
+    width: 100%; height: 34px; border-radius: 17px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); padding: 0 14px 0 34px; font-size: 13px; outline: none;
+    transition: border-color .2s;
+  }
+  .search-box input:focus { border-color: var(--purple); }
+  .search-box::before { content: "🔍"; position: absolute; left: 11px; top: 8px; font-size: 13px; opacity: .7; }
+  .filters { display: flex; gap: 6px; flex: 1; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--line);
+    background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer;
+    white-space: nowrap; transition: all .18s; user-select: none;
+  }
+  .chip:hover { border-color: var(--purple-light); color: var(--text); }
+  .chip.on { background: var(--purple); border-color: var(--purple); color: #fff; box-shadow: 0 2px 10px rgba(124,58,237,.4); }
+  .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .map-tools { display: flex; gap: 6px; }
+  .tool-btn {
+    width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); font-size: 15px; cursor: pointer; transition: all .15s;
+  }
+  .tool-btn:hover { background: var(--panel2); border-color: var(--purple); }
+
+  /* ===== 侧栏列表 ===== */
+  aside {
+    grid-area: list; background: var(--bg2); border-right: 1px solid var(--line);
+    overflow-y: auto; padding: 12px; z-index: 10;
+  }
+  aside::-webkit-scrollbar { width: 6px; }
+  aside::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .district-group { margin-bottom: 14px; }
+  .district-group h3 {
+    font-size: 12px; color: var(--text-dim); font-weight: 600; letter-spacing: 1px;
+    padding: 6px 8px; display: flex; align-items: center; gap: 7px;
+  }
+  .district-group h3 .bar { width: 4px; height: 12px; border-radius: 2px; }
+  .loc-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
+    cursor: pointer; transition: background .15s; border: 1px solid transparent;
+  }
+  .loc-item:hover { background: var(--panel); }
+  .loc-item.active { background: var(--panel2); border-color: var(--purple); }
+  .loc-item .ic {
+    width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+    font-size: 16px; flex-shrink: 0; background: rgba(124,58,237,.07);
+  }
+  .loc-item .info { min-width: 0; flex: 1; }
+  .loc-item .nm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loc-item .tp { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .loc-item .nm .xm { color: var(--purple-light); font-size: 10px; margin-left: 4px; }
+  .empty-tip { color: var(--text-dim); font-size: 12px; text-align: center; padding: 30px 0; }
+
+  /* ===== 主画布区 ===== */
+  main { grid-area: main; position: relative; overflow: hidden; background: #f3edfc; }
+  #map { position: absolute; inset: 0; cursor: grab; touch-action: none; }
+  #map.dragging { cursor: grabbing; }
+  #tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 30;
+    background: rgba(255,255,255,.96); border: 1px solid rgba(124,58,237,.3); border-radius: 10px;
+    padding: 8px 12px; font-size: 12px; max-width: 240px; backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(76,29,149,.16);
+  }
+  #tooltip .t-nm { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  #tooltip .t-ds { color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+  #tooltip .t-hint { color: var(--purple); margin-top: 4px; font-size: 10px; }
+
+  /* 图例 */
+  #legend {
+    position: absolute; left: 12px; bottom: 12px; z-index: 15;
+    background: rgba(255,255,255,.9); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 12px; font-size: 11px; color: var(--text-dim); backdrop-filter: blur(6px);
+    box-shadow: 0 6px 20px rgba(76,29,149,.1);
+  }
+  #legend .row { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+  #legend .sw { width: 14px; height: 10px; border-radius: 3px; }
+  #legend .lg-title { color: var(--text); font-weight: 600; margin-bottom: 4px; font-size: 11px; }
+  #legend .sep { height: 1px; background: var(--line); margin: 6px 0; }
+
+  /* 详情面板 */
+  #detail {
+    position: absolute; right: 12px; top: 12px; bottom: 12px; width: 320px; max-width: calc(100% - 24px);
+    z-index: 25; background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 16px;
+    backdrop-filter: blur(10px); transform: translateX(360px); opacity: 0;
+    transition: transform .32s cubic-bezier(.22,1,.36,1), opacity .32s;
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 12px 40px rgba(76,29,149,.2);
+  }
+  #detail.open { transform: translateX(0); opacity: 1; }
+  .d-head {
+    padding: 16px; background: linear-gradient(135deg, rgba(124,58,237,.12), rgba(219,39,119,.08));
+    border-bottom: 1px solid var(--line); position: relative;
+  }
+  .d-close {
+    position: absolute; right: 10px; top: 10px; width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid var(--line); background: rgba(124,58,237,.07); color: var(--text);
+    font-size: 14px; cursor: pointer; line-height: 1; z-index: 5;
+  }
+  .d-close:hover { background: var(--pink); border-color: var(--pink); color: #fff; }
+  .d-icon {
+    width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+    font-size: 26px; background: rgba(124,58,237,.07); border: 1px solid rgba(124,58,237,.16); margin-bottom: 10px;
+  }
+  .d-name { font-size: 18px; font-weight: 700; }
+  .d-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .badge {
+    font-size: 10px; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--line);
+    color: var(--text-dim); background: rgba(124,58,237,.05);
+  }
+  .badge.char { color: #fff; font-weight: 600; }
+  .d-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
+  .d-body::-webkit-scrollbar { width: 6px; }
+  .d-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .d-sec { font-size: 11px; color: var(--purple-light); font-weight: 700; letter-spacing: 2px; margin: 4px 0 7px; }
+  .d-desc { font-size: 13px; line-height: 1.8; color: var(--text); }
+  .d-memory {
+    margin-top: 16px; padding: 13px 15px; border-radius: 12px; position: relative;
+    background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(219,39,119,.10));
+    border: 1px solid rgba(124,58,237,.4);
+  }
+  .d-memory::before { content: "�?; position: absolute; left: 12px; top: 6px; font-size: 20px; color: var(--purple-light); opacity: .8; }
+  .d-memory p { font-size: 13px; line-height: 1.85; color: #4a3f68; padding-left: 18px; font-style: italic; }
+  .d-memory .src { display: block; text-align: right; font-size: 10px; color: var(--text-dim); margin-top: 8px; font-style: normal; }
+  .d-coord { margin-top: 14px; font-size: 10px; color: var(--text-dim); font-family: Consolas, monospace; }
+  .d-goto {
+    margin: 4px 16px 16px; height: 38px; border-radius: 11px; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--purple), var(--pink)); color: #fff;
+    font-size: 13px; font-weight: 600; letter-spacing: 2px; transition: filter .15s;
+  }
+  .d-goto:hover { filter: brightness(1.15); }
+
+  /* 移动�?*/
+  @media (max-width: 860px) {
+    body { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
+    aside { position: fixed; left: 0; top: 56px; bottom: 0; width: 260px; transform: translateX(-100%); transition: transform .28s; }
+    aside.show { transform: translateX(0); box-shadow: 8px 0 30px rgba(76,29,149,.2); }
+    .tool-btn.menu { display: block !important; }
+    .search-box { flex: 0 1 130px; }
+    .logo h1 small { display: none; }
+    #detail { width: calc(100% - 24px); }
+    #legend { display: none; }
+  }
+  .tool-btn.menu { display: none; }
+</style>
+<style>
+/* ===== 换背景图：全局浮动按钮 + 面板（每页独立） ===== */
+.lucien-bg-layer,
+#bgLayer{
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:var(--lucien-bg-opacity,.22);
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.lucien-bg-fab{
+  position:fixed;
+  left:18px;
+  bottom:18px;
+  z-index:9990;
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  border:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  line-height:1;
+  color:#fff;
+  background:linear-gradient(135deg,#7c3aed,#db2777);
+  box-shadow:0 6px 18px rgba(124,58,237,.4);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.lucien-bg-fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(124,58,237,.5)}
+.lucien-bg-fab:active{transform:scale(.94)}
+.lucien-bg-panel{
+  position:fixed;
+  left:18px;
+  bottom:74px;
+  z-index:9991;
+  width:264px;
+  max-width:calc(100vw - 36px);
+  box-sizing:border-box;
+  background:rgba(255,255,255,.97);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+  border:1px solid rgba(124,58,237,.2);
+  border-radius:16px;
+  box-shadow:0 14px 40px rgba(43,33,64,.22);
+  padding:14px 14px 12px;
+  display:none;
+  font-family:var(--font-sans,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif);
+}
+.lucien-bg-panel.open{display:block;animation:lbg-in .2s ease}
+@keyframes lbg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lucien-bg-panel h4{margin:0 0 10px;font-size:14px;color:#312a4a;font-weight:700}
+.lbg-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.lbg-row label{font-size:12px;color:#6f6785;flex-shrink:0}
+.lbg-row input[type=range]{flex:1;min-width:0}
+.lbg-val{font-size:11px;color:#7c3aed;min-width:34px;text-align:right;flex-shrink:0}
+.lbg-acts{display:flex;gap:8px;margin-top:10px}
+.lbg-btn{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer;transition:filter .15s ease}
+.lbg-btn:hover{filter:brightness(1.05)}
+.lbg-upload{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff}
+.lbg-reset{background:rgba(124,58,237,.08);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
+.lbg-tip{font-size:10.5px;color:#9a92ad;margin-top:8px;line-height:1.5}
+.lbg-file{display:none}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="mark">🦋</div>
+    <h1>恋语�?· 交互地图<small>LIANYU CITY INTERACTIVE MAP</small></h1>
+  </div>
+  <div class="search-box"><input id="search" type="text" placeholder="搜索地点 / 角色 / 标签�?></div>
+  <div class="filters" id="filters"></div>
+  <div class="map-tools">
+    <button class="tool-btn menu" id="btnMenu" title="地点列表">�?/button>
+    <button class="tool-btn" id="btnZoomIn" title="放大">�?/button>
+    <button class="tool-btn" id="btnZoomOut" title="缩小">�?/button>
+    <button class="tool-btn" id="btnReset" title="复位">�?/button>
+  </div>
+</header>
+
+<aside id="listPanel"></aside>
+
+<main>
+  <canvas id="map"></canvas>
+  <div id="tooltip"></div>
+  <div id="legend"></div>
+  <section id="detail"></section>
+</main>
+
+<script>
+(function () {
+'use strict';
+
+/* ===== 数据与常�?===== */
+var MAP_TILES = 144;                       // �?world-data.js 一致的 tile 坐标�?var CHAR_COLOR = { '许墨': '#7c3aed', '李泽言': '#dc2626', '白起': '#2563eb', '周棋�?: '#d97706', '凌肖': '#059669', '女主': '#db2777' };
+var TYPE_NAME = { build: '建筑', area: '区域', mark: '地标', street: '街道' };
+
+var DATA = null, LOCATIONS = [], DISTRICTS = {};
+var activeLoc = null, hoverLoc = null;
+var visibleIds = null;                     // 筛选结果（null = 全部�?var selDistricts = new Set(), selChars = new Set(), keyword = '';
+
+/* ===== 许墨 · 实时角色�?===== */
+var XUMO = {
+  name: '许墨', color: '#7c3aed', icon: '🧪',
+  schedule: [
+    { h: 0,  loc: 'xumo-lab',     act: '深夜 · 研究所的灯还亮着',   mood: '专注' },
+    { h: 5,  loc: 'xumo-home',    act: '清晨 · 在教工公寓小�?,     mood: '平静' },
+    { h: 8,  loc: 'xumo-lab',     act: '上午 · 在实验室做研�?,     mood: '平静' },
+    { h: 12, loc: 'lianyu-univ',  act: '午间 · 在恋语大学授�?,     mood: '从容' },
+    { h: 14, loc: 'xumo-lab',     act: '下午 · 在实验室整理数据',   mood: '从容' },
+    { h: 18, loc: 'chaowen-cafe', act: '傍晚 · 在街角咖啡馆看书',   mood: '温柔' }
+  ],
+  quotes: [
+    '「咖啡店外带的热美式，和他喝的同款。」——黑咖啡，不加糖不加奶�?,
+    '「没关系，就算我的讲座很催眠，能让你好好睡一觉，也很好。�?,
+    '「还没有（忙完），但偶尔也需要好好休息一下。和你一起，就是最好的休息。�?,
+    '「进去吧，吃的喝的我都买好了。」——你一心只想着爆米花，其实他早就到了�?,
+    '帮迷路的老奶奶指路后，身后传来他的声音：「我倒是觉得刚刚的老奶奶说得很对。�?
+  ]
+};
+var xmAvatar = new Image(), xmAvatarOk = false;
+xmAvatar.onload = function () { xmAvatarOk = true; draw(); renderList(); };
+xmAvatar.src = '/avatar?v=3';
+var xmLast = { slot: -1, x: 0, y: 0 }, xmWalk = null, xmActive = false;
+var CHAR_HIT = { __char: true, icon: '🧪', name: '许墨', desc: '', relatedTo: ['许墨'] };
+
+function locById(id) { for (var i = 0; i < LOCATIONS.length; i++) if (LOCATIONS[i].id === id) return LOCATIONS[i]; return null; }
+function xumoSlotIdx(h) { var idx = 0; for (var i = 0; i < XUMO.schedule.length; i++) if (h >= XUMO.schedule[i].h) idx = i; return idx; }
+function xumoAnchor(slot) {
+  var L = locById(XUMO.schedule[slot].loc);
+  var cx = L ? L.x + L.w / 2 : 84, cy = L ? L.y + L.h / 2 : 68;
+  var t = Date.now();
+  var ax = L ? Math.min(1.4, (L.w - 1) / 2) : .8, ay = L ? Math.min(1.0, (L.h - 1) / 2) : .6;
+  return { x: cx + Math.sin(t * 0.00011) * ax, y: cy + Math.cos(t * 0.00007) * ay, L: L };
+}
+function xumoPos() {
+  var d = new Date(), h = d.getHours() + d.getMinutes() / 60;
+  var slot = xumoSlotIdx(h), a = xumoAnchor(slot);
+  if (slot !== xmLast.slot) {           // 日程切换：从原地慢慢走向下一�?    if (xmLast.slot >= 0 && xmLast.x) xmWalk = { x0: xmLast.x, y0: xmLast.y, t0: Date.now() };
+    xmLast.slot = slot;
+  }
+  var x = a.x, y = a.y;
+  if (xmWalk) {
+    var k = Math.min(1, (Date.now() - xmWalk.t0) / 25000), e = k * k * (3 - 2 * k);
+    x = xmWalk.x0 + (a.x - xmWalk.x0) * e; y = xmWalk.y0 + (a.y - xmWalk.y0) * e;
+    if (k >= 1) xmWalk = null;
+  }
+  xmLast.x = x; xmLast.y = y;
+  return { x: x, y: y, slot: slot, loc: a.L };
+}
+function charDimmed(p) {
+  if (p.loc && selDistricts.size && !selDistricts.has(p.loc.district)) return true;
+  if (selChars.size && !selChars.has(XUMO.name)) return true;
+  if (keyword) {
+    var hay = (XUMO.name + '|许教授|' + XUMO.schedule[p.slot].act + '|' + (p.loc ? p.loc.name : '')).toLowerCase();
+    if (hay.indexOf(keyword) < 0) return true;
+  }
+  return false;
+}
+
+/* ===== 画布与相�?===== */
+var canvas = document.getElementById('map');
+var ctx = canvas.getContext('2d');
+var cam = { x: 0, y: 0, scale: 5 };        // 视口左上角的世界坐标 + �?tile 像素
+var dpr = Math.max(1, window.devicePixelRatio || 1);
+
+function resize() {
+  var r = canvas.parentElement.getBoundingClientRect();
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function resetView() {
+  var w = canvas.width / dpr, h = canvas.height / dpr;
+  var pad = 1.12;
+  cam.scale = Math.min(w, h) / MAP_TILES * pad;
+  cam.x = MAP_TILES / 2 - w / 2 / cam.scale;
+  cam.y = MAP_TILES / 2 - h / 2 / cam.scale;
+  draw();
+}
+
+/* 世界坐标 �?屏幕坐标 */
+function wx(x) { return (x - cam.x) * cam.scale; }
+function wy(y) { return (y - cam.y) * cam.scale; }
+
+/* ===== 渲染 ===== */
+function draw() {
+  var w = canvas.width / dpr, h = canvas.height / dpr;
+  ctx.save(); ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  /* 底色渐变（晨光恋语市·浅紫白） */
+  var bg = ctx.createRadialGradient(w * .5, h * .42, 60, w * .5, h * .5, Math.max(w, h) * .75);
+  bg.addColorStop(0, '#fbf9ff'); bg.addColorStop(1, '#ece5f9');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+
+  /* 网格 */
+  if (cam.scale > 3.2) {
+    ctx.strokeStyle = 'rgba(124,58,237,.08)'; ctx.lineWidth = 1;
+    var startTX = Math.floor(cam.x), endTX = Math.ceil(cam.x + w / cam.scale);
+    var startTY = Math.floor(cam.y), endTY = Math.ceil(cam.y + h / cam.scale);
+    ctx.beginPath();
+    for (var gx = startTX; gx <= endTX; gx++) { ctx.moveTo(wx(gx), 0); ctx.lineTo(wx(gx), h); }
+    for (var gy = startTY; gy <= endTY; gy++) { ctx.moveTo(0, wy(gy)); ctx.lineTo(w, wy(gy)); }
+    ctx.stroke();
+  }
+
+  if (!DATA) { ctx.restore(); return; }
+
+  /* 分区底色块（按该分区全部地点的包围盒外扩�?*/
+  var distBoxes = {};
+  LOCATIONS.forEach(function (L) {
+    var d = distBoxes[L.district];
+    if (!d) d = distBoxes[L.district] = { x0: L.x, y0: L.y, x1: L.x + L.w, y1: L.y + L.h };
+    d.x0 = Math.min(d.x0, L.x); d.y0 = Math.min(d.y0, L.y);
+    d.x1 = Math.max(d.x1, L.x + L.w); d.y1 = Math.max(d.y1, L.y + L.h);
+  });
+  Object.keys(distBoxes).forEach(function (did) {
+    if (selDistricts.size && !selDistricts.has(did)) return;
+    var b = distBoxes[did], D = DISTRICTS[did]; if (!D) return;
+    var px = wx(b.x0 - 2.2), py = wy(b.y0 - 2.2);
+    var pw = (b.x1 - b.x0 + 4.4) * cam.scale, ph = (b.y1 - b.y0 + 4.4) * cam.scale;
+    var rad = Math.min(26, cam.scale * 3);
+    roundRect(px, py, pw, ph, rad);
+    ctx.fillStyle = hexA(D.color, 0.05); ctx.fill();
+    ctx.setLineDash([6, 6]); ctx.strokeStyle = hexA(D.color, 0.22); ctx.lineWidth = 1.2;
+    ctx.stroke(); ctx.setLineDash([]);
+    /* 分区名（大字水印�?*/
+    if (cam.scale > 3) {
+      ctx.font = '600 ' + Math.max(11, cam.scale * 1.6) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = hexA(D.color, 0.3); ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText(D.name, px + 10, py + 8);
+    }
+  });
+
+  /* 地点（先画大�?street/area，再�?build/mark�?*/
+  var order = { street: 0, area: 1, build: 2, mark: 3 };
+  var sorted = LOCATIONS.slice().sort(function (a, b) { return order[a.type] - order[b.type]; });
+  sorted.forEach(function (L) { drawLoc(L, false); });
+  if (hoverLoc && !hoverLoc.__char) drawLoc(hoverLoc, true);
+  if (activeLoc && !activeLoc.__char) drawLoc(activeLoc, true);
+
+  /* 许墨 · 实时角色标记 */
+  drawXumo();
+
+  /* 地图边界 */
+  ctx.strokeStyle = 'rgba(124,58,237,.3)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(wx(0), wy(0), MAP_TILES * cam.scale, MAP_TILES * cam.scale);
+  ctx.restore();
+}
+
+function drawLoc(L, highlight) {
+  var dimmed = visibleIds && !visibleIds.has(L.id);
+  var x = wx(L.x), y = wy(L.y), pw = L.w * cam.scale, ph = L.h * cam.scale;
+  var cx = x + pw / 2, cy = y + ph / 2;
+  var isXumo = L.relatedTo && L.relatedTo.indexOf('许墨') >= 0;
+  var alpha = dimmed ? 0.16 : 1;
+  ctx.globalAlpha = alpha;
+
+  if (L.type === 'street') {
+    roundRect(x, y, pw, ph, Math.min(8, ph / 2));
+    ctx.fillStyle = hexA(L.color, highlight ? 0.55 : 0.3); ctx.fill();
+    ctx.strokeStyle = hexA(L.color, 0.7); ctx.lineWidth = highlight ? 2.4 : 1.4; ctx.stroke();
+  } else if (L.type === 'area') {
+    roundRect(x, y, pw, ph, Math.min(20, cam.scale * 2.4));
+    var g = ctx.createLinearGradient(x, y, x, y + ph);
+    g.addColorStop(0, hexA(L.color, highlight ? 0.4 : 0.24));
+    g.addColorStop(1, hexA(L.color, 0.1));
+    ctx.fillStyle = g; ctx.fill();
+    ctx.setLineDash([7, 5]); ctx.strokeStyle = hexA(L.color, 0.75); ctx.lineWidth = highlight ? 2.4 : 1.4; ctx.stroke(); ctx.setLineDash([]);
+  } else if (L.type === 'build') {
+    if (isXumo && !dimmed) {  /* 许墨相关地点：紫色光�?*/
+      ctx.save(); ctx.shadowColor = 'rgba(124,58,237,.6)'; ctx.shadowBlur = highlight ? 26 : 14;
+      roundRect(x, y, pw, ph, 5); ctx.fillStyle = hexA(L.color, .95); ctx.fill(); ctx.restore();
+    } else {
+      roundRect(x, y, pw, ph, 5); ctx.fillStyle = hexA(L.color, .92); ctx.fill();
+    }
+    ctx.strokeStyle = highlight ? '#7c3aed' : 'rgba(255,255,255,.85)'; ctx.lineWidth = highlight ? 2.2 : 1; ctx.stroke();
+    /* 屋顶高光 */
+    roundRect(x + 2, y + 2, Math.max(2, pw - 4), Math.max(2, ph * .3), 3);
+    ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fill();
+  } else { /* mark */
+    var r = Math.max(7, cam.scale * 0.85);
+    if (isXumo && !dimmed) {
+      ctx.save(); ctx.shadowColor = 'rgba(124,58,237,.6)'; ctx.shadowBlur = highlight ? 24 : 12;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = hexA(L.color, .95); ctx.fill(); ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = hexA(L.color, .92); ctx.fill();
+    }
+    ctx.strokeStyle = highlight ? '#7c3aed' : 'rgba(255,255,255,.9)'; ctx.lineWidth = highlight ? 2.2 : 1.2; ctx.stroke();
+    /* 涟漪（激活时�?*/
+    if (L === activeLoc) {
+      var t = (Date.now() % 1600) / 1600;
+      ctx.beginPath(); ctx.arc(cx, cy, r + t * 22, 0, 7);
+      ctx.strokeStyle = hexA('#7c3aed', (1 - t) * .8); ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  /* 图标 */
+  var fs = L.type === 'mark' ? Math.max(11, cam.scale * .95) : Math.min(cam.scale * 1.15, 22);
+  if (fs >= 9) {
+    ctx.font = fs + 'px "Segoe UI Emoji","Apple Color Emoji",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(L.icon, cx, cy + 1);
+  }
+
+  /* 名称标签 */
+  if (cam.scale >= 4.6 || highlight) {
+    ctx.font = '600 11.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    var tw = ctx.measureText(L.name).width;
+    var ly = L.type === 'mark' ? cy + Math.max(7, cam.scale * .85) + 12 : y + ph + 9;
+    roundRect(cx - tw / 2 - 6, ly - 9, tw + 12, 18, 9);
+    ctx.fillStyle = 'rgba(255,255,255,.94)'; ctx.fill();
+    ctx.strokeStyle = highlight ? '#7c3aed' : hexA(L.color, .6); ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = highlight ? '#6d28d9' : '#4c1d95'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(L.name, cx, ly);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function roundRect(x, y, w, h, r) {
+  if (w < 2 || h < 2) { ctx.beginPath(); ctx.rect(x, y, w, h); return; }
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function hexA(hex, a) {
+  var n = parseInt(hex.slice(1), 16);
+  return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+
+/* ===== 许墨角色标记渲染 ===== */
+function drawXumo() {
+  if (!DATA) return;
+  var p = xumoPos();
+  var px = wx(p.x), py = wy(p.y);
+  var r = Math.max(9, cam.scale * 0.9);
+  ctx.globalAlpha = charDimmed(p) ? 0.15 : 1;
+
+  /* 柔光 + 心跳脉冲 */
+  var g = ctx.createRadialGradient(px, py, r * .3, px, py, r * 2.8);
+  g.addColorStop(0, 'rgba(124,58,237,.45)'); g.addColorStop(1, 'rgba(124,58,237,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, r * 2.8, 0, 7); ctx.fill();
+  var t = (Date.now() % 2200) / 2200;
+  ctx.beginPath(); ctx.arc(px, py, r + 3 + t * r * 1.4, 0, 7);
+  ctx.strokeStyle = hexA('#7c3aed', (1 - t) * .5); ctx.lineWidth = 2; ctx.stroke();
+
+  /* 头像（失败回退 🧪�?*/
+  ctx.beginPath(); ctx.arc(px, py, r, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(px, py, r - 1.5, 0, 7); ctx.clip();
+  if (xmAvatarOk) {
+    var s = Math.max((2 * (r - 1.5)) / xmAvatar.width, (2 * (r - 1.5)) / xmAvatar.height);
+    ctx.drawImage(xmAvatar, px - xmAvatar.width * s / 2, py - xmAvatar.height * s / 2, xmAvatar.width * s, xmAvatar.height * s);
+  } else {
+    ctx.font = Math.floor(r * 1.1) + 'px "Segoe UI Emoji","Apple Color Emoji",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(XUMO.icon, px, py + 1);
+  }
+  ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(124,58,237,.85)'; ctx.shadowBlur = xmActive ? 20 : 10;
+  ctx.beginPath(); ctx.arc(px, py, r, 0, 7);
+  ctx.strokeStyle = xmActive ? '#7c3aed' : '#fff'; ctx.lineWidth = 2.4; ctx.stroke(); ctx.restore();
+
+  /* 名牌 */
+  if (cam.scale >= 2.6 || xmActive || hoverLoc === CHAR_HIT) {
+    var label = XUMO.name + ' �?' + (p.loc ? p.loc.name : '恋语�?);
+    ctx.font = '600 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    var tw = ctx.measureText(label).width, ly = py + r + 15;
+    roundRect(px - tw / 2 - 6, ly - 9, tw + 12, 18, 9);
+    ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fill();
+    ctx.strokeStyle = (xmActive || hoverLoc === CHAR_HIT) ? '#7c3aed' : 'rgba(124,58,237,.55)';
+    ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = '#6d28d9'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, px, ly);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ===== 命中检测（小图元优先） ===== */
+function hitTest(px, py) {
+  var wxp = cam.x + px / cam.scale, wyp = cam.y + py / cam.scale;
+  /* 许墨的角色标记最优先（小图元�?*/
+  if (DATA) {
+    var p = xumoPos();
+    var rr = Math.max(12 / cam.scale, 1.0), dx = wxp - p.x, dy = wyp - p.y;
+    if (dx * dx + dy * dy <= rr * rr) {
+      CHAR_HIT.desc = XUMO.schedule[p.slot].act + '�? + (p.loc ? p.loc.name : '恋语�?) + '�?;
+      return CHAR_HIT;
+    }
+  }
+  var best = null, bestArea = 1e9;
+  LOCATIONS.forEach(function (L) {
+    var pad = L.type === 'mark' ? Math.max(10 / cam.scale, .8) : .25;
+    var hit = wxp >= L.x - pad && wxp <= L.x + L.w + pad && wyp >= L.y - pad && wyp <= L.y + L.h + pad;
+    if (hit) {
+      var area = (L.w + pad * 2) * (L.h + pad * 2);
+      var pri = { mark: 0, build: 1, street: 2, area: 3 }[L.type] * 1000;
+      var score = area + pri;
+      if (score < bestArea) { bestArea = score; best = L; }
+    }
+  });
+  return best;
+}
+
+/* ===== 交互：拖�?/ 缩放 / 悬停 / 点击 ===== */
+var dragging = false, moved = false, lastX = 0, lastY = 0;
+var pinch = null;
+
+function localPos(e) {
+  var r = canvas.getBoundingClientRect();
+  var t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+function onDown(e) {
+  if (e.touches && e.touches.length === 2) {
+    var a = e.touches[0], b = e.touches[1];
+    pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), scale: cam.scale };
+    return;
+  }
+  var p = localPos(e); dragging = true; moved = false; lastX = p.x; lastY = p.y;
+  canvas.classList.add('dragging');
+  if (!e.touches) e.preventDefault();
+}
+function onMove(e) {
+  var p = localPos(e);
+  if (pinch && e.touches && e.touches.length === 2) {
+    var a = e.touches[0], b = e.touches[1];
+    var d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, pinch.scale * d / pinch.d);
+    e.preventDefault(); return;
+  }
+  if (dragging) {
+    if (Math.abs(p.x - lastX) + Math.abs(p.y - lastY) > 3) moved = true;
+    cam.x -= (p.x - lastX) / cam.scale; cam.y -= (p.y - lastY) / cam.scale;
+    lastX = p.x; lastY = p.y;
+    hideTip(); draw();
+    if (e.cancelable) e.preventDefault();
+  } else if (!e.touches) {
+    var L = hitTest(p.x, p.y);
+    if (L !== hoverLoc) { hoverLoc = L; draw(); }
+    if (L) showTip(L, p.x, p.y); else hideTip();
+    canvas.style.cursor = L ? 'pointer' : 'grab';
+  }
+}
+/* 统一点击处理：命中地点→打开详情；空白→关闭详情 */
+function handleClick(px, py) {
+  var L = hitTest(px, py);
+  if (L && L.__char) { openXumoDetail(); return; }
+  if (L) openDetail(L);
+  else if (activeLoc) closeDetail();
+}
+var suppressClick = false;
+function onUp(e) {
+  if (dragging && e.touches && !moved) {          /* 触摸 tap：手动处理，抑制后续合成 click */
+    var p = { x: lastX, y: lastY };
+    suppressClick = true;
+    setTimeout(function () { suppressClick = false; }, 350);
+    handleClick(p.x, p.y);
+  }
+  dragging = false; pinch = null;
+  canvas.classList.remove('dragging');
+}
+/* 统一点击入口：挂 document 层，按坐标判定是否落在画布内（兼容各种事件派发方式） */
+document.addEventListener('click', function (e) {
+  if (moved) { moved = false; return; }             /* 刚拖拽完，忽�?*/
+  if (suppressClick) return;                        /* 触摸已处理，忽略合成 click */
+  /* 覆盖在画布上�?UI 不算画布点击 */
+  if (e.target && e.target.closest &&
+      (e.target.closest('#detail') || e.target.closest('#legend') || e.target.closest('#tooltip') ||
+       e.target.closest('header') || e.target.closest('aside'))) return;
+  var r = canvas.getBoundingClientRect();
+  var px = e.clientX - r.left, py = e.clientY - r.top;
+  if (px < 0 || py < 0 || px >= r.width || py >= r.height) return;   /* 画布�?*/
+  handleClick(px, py);
+}, false);
+/* Esc 关闭详情 */
+window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && activeLoc) closeDetail(); });
+function zoomAt(px, py, newScale) {
+  newScale = Math.max(2, Math.min(28, newScale));
+  var wxp = cam.x + px / cam.scale, wyp = cam.y + py / cam.scale;
+  cam.scale = newScale;
+  cam.x = wxp - px / cam.scale; cam.y = wyp - py / cam.scale;
+  draw();
+}
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+canvas.addEventListener('touchend', onUp);
+canvas.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  var p = localPos(e);
+  zoomAt(p.x, p.y, cam.scale * (e.deltaY < 0 ? 1.18 : 1 / 1.18));
+}, { passive: false });
+
+/* 渲染循环：涟�?+ 许墨实时位置/脉冲动画（轻量节流） */
+var lastFrame = 0;
+(function loop(now) {
+  if (DATA && now - lastFrame > 60) { lastFrame = now; draw(); }
+  requestAnimationFrame(loop);
+})(0);
+
+/* ===== Tooltip ===== */
+var tipEl = document.getElementById('tooltip');
+function showTip(L, px, py) {
+  var chars = (L.relatedTo || []).map(function (c) { return '<span style="color:' + (CHAR_COLOR[c] || '#fff') + '">' + c + '</span>'; }).join(' / ') || '�?;
+  tipEl.innerHTML =
+    '<div class="t-nm">' + L.icon + ' ' + L.name + '</div>' +
+    '<div class="t-ds">' + L.desc + '</div>' +
+    '<div class="t-hint">关联�? + chars + ' · 点击查看详情</div>';
+  tipEl.style.display = 'block';
+  var w = canvas.clientWidth, tw = tipEl.offsetWidth;
+  tipEl.style.left = Math.min(px + 16, w - tw - 8) + 'px';
+  tipEl.style.top = (py + 18) + 'px';
+}
+function hideTip() { tipEl.style.display = 'none'; }
+
+/* ===== 详情面板 ===== */
+var detailEl = document.getElementById('detail');
+function openDetail(L) {
+  xmActive = false;
+  activeLoc = L;
+  var D = DISTRICTS[L.district] || {};
+  var charBadges = (L.relatedTo || []).map(function (c) {
+    return '<span class="badge char" style="background:' + (CHAR_COLOR[c] || '#555') + '33;border-color:' + (CHAR_COLOR[c] || '#555') + '">' + c + '</span>';
+  }).join('');
+  var tagBadges = (L.tags || []).map(function (t) { return '<span class="badge">' + t + '</span>'; }).join('');
+  var districtBadge = D.name ? '<span class="badge" style="border-color:' + D.color + ';color:' + D.color + '">' + D.name + '</span>' : '';
+  detailEl.innerHTML =
+    '<div class="d-head">' +
+    '  <button class="d-close" id="dClose">�?/button>' +
+    '  <div class="d-icon" style="box-shadow:0 0 24px ' + hexA(L.color, .5) + '">' + L.icon + '</div>' +
+    '  <div class="d-name">' + L.name + '</div>' +
+    '  <div class="d-badges">' + districtBadge + '<span class="badge">' + (TYPE_NAME[L.type] || L.type) + '</span>' + tagBadges + charBadges + '</div>' +
+    '</div>' +
+    '<div class="d-body">' +
+    '  <div class="d-sec">�?�?�?�?/div>' +
+    '  <div class="d-desc">' + L.desc + '</div>' +
+    (L.memory ? '<div class="d-memory"><p>' + L.memory + '</p><span class="src">—�?恋语�?· 记忆碎片</span></div>' : '') +
+    '  <div class="d-coord">COORD: (' + L.x + ', ' + L.y + ') · ' + L.w + '×' + L.h + ' tiles</div>' +
+    '</div>' +
+    '<button class="d-goto" id="dGoto">�?定位到此地点</button>';
+  detailEl.classList.add('open');
+  document.getElementById('dClose').onclick = closeDetail;
+  document.getElementById('dGoto').onclick = function () { flyTo(L); };
+  renderList();
+}
+function closeDetail() { activeLoc = null; xmActive = false; detailEl.classList.remove('open'); draw(); renderList(); }
+
+/* ===== 许墨 · 实时动态卡�?===== */
+function openXumoDetail() {
+  var p = xumoPos(), slot = XUMO.schedule[p.slot];
+  var locName = p.loc ? p.loc.name : '恋语�?;
+  activeLoc = CHAR_HIT; xmActive = true; hoverLoc = null;
+  var now = new Date();
+  /* 今日行程 */
+  var rows = '';
+  for (var i = 0; i < XUMO.schedule.length; i++) {
+    var s = XUMO.schedule[i], h2 = (i + 1 < XUMO.schedule.length ? XUMO.schedule[i + 1].h : 24);
+    var cur = i === p.slot;
+    rows += '<div style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-radius:8px;margin-bottom:3px;' +
+      (cur ? 'background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.45)' : '') + '">' +
+      '<span style="font-family:Consolas,monospace;font-size:11px;color:var(--text-dim);min-width:88px">' +
+      ('0' + s.h).slice(-2) + ':00�? + ('0' + h2).slice(-2) + ':00</span>' +
+      '<span style="font-size:12px;' + (cur ? 'color:#6d28d9;font-weight:600' : '') + '">' + s.act + (cur ? ' ◀ 现在' : '') + '</span></div>';
+  }
+  var q = XUMO.quotes[now.getHours() % XUMO.quotes.length];
+  detailEl.innerHTML =
+    '<div class="d-head">' +
+    '  <button class="d-close" id="dClose">�?/button>' +
+    '  <div class="d-icon" style="padding:0;overflow:hidden"><img src="/avatar?v=3" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent=\'🧪\'"></div>' +
+    '  <div class="d-name">许墨</div>' +
+    '  <div class="d-badges"><span class="badge char" style="background:#7c3aed33;border-color:#7c3aed;color:#6d28d9">男主 · 实时位置</span>' +
+    '  <span class="badge">心情�? + slot.mood + '</span><span class="badge">' + locName + '</span></div>' +
+    '</div>' +
+    '<div class="d-body">' +
+    '  <div class="d-sec">�?�?�?�?/div>' +
+    '  <div class="d-desc">' + slot.act + '�?br>他就�?<b>' + locName + '</b> 附近——缩小地图找找那枚紫色的光点，去偶遇他吧�?/div>' +
+    '  <div class="d-sec" style="margin-top:14px">�?�?�?�?/div>' + rows +
+    '  <div class="d-memory"><p>' + q + '</p><span class="src">—�?恋语�?· 记忆碎片</span></div>' +
+    '  <div class="d-coord">COORD: (' + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ') · 更新�?' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + '</div>' +
+    '</div>' +
+    '<button class="d-goto" id="dGoto">�?定位到许�?/button>';
+  detailEl.classList.add('open');
+  document.getElementById('dClose').onclick = closeDetail;
+  document.getElementById('dGoto').onclick = function () { flyTo({ x: p.x - .5, y: p.y - .5, w: 1, h: 1 }); };
+  renderList();
+}
+
+/* ===== 定位飞行 ===== */
+var flyAnim = null;
+function flyTo(L) {
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  var targetScale = Math.max(cam.scale, 11);
+  var tx = L.x + L.w / 2 - w / 2 / targetScale;
+  var ty = L.y + L.h / 2 - h / 2 / targetScale;
+  var from = { x: cam.x, y: cam.y, s: cam.scale };
+  var t0 = performance.now(), dur = 650;
+  cancelAnimationFrame(flyAnim);
+  (function step(now) {
+    var t = Math.min(1, (now - t0) / dur);
+    var e = 1 - Math.pow(1 - t, 3);
+    cam.x = from.x + (tx - from.x) * e; cam.y = from.y + (ty - from.y) * e;
+    cam.scale = from.s + (targetScale - from.s) * e;
+    draw();
+    if (t < 1) flyAnim = requestAnimationFrame(step);
+  })(t0);
+}
+
+/* ===== 工具按钮 ===== */
+document.getElementById('btnZoomIn').onclick = function () { zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, cam.scale * 1.35); };
+document.getElementById('btnZoomOut').onclick = function () { zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, cam.scale / 1.35); };
+document.getElementById('btnReset').onclick = function () { closeDetail(); resetView(); };
+document.getElementById('btnMenu').onclick = function () { document.getElementById('listPanel').classList.toggle('show'); };
+
+/* ===== 筛�?===== */
+function applyFilter() {
+  if (!selDistricts.size && !selChars.size && !keyword) { visibleIds = null; }
+  else {
+    visibleIds = new Set();
+    LOCATIONS.forEach(function (L) {
+      if (selDistricts.size && !selDistricts.has(L.district)) return;
+      if (selChars.size) {
+        var ok = false;
+        (L.relatedTo || []).forEach(function (c) { if (selChars.has(c)) ok = true; });
+        if (!ok) return;
+      }
+      if (keyword) {
+        var hay = L.name + '|' + L.desc + '|' + L.type + '|' + (L.relatedTo || []).join(',') + '|' + (L.tags || []).join(',') + '|' + (DISTRICTS[L.district] || {}).name;
+        if (hay.toLowerCase().indexOf(keyword) < 0) return;
+      }
+      visibleIds.add(L.id);
+    });
+  }
+  draw(); renderList();
+}
+
+function buildFilters() {
+  var box = document.getElementById('filters');
+  var html = '';
+  Object.keys(DISTRICTS).forEach(function (id) {
+    var D = DISTRICTS[id];
+    html += '<button class="chip" data-district="' + id + '"><span class="dot" style="background:' + D.color + '"></span>' + D.name + '</button>';
+  });
+  html += '<span style="width:1px;height:18px;background:var(--line);margin:4px 2px"></span>';
+  Object.keys(CHAR_COLOR).forEach(function (c) {
+    html += '<button class="chip" data-char="' + c + '"><span class="dot" style="background:' + CHAR_COLOR[c] + '"></span>' + c + '</button>';
+  });
+  box.innerHTML = html;
+  box.querySelectorAll('.chip').forEach(function (chip) {
+    chip.onclick = function () {
+      chip.classList.toggle('on');
+      if (chip.dataset.district) {
+        chip.classList.contains('on') ? selDistricts.add(chip.dataset.district) : selDistricts.delete(chip.dataset.district);
+      } else {
+        chip.classList.contains('on') ? selChars.add(chip.dataset.char) : selChars.delete(chip.dataset.char);
+      }
+      applyFilter();
+    };
+  });
+}
+
+document.getElementById('search').addEventListener('input', function () {
+  keyword = this.value.trim().toLowerCase(); applyFilter();
+});
+
+/* ===== 侧栏列表 ===== */
+function renderList() {
+  var box = document.getElementById('listPanel');
+  var groups = {};
+  var shown = 0;
+  LOCATIONS.forEach(function (L) {
+    if (visibleIds && !visibleIds.has(L.id)) return;
+    (groups[L.district] = groups[L.district] || []).push(L); shown++;
+  });
+  var cp = xumoPos(), charVisible = !charDimmed(cp);
+  if (!shown && !charVisible) { box.innerHTML = '<div class="empty-tip">没有匹配的地�?/div>'; return; }
+  var html = '';
+  /* 许墨 · 实时置顶 */
+  if (charVisible) {
+    var cslot = XUMO.schedule[cp.slot];
+    html += '<div class="district-group"><h3><span class="bar" style="background:#7c3aed"></span>�?此刻 · 1</h3>' +
+      '<div class="loc-item' + (xmActive ? ' active' : '') + '" data-id="__xumo">' +
+      '<div class="ic" style="border:1px solid rgba(124,58,237,.55);overflow:hidden">' +
+      (xmAvatarOk ? '<img src="/avatar?v=3" style="width:100%;height:100%;object-fit:cover;display:block">' : XUMO.icon) + '</div>' +
+      '<div class="info"><div class="nm">' + XUMO.name + '<span class="xm">✦实�?/span></div>' +
+      '<div class="tp">' + cslot.act + '</div></div></div></div>';
+  }
+  Object.keys(DISTRICTS).forEach(function (did) {
+    var list = groups[did]; if (!list) return;
+    var D = DISTRICTS[did];
+    html += '<div class="district-group"><h3><span class="bar" style="background:' + D.color + '"></span>' + D.name + ' · ' + list.length + '</h3>';
+    list.forEach(function (L) {
+      var isXumo = (L.relatedTo || []).indexOf('许墨') >= 0;
+      html += '<div class="loc-item' + (activeLoc === L ? ' active' : '') + '" data-id="' + L.id + '">' +
+        '<div class="ic" style="border:1px solid ' + hexA(L.color, .5) + '">' + L.icon + '</div>' +
+        '<div class="info"><div class="nm">' + L.name + (isXumo ? '<span class="xm">✦许�?/span>' : '') + '</div>' +
+        '<div class="tp">' + (TYPE_NAME[L.type] || L.type) + ' · ' + ((L.relatedTo || [])[0] || '公共') + '</div></div></div>';
+    });
+    html += '</div>';
+  });
+  box.innerHTML = html;
+  box.querySelectorAll('.loc-item').forEach(function (item) {
+    item.onclick = function () {
+      if (item.dataset.id === '__xumo') {
+        var p = xumoPos();
+        openXumoDetail();
+        flyTo({ x: p.x - .5, y: p.y - .5, w: 1, h: 1 });
+        return;
+      }
+      var L = LOCATIONS.find(function (l) { return l.id === item.dataset.id; });
+      if (L) { openDetail(L); flyTo(L); }
+    };
+  });
+}
+
+/* ===== 图例 ===== */
+function buildLegend() {
+  var el = document.getElementById('legend');
+  var dRows = Object.keys(DISTRICTS).map(function (id) {
+    var D = DISTRICTS[id];
+    return '<div class="row"><span class="sw" style="background:' + D.color + '"></span>' + D.name + '</div>';
+  }).join('');
+  var cRows = Object.keys(CHAR_COLOR).map(function (c) {
+    return '<div class="row"><span class="sw" style="background:' + CHAR_COLOR[c] + ';border-radius:50%;width:10px;height:10px"></span>' + c + '</div>';
+  }).join('');
+  el.innerHTML = '<div class="lg-title">�?分区 / 角色</div>' + dRows + '<div class="sep"></div>' + cRows +
+    '<div class="sep"></div><div class="row"><span class="sw" style="background:#7c3aed;border-radius:50%;width:10px;height:10px;box-shadow:0 0 6px #7c3aed"></span>许墨 · 实时位置</div>';
+}
+
+/* ===== 加载数据 ===== */
+fetch('lianyu-map.json?v=2').then(function (r) { return r.json(); }).then(function (d) {
+  DATA = d;
+  LOCATIONS = d.locations;
+  d.districts.forEach(function (D) { DISTRICTS[D.id] = D; });
+  buildFilters(); buildLegend(); renderList();
+  resize(); resetView();
+}).catch(function (err) {
+  document.getElementById('listPanel').innerHTML = '<div class="empty-tip">数据加载失败�? + err + '<br>请确�?lianyu-map.json 与本页面同目�?/div>';
+});
+
+})();
+</script>
+<script>
+/* ===== 换背景图：每页独立的浮动按钮 ===== */
+(function () {
+  'use strict';
+
+  function pageKey() {
+    var p = location.pathname.split('/').pop();
+    if (!p || p === '') p = 'index';
+    p = p.replace(/\.html$/, '') || 'index';
+    return p;
+  }
+
+  var key = pageKey();
+  var IMG_KEY = 'lucien_bg_img_' + key;
+  var OP_KEY = 'lucien_bg_op_' + key;
+
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'bgLayer';
+    document.body.insertBefore(layer, document.body.firstChild);
+  }
+  layer.classList.add('lucien-bg-layer');
+
+  function applyOpacity(v) {
+    layer.style.setProperty('--lucien-bg-opacity', (v / 100).toString());
+    try { localStorage.setItem(OP_KEY, v.toString()); } catch (e) {}
+  }
+  function applyImg(dataUrl) {
+    layer.style.backgroundImage = dataUrl ? 'url(' + dataUrl + ')' : 'none';
+  }
+
+  // 构建 UI
+  var fab = document.createElement('button');
+  fab.className = 'lucien-bg-fab';
+  fab.type = 'button';
+  fab.title = '换背景图';
+  fab.setAttribute('aria-label', '换背景图');
+  fab.textContent = '🖼�?;
+
+  var panel = document.createElement('div');
+  panel.className = 'lucien-bg-panel';
+  panel.innerHTML =
+    '<h4>页面背景</h4>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
+    '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
+    '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
+    '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
+    '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
+    '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+
+  var opInput = panel.querySelector('#lbgOp');
+  var opVal = panel.querySelector('#lbgOpVal');
+  var fileInput = panel.querySelector('#lbgFile');
+
+  fab.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== fab) {
+      panel.classList.remove('open');
+    }
+  });
+  opInput.addEventListener('input', function () {
+    var v = parseInt(opInput.value, 10);
+    opVal.textContent = v + '%';
+    applyOpacity(v);
+  });
+  panel.querySelector('#lbgUpload').addEventListener('click', function () { fileInput.click(); });
+  panel.querySelector('#lbgReset').addEventListener('click', function () {
+    try { localStorage.removeItem(IMG_KEY); } catch (e) {}
+    applyImg(null);
+    panel.classList.remove('open');
+  });
+  fileInput.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { alert('图片不能超过 10MB'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max) {
+          var r = Math.min(max / w, max / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl;
+        try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        try { localStorage.setItem(IMG_KEY, dataUrl); }
+        catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
+        applyImg(dataUrl);
+      };
+      img.onerror = function () { alert('图片读取失败'); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  // 初始�?  try {
+    var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
+    if (isNaN(savedOp)) savedOp = 22;
+    opInput.value = savedOp;
+    opVal.textContent = savedOp + '%';
+    applyOpacity(savedOp);
+    var savedImg = localStorage.getItem(IMG_KEY);
+    if (savedImg) applyImg(savedImg);
+  } catch (e) {}
+})();
+
+</script>
+</body>
+</html>
+
+

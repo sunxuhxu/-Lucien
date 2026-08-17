@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>奇想功能�?· 许墨的颠覆性实验室</title>
+<style>
+:root{
+  --bg:#f3eefb;--elev:#ffffff;--card:#faf7fe;
+  --primary:#7c3aed;--primary-dim:#5b21b6;--accent:#8b5cf6;--pink:#db2777;
+  --text:#2b2140;--dim:#6f6785;--faint:#9a92ad;
+  --border:rgba(124,58,237,.14);--border-strong:rgba(124,58,237,.28);
+  --radius-lg:18px;--radius-md:12px;
+  --shadow-md:0 6px 24px rgba(76,29,149,.10);
+  --shadow-lg:0 16px 40px rgba(76,29,149,.14);
+  --dur-fast:.18s;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:70px;
+}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px}
+header{
+  text-align:center;padding:26px 0 8px;
+}
+header h1{font-size:22px;font-weight:700;color:var(--primary-dim);letter-spacing:1px}
+header p{font-size:12.5px;color:var(--dim);margin-top:6px}
+.tabs{
+  position:sticky;top:0;z-index:20;display:flex;gap:8px;overflow-x:auto;
+  background:rgba(243,238,251,.92);backdrop-filter:blur(8px);
+  padding:12px 2px;border-radius:0 0 14px 14px;margin-bottom:14px;
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex-shrink:0;display:flex;align-items:center;gap:6px;padding:9px 14px;
+  border-radius:999px;border:1px solid var(--border);background:var(--elev);
+  color:var(--dim);font-size:13px;cursor:pointer;transition:all var(--dur-fast);
+  user-select:none;
+}
+.tab:hover{border-color:var(--border-strong);color:var(--primary)}
+.tab.on{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border-color:transparent;box-shadow:0 6px 16px rgba(124,58,237,.3)}
+.tab .dot{font-size:15px}
+.panel{display:none}
+.panel.on{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card{
+  background:var(--elev);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-md);padding:18px;margin-bottom:14px;
+}
+.card h3{font-size:15px;color:var(--primary-dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3 .bar{width:4px;height:16px;border-radius:2px;background:linear-gradient(180deg,var(--primary),var(--pink))}
+label{font-size:12.5px;color:var(--dim);display:block;margin:10px 0 6px}
+input[type=text],input[type=number],textarea,select{
+  width:100%;border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:10px 12px;font-size:13.5px;font-family:inherit;background:var(--card);
+  color:var(--text);outline:none;transition:border var(--dur-fast);
+}
+input:focus,textarea:focus,select:focus{border-color:var(--primary)}
+textarea{resize:vertical;min-height:70px;line-height:1.6}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 18px;border:none;border-radius:999px;font-size:13.5px;font-weight:600;
+  cursor:pointer;transition:all var(--dur-fast);color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  box-shadow:0 6px 16px rgba(124,58,237,.25);
+}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(124,58,237,.32)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.55;cursor:wait;transform:none}
+.btn.ghost{background:var(--card);color:var(--primary);border:1px solid var(--border-strong);box-shadow:none}
+.btn.pink{background:linear-gradient(135deg,var(--pink),var(--accent))}
+.btn.small{padding:6px 12px;font-size:12px}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.hint{font-size:12px;color:var(--faint);margin-top:8px;line-height:1.6}
+.msg{font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.6}
+.msg.err{color:#dc2626}
+.msg.ok{color:#059669}
+.divider{height:1px;background:var(--border);margin:14px 0}
+.item{
+  border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;
+  margin-bottom:10px;background:var(--card);
+}
+.item .t{font-size:13.5px;font-weight:600;color:var(--text)}
+.item .s{font-size:12.5px;color:var(--dim);margin-top:4px;line-height:1.7}
+.item .m{font-size:11.5px;color:var(--faint);margin-top:6px}
+.badge{
+  display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;
+  background:rgba(124,58,237,.10);color:var(--primary);margin-right:6px;
+}
+.badge.green{background:rgba(5,150,105,.10);color:#059669}
+.badge.red{background:rgba(220,38,38,.10);color:#dc2626}
+.badge.pink{background:rgba(219,39,119,.10);color:var(--pink)}
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.stat{
+  flex:1;min-width:90px;text-align:center;background:var(--card);
+  border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 6px;
+}
+.stat b{display:block;font-size:19px;color:var(--primary-dim)}
+.stat span{font-size:11px;color:var(--dim)}
+.opt{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);
+  border-radius:var(--radius-md);margin-bottom:8px;background:var(--card);cursor:pointer;
+  font-size:13.5px;transition:border var(--dur-fast)}
+.opt:hover{border-color:var(--primary)}
+.opt input{accent-color:var(--primary);width:15px;height:15px}
+.opt.on{border-color:var(--primary);background:rgba(124,58,237,.06)}
+.quiz-q{margin-bottom:18px}
+.quiz-q .q{font-weight:600;font-size:13.5px;margin-bottom:8px;line-height:1.6}
+.dim-bar{height:8px;border-radius:4px;background:rgba(124,58,237,.12);overflow:hidden;margin:4px 0 10px}
+.dim-bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary),var(--pink));transition:width .6s ease}
+.dialogue{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:12px;background:var(--card);margin-bottom:12px}
+.dlg{display:flex;margin-bottom:10px}
+.dlg .who{flex-shrink:0;width:52px;font-size:11px;color:var(--faint);padding-top:3px}
+.dlg .bub{max-width:78%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.7}
+.dlg.her .bub{background:rgba(124,58,237,.08);border:1px solid var(--border)}
+.dlg.you{justify-content:flex-end}
+.dlg.you .bub{background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(219,39,119,.10));border:1px solid var(--border-strong)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.chip{font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--border);
+  background:var(--card);color:var(--dim);cursor:pointer;transition:all var(--dur-fast)}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.kw{display:inline-block;font-size:12.5px;padding:4px 12px;border-radius:999px;margin:3px 4px 3px 0;
+  background:linear-gradient(135deg,rgba(124,58,237,.12),rgba(219,39,119,.10));color:var(--primary-dim);font-weight:600}
+.audio-player{width:100%;margin-top:8px}
+.tl-type{font-size:11px;color:var(--faint);flex-shrink:0}
+.tl-date{font-size:11px;color:var(--faint);margin-top:3px}
+.empty{text-align:center;color:var(--faint);font-size:13px;padding:28px 10px;line-height:1.8}
+footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
+  border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;vertical-align:-2px}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+<style>
+/* ===== 换背景图：全局浮动按钮 + 面板（每页独立） ===== */
+.lucien-bg-layer,
+#bgLayer{
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:var(--lucien-bg-opacity,.22);
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.lucien-bg-fab{
+  position:fixed;
+  left:18px;
+  bottom:18px;
+  z-index:9990;
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  border:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  line-height:1;
+  color:#fff;
+  background:linear-gradient(135deg,#7c3aed,#db2777);
+  box-shadow:0 6px 18px rgba(124,58,237,.4);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.lucien-bg-fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(124,58,237,.5)}
+.lucien-bg-fab:active{transform:scale(.94)}
+.lucien-bg-panel{
+  position:fixed;
+  left:18px;
+  bottom:74px;
+  z-index:9991;
+  width:264px;
+  max-width:calc(100vw - 36px);
+  box-sizing:border-box;
+  background:rgba(255,255,255,.97);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+  border:1px solid rgba(124,58,237,.2);
+  border-radius:16px;
+  box-shadow:0 14px 40px rgba(43,33,64,.22);
+  padding:14px 14px 12px;
+  display:none;
+  font-family:var(--font-sans,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif);
+}
+.lucien-bg-panel.open{display:block;animation:lbg-in .2s ease}
+@keyframes lbg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lucien-bg-panel h4{margin:0 0 10px;font-size:14px;color:#312a4a;font-weight:700}
+.lbg-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.lbg-row label{font-size:12px;color:#6f6785;flex-shrink:0}
+.lbg-row input[type=range]{flex:1;min-width:0}
+.lbg-val{font-size:11px;color:#7c3aed;min-width:34px;text-align:right;flex-shrink:0}
+.lbg-acts{display:flex;gap:8px;margin-top:10px}
+.lbg-btn{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer;transition:filter .15s ease}
+.lbg-btn:hover{filter:brightness(1.05)}
+.lbg-upload{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff}
+.lbg-reset{background:rgba(124,58,237,.08);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
+.lbg-tip{font-size:10.5px;color:#9a92ad;margin-top:8px;line-height:1.5}
+.lbg-file{display:none}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>奇想功能�?· 许墨的颠覆性实验室</h1>
+    <p>决策预言�?· 默契测验 · 悬疑事件�?· 反向剧场 · 年度报告 · 习惯管家 · 晚间回顾 · 记忆博物�?/p>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <div class="tab on" data-p="p1"><span class="dot">🔮</span>预言�?/div>
+    <div class="tab" data-p="p2"><span class="dot">💞</span>默契测验</div>
+    <div class="tab" data-p="p3"><span class="dot">🕵�?/span>事件�?/div>
+    <div class="tab" data-p="p4"><span class="dot">🎭</span>剧场</div>
+    <div class="tab" data-p="p5"><span class="dot">📜</span>年度报告</div>
+    <div class="tab" data-p="p6"><span class="dot">�?/span>习惯管家</div>
+    <div class="tab" data-p="p7"><span class="dot">🌙</span>晚间回顾</div>
+    <div class="tab" data-p="p8"><span class="dot">🏛�?/span>博物�?/div>
+  </nav>
+
+  <!-- ============ 1. 决策预言�?============ -->
+  <section class="panel on" id="p1">
+    <div class="card">
+      <h3><span class="bar"></span>选择困难症终结�?/h3>
+      <label>你的问题</label>
+      <input type="text" id="oracleQ" placeholder="例如：今晚要不要去那家新开的餐厅？">
+      <label>选项（至�?2 个）</label>
+      <div id="oracleOpts"></div>
+      <div class="btn-row">
+        <button class="btn ghost small" onclick="addOracleOpt()">�?添加选项</button>
+        <button class="btn" onclick="oracleAsk()" id="oracleBtn">让许墨拍�?/button>
+      </div>
+      <div id="oracleRes" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>预言记录与准确率</h3>
+      <div class="stat-row" id="oracleStats"></div>
+      <div id="oracleList"></div>
+      <div class="empty" id="oracleEmpty" style="display:none">还没有预言记录。给许墨一个机会，他不会让你失望�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 2. 默契测验 ============ -->
+  <section class="panel" id="p2">
+    <div class="card">
+      <h3><span class="bar"></span>你有多了解自己？许墨有多了解你？</h3>
+      <p class="hint">许墨会基于你的记忆、朋友圈和约会记录出 5 道题。你来答题，比对你们两人的默契�?/p>
+      <div class="btn-row">
+        <button class="btn" onclick="quizNew()" id="quizNewBtn">出题</button>
+        <button class="btn ghost" onclick="quizList()">历史记录</button>
+      </div>
+      <div id="quizArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>测验记录</h3>
+      <div id="quizHist"></div>
+      <div class="empty" id="quizHistEmpty">暂无测验记录</div>
+    </div>
+  </section>
+
+  <!-- ============ 3. 每日悬疑事件�?============ -->
+  <section class="panel" id="p3">
+    <div class="card">
+      <h3><span class="bar"></span>今日案件</h3>
+      <div class="stat-row" id="caseStats"></div>
+      <div id="caseBody"></div>
+      <div id="caseEmpty" class="empty" style="display:none">今日案件尚未发布。许墨正在黑天鹅档案馆里翻阅卷宗…�?/div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>案件档案</h3>
+      <div id="caseHist"></div>
+      <div class="empty" id="caseHistEmpty">档案室空空如�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 4. 反向扮演剧场 ============ -->
+  <section class="panel" id="p4">
+    <div class="card">
+      <h3><span class="bar"></span>你演许墨，她演女�?/h3>
+      <label>主题词（可留空，让许墨随缘挑�?/label>
+      <input type="text" id="thTheme" placeholder="例如：雨�?/ 实验�?/ 天台观星 / 被放鸽子">
+      <div class="btn-row">
+        <button class="btn" onclick="thNew()">开一场新�?/button>
+      </div>
+      <div id="thArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>演出档案</h3>
+      <div id="thHist"></div>
+      <div class="empty" id="thHistEmpty">还没有演出记录。舞台已经搭好，等你上台�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 5. 关系年度报告 ============ -->
+  <section class="panel" id="p5">
+    <div class="card">
+      <h3><span class="bar"></span>生成年度关系报告</h3>
+      <label>年份</label>
+      <input type="text" id="rpYear" value="">
+      <p class="hint">许墨会汇总这一年的聊天、记忆、约会、朋友圈与时光盒数据，写一封只属于你们两人的年度报告�?/p>
+      <div class="btn-row">
+        <button class="btn" onclick="rpGen()" id="rpGenBtn">生成报告</button>
+      </div>
+      <div id="rpArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>历年报告</h3>
+      <div id="rpHist"></div>
+      <div class="empty" id="rpHistEmpty">还没有报告。让许墨为你们写第一封吧�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 6. 习惯养成管家 ============ -->
+  <section class="panel" id="p6">
+    <div class="card">
+      <h3><span class="bar"></span>今日打卡</h3>
+      <div class="stat-row" id="habitStats"></div>
+      <div id="habitList"></div>
+      <div class="btn-row">
+        <button class="btn" onclick="habitEnc()" id="habitEncBtn">求一句夸�?/button>
+        <button class="btn ghost" onclick="habitList2()">刷新</button>
+      </div>
+      <div id="habitEnc" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>新建习惯</h3>
+      <label>习惯名称</label>
+      <input type="text" id="habitName" placeholder="例如：喝�?/ 23 点前睡觉 / 久坐 1 小时起来走走">
+      <label>每日提醒时间（可选，到点提醒未打卡项�?/label>
+      <input type="text" id="habitTime" placeholder="例如�?1:00，留空则不提�?>
+      <div class="btn-row">
+        <button class="btn pink" onclick="habitAdd()">添加习惯</button>
+        <button class="btn ghost" onclick="habitRemind()">保存提醒</button>
+      </div>
+      <div id="habitMsg" class="msg"></div>
+    </div>
+  </section>
+
+  <!-- ============ 7. 晚间语音回顾 ============ -->
+  <section class="panel" id="p7">
+    <div class="card">
+      <h3><span class="bar"></span>今日回顾播报</h3>
+      <p class="hint">许墨会翻看你们今天的对话与经历，写一段睡前电台式的回顾；还可以让他的声音念给你听�?/p>
+      <div class="btn-row">
+        <button class="btn" onclick="rcpGen(false)">生成回顾</button>
+        <button class="btn ghost" onclick="rcpGen(true)">重新生成</button>
+        <button class="btn pink" onclick="rcpVoice()" id="rcpVoiceBtn">合成许墨的声�?/button>
+      </div>
+      <div id="rcpArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>回顾存档</h3>
+      <div id="rcpHist"></div>
+      <div class="empty" id="rcpHistEmpty">还没有回顾存档。今晚，让许墨陪你收个尾�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 8. 记忆博物�?============ -->
+  <section class="panel" id="p8">
+    <div class="card">
+      <h3><span class="bar"></span>时光�?/h3>
+      <p class="hint">记忆、朋友圈、约会、纪念日、日记……都被编织在同一条时间线上。点击「收藏为展品」�?/p>
+      <div id="tlList"></div>
+      <div class="empty" id="tlEmpty" style="display:none">时光轴还是空的。去和许墨创造点回忆吧�?/div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>馆藏展品</h3>
+      <div class="btn-row">
+        <button class="btn ghost" onclick="tlRefresh()">刷新时光�?/button>
+        <button class="btn" onclick="museumTour()">让许墨导�?/button>
+      </div>
+      <div id="musTour" class="msg"></div>
+      <div id="musList"></div>
+      <div class="empty" id="musEmpty" style="display:none">展馆空空如也。把最珍贵的瞬间挂上墙吧�?/div>
+    </div>
+  </section>
+
+  <footer>许墨 · 记忆是唯一不会背叛我们的证�?/footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TAB_ICON = {p1:'🔮',p2:'💞',p3:'🕵�?,p4:'🎭',p5:'📜',p6:'�?,p7:'🌙',p8:'🏛�?};
+let curQuiz = null, curCase = null, curScene = null, curRecap = null, oracleSel = [], tlCache = [];
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fmtTs(ts){return esc(ts)}
+function busy(btnId,on){const b=$(btnId);if(!b)return;if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span> 处理中�?}else if(b.dataset.t){b.innerHTML=b.dataset.t;delete b.dataset.t}}
+async function api(url,opts){
+  const r = await fetch(url,Object.assign({headers:{'Content-Type':'application/json'}},opts));
+  let d = {};
+  try{d = await r.json()}catch(e){}
+  if(!r.ok){throw new Error(d.error||('请求失败 '+r.status))}
+  return d;
+}
+
+document.getElementById('tabs').addEventListener('click',function(e){
+  const t = e.target.closest('.tab'); if(!t) return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on'); $(t.dataset.p).classList.add('on');
+  if(t.dataset.p==='p3'){caseInit()}
+  if(t.dataset.p==='p8'){tlLoad()}
+});
+
+/* ================= 1. 预言�?================= */
+function addOracleOpt(v){
+  const d = document.createElement('div'); d.className='opt';
+  d.innerHTML='<input type="text" value="'+esc(v||'')+'" placeholder="选项">'+
+    '<button class="btn ghost small" onclick="this.parentNode.remove()">�?/button>';
+  $('oracleOpts').appendChild(d);
+}
+function oracleOpts(){
+  return Array.from($('oracleOpts').querySelectorAll('input')).map(i=>i.value.trim()).filter(Boolean);
+}
+async function oracleAsk(){
+  const q=$('oracleQ').value.trim(), opts=oracleOpts();
+  if(!q||opts.length<2){$('oracleRes').innerHTML='<span class="msg err">请填写问题，并至少给出两个选项</span>';return}
+  busy('oracleBtn',true);$('oracleRes').innerHTML='';
+  try{
+    const d = await api('/api/oracle/ask',{method:'POST',body:JSON.stringify({question:q,options:opts})});
+    $('oracleRes').innerHTML='<div class="item"><div class="t">'+esc(d.item.question)+'</div>'+
+      '<div class="s">许墨的选择�?b>'+esc(d.item.pick)+'</b><br>'+esc(d.item.reason)+'</div>'+
+      '<div class="m">'+fmtTs(d.item.ts)+' · 结果揭晓后告诉我准不�?/div></div>';
+    $('oracleQ').value='';$('oracleOpts').innerHTML='';
+    oracleList();
+  }catch(e){$('oracleRes').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('oracleBtn',false);
+}
+async function oracleList(){
+  try{
+    const d = await api('/api/oracle');
+    const s=d.stats;
+    $('oracleStats').innerHTML=
+      '<div class="stat"><b>'+s.total+'</b><span>预言总数</span></div>'+
+      '<div class="stat"><b>'+(s.accuracy||'--')+'%</b><span>准确�?/span></div>'+
+      '<div class="stat"><b>'+s.right+'</b><span>命中</span></div>'+
+      '<div class="stat"><b>'+s.wrong+'</b><span>翻车</span></div>'+
+      '<div class="stat"><b>'+s.pending+'</b><span>待揭�?/span></div>';
+    if(!d.items.length){$('oracleEmpty').style.display='block';$('oracleList').innerHTML='';return}
+    $('oracleEmpty').style.display='none';
+    $('oracleList').innerHTML=d.items.map(it=>{
+      const st=it.status==='right'?'<span class="badge green">命中</span>':it.status==='wrong'?'<span class="badge red">翻车</span>':'<span class="badge">待揭�?/span>';
+      const btns=it.status==='pending'?
+        '<div class="btn-row"><button class="btn small" onclick="oracleVerdict(\''+it.id+'\',\'right\')">选对�?/button>'+
+        '<button class="btn small pink" onclick="oracleVerdict(\''+it.id+'\',\'wrong\')">选错�?/button></div>':'';
+      return '<div class="item"><div class="t">'+esc(it.question)+' '+st+'</div>'+
+        '<div class="s">许墨�?b>'+esc(it.pick)+'</b> �?'+esc(it.reason)+'</div>'+
+        '<div class="m">'+fmtTs(it.ts)+'</div>'+btns+'</div>';
+    }).join('');
+  }catch(e){}
+}
+async function oracleVerdict(oid,result){
+  await api('/api/oracle/verdict',{method:'POST',body:JSON.stringify({oid,result})});
+  oracleList();
+}
+
+/* ================= 2. 默契测验 ================= */
+async function quizNew(){
+  busy('quizNewBtn',true);$('quizArea').innerHTML='';
+  try{
+    const d = await api('/api/quiz/generate',{method:'POST',body:'{}'});
+    curQuiz=d.quiz;
+    $('quizArea').innerHTML='<div class="item"><div class="t">许墨出题完成</div>'+
+      '<div class="s">�?'+curQuiz.questions.length+' 题，凭直觉回答就好。答完后我会告诉你，你们有多默契�?/div></div>'+
+      curQuiz.questions.map((q,qi)=>{
+        return '<div class="quiz-q"><div class="q">'+(qi+1)+'. '+esc(q.q)+'</div>'+
+          q.options.map((o,oi)=>{
+            return '<label class="opt"><input type="radio" name="q'+qi+'" value="'+esc(o)+'" onclick="quizPick('+qi+','+oi+')"><span>'+esc(o)+'</span></label>';
+          }).join('')+'</div>';
+      }).join('')+
+      '<div class="btn-row"><button class="btn" onclick="quizSubmit()">交卷，比对默�?/button></div>';
+  }catch(e){$('quizArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('quizNewBtn',false);
+}
+function quizPick(qi,oi){
+  const q=curQuiz.questions[qi];
+  document.querySelectorAll('input[name=q'+qi+']').forEach(x=>x.closest('.opt').classList.remove('on'));
+  document.querySelectorAll('input[name=q'+qi+']')[oi].closest('.opt').classList.add('on');
+  q.pick=q.options[oi];
+}
+async function quizSubmit(){
+  if(!curQuiz||curQuiz.questions.some(q=>!q.pick)){$('quizArea').innerHTML='<span class="msg err">还有题目没回�?/span>';return}
+  try{
+    const d = await api('/api/quiz/submit',{method:'POST',body:JSON.stringify({quiz_id:curQuiz.id,answers:curQuiz.questions.map(q=>q.pick)})});
+    const score=d.score;
+    const color=score>=80?'#059669':score>=60?'#b45309':'#dc2626';
+    $('quizArea').innerHTML='<div class="item"><div class="t">默契�?<b style="font-size:24px;color:'+color+'">'+score+'</b> / 100</div>'+
+      '<div class="s">'+esc(d.quiz.verdict)+'</div></div>'+
+      d.detail.map((x,i)=>{
+        return '<div class="item"><div class="t">'+(i+1)+'. '+esc(x.q)+' '+
+          (x.correct?'<span class="badge green">默契</span>':'<span class="badge red">偏差</span>')+'</div>'+
+          '<div class="s">许墨的答案：<b>'+esc(x.answer)+'</b>（你的答案：'+esc(x.user||'未答')+'�?/div>'+
+          (x.reason?'<div class="m">许墨的理由：'+esc(x.reason)+'</div>':'')+'</div>';
+      }).join('');
+    quizList();
+  }catch(e){$('quizArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+}
+async function quizList(){
+  try{
+    const d = await api('/api/quiz');
+    if(!d.quizzes.length){$('quizHistEmpty').style.display='block';$('quizHist').innerHTML='';return}
+    $('quizHistEmpty').style.display='none';
+    $('quizHist').innerHTML=d.quizzes.map(q=>{
+      return '<div class="item"><div class="t">'+fmtTs(q.ts)+' <span class="badge pink">'+q.score+' �?/span>'+
+        (q.status==='pending'?'<span class="badge">未作�?/span>':'')+'</div>'+
+        (q.verdict?'<div class="s">'+esc(q.verdict)+'</div>':'')+
+        '<div class="m">�?'+(q.questions||[]).length+' �?· 历史最�?'+d.stats.best+'</div></div>';
+    }).join('');
+  }catch(e){}
+}
+
+/* ================= 3. 悬疑事件�?================= */
+async function caseInit(){await caseHist();}
+async function caseNew(){
+  busy('caseNewBtn',true);
+  try{
+    await api('/api/case/new',{method:'POST',body:'{}'});
+    await caseLoad();
+  }catch(e){$('caseBody').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('caseNewBtn',false);
+}
+async function caseLoad(){
+  try{
+    const d = await api('/api/case/today');
+    const st = await api('/api/case/history');
+    $('caseStats').innerHTML=
+      '<div class="stat"><b>'+st.stats.solved+'</b><span>破获</span></div>'+
+      '<div class="stat"><b>'+st.stats.total+'</b><span>累计</span></div>'+
+      '<div class="stat"><b>'+st.stats.streak+'</b><span>连破</span></div>'+
+      '<div class="stat"><b>'+st.stats.points+'</b><span>积分</span></div>';
+    if(!d.case){curCase=null;
+      $('caseBody').innerHTML='<div class="empty">今日案件尚未发布</div>'+
+        '<div class="btn-row"><button class="btn" id="caseNewBtn" onclick="caseNew()">许墨，发布今日案�?/button></div>';
+      return}
+    curCase=d.case;
+    const c=d.case;
+    const solved=c.solved?'<span class="badge green">已破�?+'+c.score+'�?/span>':c.submitted?'<span class="badge">已提交，等许墨判�?/span>':'';
+    $('caseBody').innerHTML='<div class="item"><div class="t">'+esc(c.title)+' '+solved+'<span class="badge">'+esc(c.diff||'normal')+'</span></div>'+
+      '<div class="s" style="white-space:pre-wrap">'+esc(c.story)+'</div>'+
+      '<div class="m">'+esc(c.date)+' · 已用线索 '+(c.clues||[]).length+'/3</div>'+
+      (c.clues&&c.clues.length?'<div class="divider"></div><div class="s">'+
+        c.clues.map(x=>'<b>线索'+x.n+'</b>�?+esc(x.text)).join('<br>')+'</div>':'')+
+      (c.verdict?'<div class="divider"></div><div class="s">许墨判定�?b>'+
+        (c.verdict==='correct'?'正确':c.verdict==='close'?'接近真相':'偏离�?)+'</b> '+esc(c.comment||'')+'</div>':'')+
+      (c.solved?'<div class="divider"></div><div class="s"><b>真相</b>�?+esc(c.answer)+'</div>':'')+
+      '</div>';
+    if(!c.solved){
+      $('caseBody').innerHTML+='<div class="btn-row">'+
+        '<button class="btn ghost small" onclick="caseClue()"'+(c.submitted?' disabled':'')+'>要一条线索（�?'+(3-(c.clues||[]).length)+'�?/button></div>';
+      if(!c.submitted){
+        $('caseBody').innerHTML+='<label>你的推理答案</label><textarea id="caseAns" placeholder="写下你的答案"></textarea>'+
+          '<label>推理过程</label><textarea id="caseWhy" placeholder="你的推理链条…�?></textarea>'+
+          '<div class="btn-row"><button class="btn" onclick="caseSubmit()">提交推理</button></div>';
+      }else if(!c.solved){
+        $('caseBody').innerHTML+='<div class="btn-row"><button class="btn" onclick="caseReveal()">揭晓真相</button></div>';
+      }
+    }
+  }catch(e){}
+}
+async function caseClue(){
+  try{
+    const d = await api('/api/case/'+curCase.id+'/clue',{method:'POST'});
+    caseLoad();
+  }catch(e){alert(e.message)}
+}
+async function caseSubmit(){
+  const ans=$('caseAns').value.trim(), why=$('caseWhy').value.trim();
+  if(!ans){alert('请先写出你的答案');return}
+  try{
+    const d = await api('/api/case/'+curCase.id+'/submit',{method:'POST',body:JSON.stringify({answer:ans,reasoning:why})});
+    caseLoad();
+  }catch(e){alert(e.message)}
+}
+async function caseReveal(){
+  try{
+    await api('/api/case/'+curCase.id+'/reveal',{method:'POST'});
+    caseLoad();caseHist();
+  }catch(e){alert(e.message)}
+}
+async function caseHist(){
+  try{
+    const d = await api('/api/case/history');
+    if(!d.cases.length){$('caseHistEmpty').style.display='block';$('caseHist').innerHTML='';return}
+    $('caseHistEmpty').style.display='none';
+    $('caseHist').innerHTML=d.cases.map(c=>{
+      return '<div class="item"><div class="t">'+esc(c.date)+' · '+esc(c.title)+
+        (c.solved?'<span class="badge green">'+c.score+'�?/span>':c.submitted?'<span class="badge">待揭�?/span>':'<span class="badge">未解</span>')+
+        '</div><div class="m">'+esc(c.user_answer||'未作�?)+'</div></div>';
+    }).join('');
+  }catch(e){}
+}
+
+/* ================= 4. 剧场 ================= */
+async function thNew(){
+  const theme=$('thTheme').value.trim();
+  busy('thNewBtn',true);
+  try{
+    const d = await api('/api/theater/new',{method:'POST',body:JSON.stringify({theme})});
+    curScene=d.scene;
+    renderScene();
+  }catch(e){$('thArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('thNewBtn',false);
+}
+function renderScene(){
+  const s=curScene;
+  let html='<div class="item"><div class="t">'+esc(s.title)+'</div>'+
+    '<div class="s">'+esc(s.setting)+'</div>'+
+    '<div class="m">'+fmtTs(s.ts)+' · '+(s.status==='done'?'已谢�?:'演出�?)+'</div></div>'+
+    '<div class="dialogue" id="thDial">'+s.lines.map(l=>
+      '<div class="dlg '+(l.role==='you'?'you':'her')+'"><div class="who">'+(l.role==='you'?'�?许墨)':'女主')+'</div><div class="bub">'+esc(l.text)+'</div></div>'
+    ).join('')+'</div>';
+  if(s.status==='acting'){
+    html+='<input type="text" id="thLine" placeholder="以许墨的身份说一句台词…�? onkeydown="if(event.key===\'Enter\')thAct()">'+
+      '<div class="btn-row"><button class="btn" onclick="thAct()">说这�?/button>'+
+      '<button class="btn pink" onclick="thFinish()">谢幕，请许墨点评</button></div>';
+  }else{
+    const dims=s.dims||{};
+    html+='<div class="item"><div class="t">许墨的评�?<span class="badge pink">'+s.score+' �?/span></div>'+
+      '<div class="s">'+esc(s.review)+'</div>'+
+      (s.suggestion?'<div class="m">改进建议�?+esc(s.suggestion)+'</div>':'')+
+      (Object.keys(dims).length?'<div class="divider"></div>'+
+        Object.entries(dims).map(([k,v])=>'<div style="font-size:12px;color:var(--dim)">'+esc(k)+' '+v+'</div>'+
+          '<div class="dim-bar"><i style="width:'+v+'%"></i></div>').join(''):'')+
+      '</div>';
+  }
+  $('thArea').innerHTML=html;
+  const dl=$('thDial');if(dl)dl.scrollTop=dl.scrollHeight;
+}
+async function thAct(){
+  const line=$('thLine').value.trim();
+  if(!line){return}
+  try{
+    const d = await api('/api/theater/'+curScene.id+'/act',{method:'POST',body:JSON.stringify({line})});
+    curScene=d.scene;renderScene();
+  }catch(e){alert(e.message)}
+}
+async function thFinish(){
+  if(!confirm('要谢幕并请许墨点评这场演出吗�?))return;
+  busy('thFinBtn',true);
+  try{
+    const d = await api('/api/theater/'+curScene.id+'/finish',{method:'POST'});
+    curScene=d.scene;renderScene();thHist();
+  }catch(e){alert(e.message)}
+  busy('thFinBtn',false);
+}
+async function thHist(){
+  try{
+    const d = await api('/api/theater');
+    if(!d.scenes.length){$('thHistEmpty').style.display='block';$('thHist').innerHTML='';return}
+    $('thHistEmpty').style.display='none';
+    $('thHist').innerHTML=d.scenes.map(s=>
+      '<div class="item"><div class="t">'+esc(s.title)+
+      (s.status==='done'?'<span class="badge pink">'+s.score+' �?/span>':'<span class="badge">演出�?/span>')+
+      '</div><div class="m">'+fmtTs(s.ts)+' · '+s.lines.length+' 句台�?/div></div>'
+    ).join('');
+  }catch(e){}
+}
+
+/* ================= 5. 年度报告 ================= */
+async function rpGen(){
+  const year=$('rpYear').value.trim()||new Date().getFullYear();
+  busy('rpGenBtn',true);$('rpArea').innerHTML='';
+  try{
+    const d = await api('/api/rapport/generate',{method:'POST',body:JSON.stringify({year})});
+    renderRp(d.report);
+  }catch(e){$('rpArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('rpGenBtn',false);
+}
+function renderRp(rep){
+  const r=rep.report;
+  $('rpArea').innerHTML=
+    '<div class="item"><div class="t">'+rep.year+' 年度关系报告</div>'+
+    '<div class="s" style="white-space:pre-wrap;margin-top:8px">'+esc(r.opening)+'</div></div>'+
+    '<div class="item"><div class="t">年度关键�?/div><div style="margin-top:6px">'+
+    (r.keywords||[]).map(k=>'<span class="kw">'+esc(k)+'</span>').join('')+'</div></div>'+
+    '<div class="item"><div class="t">那些瞬间</div>'+
+    (r.moments||[]).map(m=>'<div class="s"><b>'+esc(m.title)+'</b>�?+esc(m.desc)+'</div>').join('')+'</div>'+
+    '<div class="item"><div class="t">这一年的数据</div><div class="stat-row">'+
+    '<div class="stat"><b>'+esc(r.data?.affinity??rep.summary.affinity)+'</b><span>好感�?/span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.dates??rep.summary.dates)+'</b><span>约会次数</span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.memories??rep.summary.memories)+'</b><span>许墨的记�?/span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.moments??rep.summary.moments)+'</b><span>朋友�?/span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.convos??rep.summary.conversations)+'</b><span>对话轮数</span></div>'+
+    '</div></div>'+
+    '<div class="item"><div class="t">许墨的年度心�?/div><div class="s">'+esc(r.heart)+'</div></div>'+
+    '<div class="item"><div class="t">来年的约�?/div><div class="s">'+esc(r.promise)+'</div></div>';
+  rpHist();
+}
+async function rpHist(){
+  try{
+    const d = await api('/api/rapport');
+    if(!d.reports.length){$('rpHistEmpty').style.display='block';$('rpHist').innerHTML='';return}
+    $('rpHistEmpty').style.display='none';
+    $('rpHist').innerHTML=d.reports.map(r=>
+      '<div class="item" style="cursor:pointer" onclick="rpOpen(\''+r.id+'\')"><div class="t">'+r.year+' 年度报告</div>'+
+      '<div class="m">'+fmtTs(r.ts)+' · 点击展开</div></div>'
+    ).join('');
+  }catch(e){}
+}
+async function rpOpen(rid){
+  const d = await api('/api/rapport/'+rid);
+  renderRp(d.report);
+}
+
+/* ================= 6. 习惯管家 ================= */
+let habitData=null;
+async function habitList2(){
+  try{
+    const d = await api('/api/habit');
+    habitData=d;
+    $('habitStats').innerHTML=
+      '<div class="stat"><b>'+d.habits.length+'</b><span>习惯</span></div>'+
+      '<div class="stat"><b>'+d.done+'</b><span>今日完成</span></div>'+
+      '<div class="stat"><b>'+d.habits.filter(h=>h.streak>0).length+'</b><span>保持连续</span></div>';
+    if(!d.habits.length){$('habitList').innerHTML='<div class="empty">还没有习惯。先立一个小目标�?/div>';return}
+    $('habitList').innerHTML=d.habits.map(h=>
+      '<div class="item"><div class="t">'+esc(h.emoji)+' '+esc(h.name)+
+      (h.done_today?'<span class="badge green">今日完成</span>':'<span class="badge">未打�?/span>')+
+      '</div><div class="m">连续 '+h.streak+' �?· 最�?'+h.best+' · 累计 '+h.total+' �?/div>'+
+      '<div class="btn-row"><button class="btn small '+(h.done_today?'ghost pink':'')+'" onclick="habitCheck(\''+h.id+'\')">'+
+      (h.done_today?'取消打卡':'打卡')+'</button></div></div>'
+    ).join('');
+  }catch(e){}
+}
+async function habitCheck(hid){
+  try{
+    await api('/api/habit/'+hid+'/check',{method:'POST'});
+    habitList2();
+  }catch(e){alert(e.message)}
+}
+async function habitAdd(){
+  const name=$('habitName').value.trim();
+  if(!name){$('habitMsg').innerHTML='<span class="msg err">请填写习惯名�?/span>';return}
+  try{
+    await api('/api/habit',{method:'POST',body:JSON.stringify({name})});
+    $('habitName').value='';$('habitMsg').innerHTML='<span class="msg ok">习惯已收录�?/span>';
+    habitList2();
+  }catch(e){$('habitMsg').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+}
+async function habitRemind(){
+  const t=$('habitTime').value.trim();
+  try{
+    await api('/api/habit/remind',{method:'POST',body:JSON.stringify({time:t})});
+    $('habitMsg').innerHTML='<span class="msg ok">'+(t?'已设置每�?'+t+' 提醒':'已取消提�?)+'�?/span>';
+  }catch(e){$('habitMsg').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+}
+async function habitEnc(){
+  if(!habitData){await habitList2()}
+  busy('habitEncBtn',true);
+  try{
+    const d = await api('/api/habit/encourage',{method:'POST',body:JSON.stringify({
+      done:habitData.done,total:habitData.habits.length,
+      streak:habitData.habits.reduce((a,b)=>a+Math.max(b.streak,0),0)})});
+    $('habitEnc').innerHTML='<div class="item"><div class="s">'+esc(d.text)+'</div></div>';
+  }catch(e){$('habitEnc').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('habitEncBtn',false);
+}
+setInterval(async()=>{
+  try{
+    const d = await api('/api/habit/reminder');
+    if(d.due){
+      const pending=d.pending.length?'未打卡：'+d.pending.join('�?)+'�?:'今天的习惯都完成了，辛苦了�?;
+      alert('许墨的提醒：'+pending);
+      habitList2();
+    }
+  }catch(e){}
+},60000);
+habitList2();
+
+/* ================= 7. 晚间回顾 ================= */
+async function rcpGen(force){
+  busy('rcpGenBtn',true);$('rcpArea').innerHTML='';
+  try{
+    const d = await api('/api/recap/generate',{method:'POST',body:JSON.stringify({force})});
+    curRecap=d.recap;
+    $('rcpArea').innerHTML='<div class="item"><div class="t">今日回顾 · '+esc(d.recap.date)+'</div>'+
+      '<div class="s" style="white-space:pre-wrap;margin-top:6px">'+esc(d.recap.text)+'</div>'+
+      (d.recap.audio?'<audio class="audio-player" controls src="'+d.recap.audio+'"></audio>':'')+
+      '</div>';
+    rcpHist();
+  }catch(e){$('rcpArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('rcpGenBtn',false);
+}
+async function rcpVoice(){
+  if(!curRecap){alert('请先生成回顾文本');return}
+  busy('rcpVoiceBtn',true);
+  try{
+    const d = await api('/api/recap/'+curRecap.id+'/voice',{method:'POST'});
+    curRecap.audio=d.audio;
+    $('rcpArea').innerHTML+='<audio class="audio-player" controls autoplay src="'+d.audio+'"></audio>';
+  }catch(e){alert(e.message)}
+  busy('rcpVoiceBtn',false);
+}
+async function rcpHist(){
+  try{
+    const d = await api('/api/recap');
+    if(!d.recaps.length){$('rcpHistEmpty').style.display='block';$('rcpHist').innerHTML='';return}
+    $('rcpHistEmpty').style.display='none';
+    $('rcpHist').innerHTML=d.recaps.map(r=>
+      '<div class="item"><div class="t">'+esc(r.date)+' 晚间回顾</div>'+
+      '<div class="s">'+esc(r.text.slice(0,80))+'�?/div>'+
+      (r.audio?'<audio class="audio-player" controls src="'+r.audio+'"></audio>':'')+
+      '</div>'
+    ).join('');
+  }catch(e){}
+}
+
+/* ================= 8. 博物�?================= */
+async function tlLoad(){
+  try{
+    const d = await api('/api/museum/timeline');
+    tlCache=d.items;
+    if(!d.items.length){$('tlEmpty').style.display='block';$('tlList').innerHTML='';return}
+    $('tlEmpty').style.display='none';
+    $('tlList').innerHTML=d.items.map(it=>
+      '<div class="item"><div class="t"><span class="tl-type">'+esc(it.label)+'</span> '+fmtTs(it.ts)+'</div>'+
+      '<div class="s">'+esc(it.text)+'</div>'+
+      '<div class="btn-row"><button class="btn small ghost" onclick="musAdd(\''+it.type+'\',\''+esc(it.text).replace(/'/g,'&#39;')+'\')">收藏为展�?/button></div></div>'
+    ).join('');
+    musLoad();
+  }catch(e){}
+}
+async function tlRefresh(){tlLoad()}
+async function musAdd(type,text){
+  try{
+    await api('/api/museum/exhibit',{method:'POST',body:JSON.stringify({type,text})});
+    musLoad();tlLoad();
+  }catch(e){alert(e.message)}
+}
+async function musLoad(){
+  try{
+    const d = await api('/api/museum/exhibits');
+    if(!d.exhibits.length){$('musEmpty').style.display='block';$('musList').innerHTML='';return}
+    $('musEmpty').style.display='none';
+    $('musList').innerHTML=d.exhibits.map(e=>
+      '<div class="item"><div class="t">'+esc(e.title)+' <span class="badge">'+esc(e.label)+'</span></div>'+
+      '<div class="s">'+esc(e.desc)+'</div>'+
+      '<div class="m">'+esc(e.text.slice(0,60))+'�?· '+fmtTs(e.ts)+'</div>'+
+      '<div class="btn-row"><button class="btn small pink ghost" onclick="musDel(\''+e.id+'\')">撤下展品</button></div></div>'
+    ).join('');
+  }catch(e){}
+}
+async function musDel(eid){
+  await api('/api/museum/exhibit/'+eid,{method:'DELETE'});
+  musLoad();
+}
+async function museumTour(){
+  const ex=await api('/api/museum/exhibits');
+  if(!ex.exhibits.length){alert('展馆还是空的，先收藏展品');return}
+  try{
+    const d = await api('/api/museum/tour',{method:'POST',body:JSON.stringify({ids:ex.exhibits.map(e=>e.id)})});
+    $('musTour').innerHTML='<div class="item"><div class="t">许墨的导�?/div><div class="s">'+esc(d.tour)+'</div></div>';
+  }catch(e){alert(e.message)}
+}
+
+/* ================= 初始�?================= */
+addOracleOpt();addOracleOpt();
+$('rpYear').value=new Date().getFullYear();
+oracleList();quizList();caseHist();thHist();rpHist();rcpHist();tlLoad();
+</script>
+<script>
+/* ===== 换背景图：每页独立的浮动按钮 ===== */
+(function () {
+  'use strict';
+
+  function pageKey() {
+    var p = location.pathname.split('/').pop();
+    if (!p || p === '') p = 'index';
+    p = p.replace(/\.html$/, '') || 'index';
+    return p;
+  }
+
+  var key = pageKey();
+  var IMG_KEY = 'lucien_bg_img_' + key;
+  var OP_KEY = 'lucien_bg_op_' + key;
+
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'bgLayer';
+    document.body.insertBefore(layer, document.body.firstChild);
+  }
+  layer.classList.add('lucien-bg-layer');
+
+  function applyOpacity(v) {
+    layer.style.setProperty('--lucien-bg-opacity', (v / 100).toString());
+    try { localStorage.setItem(OP_KEY, v.toString()); } catch (e) {}
+  }
+  function applyImg(dataUrl) {
+    layer.style.backgroundImage = dataUrl ? 'url(' + dataUrl + ')' : 'none';
+  }
+
+  // 构建 UI
+  var fab = document.createElement('button');
+  fab.className = 'lucien-bg-fab';
+  fab.type = 'button';
+  fab.title = '换背景图';
+  fab.setAttribute('aria-label', '换背景图');
+  fab.textContent = '🖼�?;
+
+  var panel = document.createElement('div');
+  panel.className = 'lucien-bg-panel';
+  panel.innerHTML =
+    '<h4>页面背景</h4>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
+    '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
+    '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
+    '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
+    '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
+    '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+
+  var opInput = panel.querySelector('#lbgOp');
+  var opVal = panel.querySelector('#lbgOpVal');
+  var fileInput = panel.querySelector('#lbgFile');
+
+  fab.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== fab) {
+      panel.classList.remove('open');
+    }
+  });
+  opInput.addEventListener('input', function () {
+    var v = parseInt(opInput.value, 10);
+    opVal.textContent = v + '%';
+    applyOpacity(v);
+  });
+  panel.querySelector('#lbgUpload').addEventListener('click', function () { fileInput.click(); });
+  panel.querySelector('#lbgReset').addEventListener('click', function () {
+    try { localStorage.removeItem(IMG_KEY); } catch (e) {}
+    applyImg(null);
+    panel.classList.remove('open');
+  });
+  fileInput.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { alert('图片不能超过 10MB'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max) {
+          var r = Math.min(max / w, max / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl;
+        try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        try { localStorage.setItem(IMG_KEY, dataUrl); }
+        catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
+        applyImg(dataUrl);
+      };
+      img.onerror = function () { alert('图片读取失败'); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  // 初始�?  try {
+    var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
+    if (isNaN(savedOp)) savedOp = 22;
+    opInput.value = savedOp;
+    opVal.textContent = savedOp + '%';
+    applyOpacity(savedOp);
+    var savedImg = localStorage.getItem(IMG_KEY);
+    if (savedImg) applyImg(savedImg);
+  } catch (e) {}
+})();
+
+</script>
+</body>
+</html>
+

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"/>
+<title>学习陪伴 · 诊断</title>
+<style>
+  body{font-family:Consolas,monospace;background:#0f172a;color:#e2e8f0;padding:16px;font-size:13px}
+  h2{color:#5eead4;margin:0 0 10px}
+  .item{padding:7px 10px;border-left:3px solid #475569;margin:5px 0;background:#1e293b;border-radius:0 6px 6px 0;white-space:pre-wrap;word-break:break-all}
+  .ok{border-color:#34d399;color:#a7f3d0}
+  .fail{border-color:#f87171;color:#fca5a5}
+  .run{border-color:#fbbf24;color:#fde68a}
+  #summary{margin-top:12px;padding:10px;border:1px dashed #64748b;border-radius:8px}
+  iframe{display:none}
+  #bar{position:fixed;top:0;left:0;height:3px;background:#34d399;width:0;transition:width .4s}
+</style>
+<style>
+/* ===== 换背景图：全局浮动按钮 + 面板（每页独立） ===== */
+.lucien-bg-layer,
+#bgLayer{
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:var(--lucien-bg-opacity,.22);
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.lucien-bg-fab{
+  position:fixed;
+  left:18px;
+  bottom:18px;
+  z-index:9990;
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  border:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  line-height:1;
+  color:#fff;
+  background:linear-gradient(135deg,#7c3aed,#db2777);
+  box-shadow:0 6px 18px rgba(124,58,237,.4);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.lucien-bg-fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(124,58,237,.5)}
+.lucien-bg-fab:active{transform:scale(.94)}
+.lucien-bg-panel{
+  position:fixed;
+  left:18px;
+  bottom:74px;
+  z-index:9991;
+  width:264px;
+  max-width:calc(100vw - 36px);
+  box-sizing:border-box;
+  background:rgba(255,255,255,.97);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+  border:1px solid rgba(124,58,237,.2);
+  border-radius:16px;
+  box-shadow:0 14px 40px rgba(43,33,64,.22);
+  padding:14px 14px 12px;
+  display:none;
+  font-family:var(--font-sans,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif);
+}
+.lucien-bg-panel.open{display:block;animation:lbg-in .2s ease}
+@keyframes lbg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lucien-bg-panel h4{margin:0 0 10px;font-size:14px;color:#312a4a;font-weight:700}
+.lbg-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.lbg-row label{font-size:12px;color:#6f6785;flex-shrink:0}
+.lbg-row input[type=range]{flex:1;min-width:0}
+.lbg-val{font-size:11px;color:#7c3aed;min-width:34px;text-align:right;flex-shrink:0}
+.lbg-acts{display:flex;gap:8px;margin-top:10px}
+.lbg-btn{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer;transition:filter .15s ease}
+.lbg-btn:hover{filter:brightness(1.05)}
+.lbg-upload{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff}
+.lbg-reset{background:rgba(124,58,237,.08);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
+.lbg-tip{font-size:10.5px;color:#9a92ad;margin-top:8px;line-height:1.5}
+.lbg-file{display:none}
+
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<h2>学习陪伴 · 自动化诊�?/h2>
+<div id="log"></div>
+<div id="summary">运行中�?/div>
+<iframe id="frame" src="/"></iframe>
+<script>
+(function(){
+  var logEl = document.getElementById('log');
+  var results = [];
+  var iframeErrors = [];
+  var frame = document.getElementById('frame');
+
+  function item(status, msg){
+    var d = document.createElement('div');
+    d.className = 'item ' + status;
+    d.textContent = (status==='ok'?'[PASS] ':status==='fail'?'[FAIL] ':'[WAIT] ') + msg;
+    logEl.appendChild(d);
+    if(status!=='run') results.push({status:status, msg:msg});
+    document.getElementById('bar').style.width = Math.round(results.length/12*100)+'%';
+  }
+  function done(){
+    var pass = results.filter(function(r){return r.status==='ok';}).length;
+    var fail = results.filter(function(r){return r.status==='fail';}).length;
+    var s = document.getElementById('summary');
+    s.textContent = '完成�?+pass+' 通过 / '+fail+' 失败'+(iframeErrors.length?(' · iframe错误 '+iframeErrors.length+' 条：'+iframeErrors.slice(0,5).join(' | ')):' · �?iframe JS 错误');
+    s.style.borderColor = fail||iframeErrors.length ? '#f87171' : '#34d399';
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  async function waitUntil(fn, timeout, step){
+    step = step || 500;
+    var t0 = Date.now();
+    while(Date.now() - t0 < timeout){
+      try{ var v = fn(); if(v) return v; }catch(e){}
+      await sleep(step);
+    }
+    return null;
+  }
+
+  frame.addEventListener('load', function(){
+    try{
+      var w = frame.contentWindow;
+      w.onerror = function(msg){ iframeErrors.push(String(msg)); };
+      w.addEventListener('unhandledrejection', function(e){ iframeErrors.push('rejection: '+String(e.reason)); });
+    }catch(e){}
+  });
+
+  async function run(){
+    item('run','加载主页�?);
+    var ok = await waitUntil(function(){
+      try{ return frame.contentDocument && frame.contentDocument.getElementById('app-coach'); }catch(e){ return null; }
+    }, 15000);
+    if(!ok){ item('fail','主页未加载出 app-coach（可能停在口令页，先 fetch 验证再刷�?); 
+      try{ await fetch('/api/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"code":"xumo2026"}'}); frame.src='/'; await sleep(4000);}catch(e){}
+      ok = await waitUntil(function(){ try{ return frame.contentDocument.getElementById('app-coach'); }catch(e){ return null; } }, 10000);
+      if(!ok){ item('fail','仍无法加载，终止'); done(); return; }
+    }
+    item('ok','T1 主页加载 + app-coach 存在');
+    var doc = frame.contentDocument, win = frame.contentWindow;
+    win.confirm = function(){ return true; };
+
+    // T2 打开学习陪伴（主逻辑�?IIFE 内，必须用真实点击触发）
+    doc.querySelector('.app-icon[data-app="coach"]').click();
+    var opened = await waitUntil(function(){ return doc.getElementById('app-coach').classList.contains('open'); }, 3000);
+    item(opened?'ok':'fail','T2 openApp(coach) 视图打开');
+    if(!opened){ done(); return; }
+
+    // T3 四个子tab
+    var tabs = doc.querySelectorAll('.ctab');
+    item(tabs.length===4?'ok':'fail','T3 子tab数量 = '+tabs.length+'（期�?�?);
+
+    // T4 专注开�?    item('run','T4 开始专注（LLM 开场语，最�?5s）�?);
+    doc.getElementById('cfTask').value = '雅思核心词 List 1';
+    doc.querySelector('#cfChips button[data-min="25"]').click();
+    doc.getElementById('cfStart').click();
+    var timerOn = await waitUntil(function(){
+      var t = doc.getElementById('cfTimer');
+      return t && t.style.display!=='none' && (doc.getElementById('cfSayText').textContent||'').length > 4;
+    }, 75000);
+    if(timerOn){
+      item('ok','T4 计时界面+开场语�?+doc.getElementById('cfSayText').textContent.slice(0,40)+'�?/ 时钟 '+doc.getElementById('cfClock').textContent);
+    } else { item('fail','T4 计时界面未出现或气泡为空'); }
+
+    // T5 提前结束
+    if(timerOn){
+      item('run','T5 提前结束（LLM 收尾语，最�?5s）�?);
+      doc.getElementById('cfGiveup').click();
+      var finBtn = await waitUntil(function(){
+        return doc.getElementById('cfGiveup').textContent.indexOf('再来一�?) >= 0;
+      }, 75000);
+      if(finBtn){
+        item('ok','T5 收尾语：'+doc.getElementById('cfSayText').textContent.slice(0,40)+'�?);
+        doc.getElementById('cfGiveup').click();
+        var back = doc.getElementById('cfSetup').style.display !== 'none';
+        item(back?'ok':'fail','T5b 重置回设置界�?);
+      } else { item('fail','T5 收尾未返�?); }
+    }
+
+    // T6 计划生成
+    item('run','T6 生成学习计划（LLM，最�?20s）�?);
+    doc.querySelector('.ctab[data-ctab="plan"]').click();
+    doc.getElementById('cpGoal').value = '两周内背完雅思核心词�?;
+    doc.getElementById('cpGen').click();
+    var planOk = await waitUntil(function(){
+      var v = doc.getElementById('cpView');
+      return v && v.style.display!=='none' && (doc.getElementById('cpvToday').textContent||'').length > 5;
+    }, 120000);
+    if(planOk){
+      item('ok','T6 计划视图渲染 · 今日任务�?+doc.getElementById('cpvToday').textContent.slice(0,30).replace(/\s+/g,' ')+'�?);
+      var first = doc.querySelector('#cpvToday .cp-task');
+      if(first){ first.click();
+        var checked = await waitUntil(function(){ var el = doc.querySelector('#cpvToday .cp-task.done'); return el; }, 8000);
+        item(checked?'ok':'fail','T6b 任务勾选出现✓');
+      }
+    } else { item('fail','T6 计划未生成（视图为空�?); }
+
+    // T7 请教
+    item('run','T7 导师问答（LLM，最�?0s）�?);
+    doc.querySelector('.ctab[data-ctab="ask"]').click();
+    doc.getElementById('caInput').value = '总是背了就忘怎么�?;
+    doc.getElementById('caSend').click();
+    var asked = await waitUntil(function(){
+      var msgs = doc.querySelectorAll('#caChat .ca-msg:not(.user)');
+      return msgs.length >= 2 && (msgs[msgs.length-1].textContent||'').length > 20 && !doc.getElementById('caThinking');
+    }, 90000);
+    item(asked?'ok':'fail','T7 许墨回复�?+(asked?doc.querySelectorAll('#caChat .ca-msg:not(.user)')[1].textContent.slice(0,40).replace(/\s+/g,'')+'�?:'无回�?));
+
+    // T8 复盘
+    item('run','T8 今日复盘（LLM，最�?0s）�?);
+    doc.querySelector('.ctab[data-ctab="review"]').click();
+    doc.getElementById('crDaily').click();
+    var reviewed = await waitUntil(function(){
+      var c = doc.getElementById('crCard');
+      return c && c.style.display!=='none' && (doc.getElementById('crText').textContent||'').length > 15;
+    }, 90000);
+    item(reviewed?'ok':'fail','T8 复盘卡片�?+(reviewed?doc.getElementById('crText').textContent.slice(0,40).replace(/\s+/g,'')+'�?:'未生�?));
+
+    // T9 背单词不受影�?    doc.querySelector('#app-coach .nav-back').click();
+    await sleep(300);
+    doc.querySelector('.app-icon[data-app="words"]').click();
+    await sleep(1500);
+    var wordsOk = doc.getElementById('app-words').classList.contains('open') && doc.getElementById('wp-today').classList.contains('active');
+    doc.querySelector('.wtab[data-wtab="lib"]').click();
+    var libOk = doc.getElementById('wp-lib').classList.contains('active');
+    doc.querySelector('.wtab[data-wtab="stats"]').click();
+    var statsOk = doc.getElementById('wp-stats').classList.contains('active');
+    item(wordsOk&&libOk&&statsOk?'ok':'fail','T9 背单词app三tab正常�?+[wordsOk,libOk,statsOk].join(',')+'�?);
+
+    // T10 学习陪伴再进入（面板状态复位）
+    doc.querySelector('#app-words .nav-back').click();
+    await sleep(200);
+    doc.querySelector('.app-icon[data-app="coach"]').click();
+    await sleep(1200);
+    var focusActive = doc.getElementById('cp-focus').classList.contains('active');
+    item(focusActive?'ok':'fail','T10 重新进入学习陪伴默认聚焦"专注"tab');
+
+    done();
+  }
+  run();
+})();
+</script>
+<script>
+/* ===== 换背景图：每页独立的浮动按钮 ===== */
+(function () {
+  'use strict';
+
+  function pageKey() {
+    var p = location.pathname.split('/').pop();
+    if (!p || p === '') p = 'index';
+    p = p.replace(/\.html$/, '') || 'index';
+    return p;
+  }
+
+  var key = pageKey();
+  var IMG_KEY = 'lucien_bg_img_' + key;
+  var OP_KEY = 'lucien_bg_op_' + key;
+
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'bgLayer';
+    document.body.insertBefore(layer, document.body.firstChild);
+  }
+  layer.classList.add('lucien-bg-layer');
+
+  function applyOpacity(v) {
+    layer.style.setProperty('--lucien-bg-opacity', (v / 100).toString());
+    try { localStorage.setItem(OP_KEY, v.toString()); } catch (e) {}
+  }
+  function applyImg(dataUrl) {
+    layer.style.backgroundImage = dataUrl ? 'url(' + dataUrl + ')' : 'none';
+  }
+
+  // 构建 UI
+  var fab = document.createElement('button');
+  fab.className = 'lucien-bg-fab';
+  fab.type = 'button';
+  fab.title = '换背景图';
+  fab.setAttribute('aria-label', '换背景图');
+  fab.textContent = '🖼�?;
+
+  var panel = document.createElement('div');
+  panel.className = 'lucien-bg-panel';
+  panel.innerHTML =
+    '<h4>页面背景</h4>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
+    '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
+    '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
+    '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
+    '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
+    '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+
+  var opInput = panel.querySelector('#lbgOp');
+  var opVal = panel.querySelector('#lbgOpVal');
+  var fileInput = panel.querySelector('#lbgFile');
+
+  fab.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== fab) {
+      panel.classList.remove('open');
+    }
+  });
+  opInput.addEventListener('input', function () {
+    var v = parseInt(opInput.value, 10);
+    opVal.textContent = v + '%';
+    applyOpacity(v);
+  });
+  panel.querySelector('#lbgUpload').addEventListener('click', function () { fileInput.click(); });
+  panel.querySelector('#lbgReset').addEventListener('click', function () {
+    try { localStorage.removeItem(IMG_KEY); } catch (e) {}
+    applyImg(null);
+    panel.classList.remove('open');
+  });
+  fileInput.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { alert('图片不能超过 10MB'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max) {
+          var r = Math.min(max / w, max / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl;
+        try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        try { localStorage.setItem(IMG_KEY, dataUrl); }
+        catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
+        applyImg(dataUrl);
+      };
+      img.onerror = function () { alert('图片读取失败'); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  // 初始�?  try {
+    var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
+    if (isNaN(savedOp)) savedOp = 22;
+    opInput.value = savedOp;
+    opVal.textContent = savedOp + '%';
+    applyOpacity(savedOp);
+    var savedImg = localStorage.getItem(IMG_KEY);
+    if (savedImg) applyImg(savedImg);
+  } catch (e) {}
+})();
+
+</script>
+</body>
+</html>
+
+

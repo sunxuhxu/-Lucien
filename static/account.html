@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>许墨 · 数据管理</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh; background: linear-gradient(160deg, #1e1030 0%, #3b1d63 55%, #7c3aed 130%);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #f3eefc;
+    padding: 28px 16px 60px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .title { font-size: 20px; font-weight: 600; letter-spacing: 2px; }
+  .title .em { margin-right: 8px; }
+  a.back { color: #c4b5fd; font-size: 13px; text-decoration: none; opacity: .85; }
+  .card {
+    background: rgba(255,255,255,0.07); backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 18px;
+    padding: 22px 22px 24px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; letter-spacing: 1px; }
+  .card .desc { font-size: 12.5px; opacity: .7; margin-bottom: 16px; line-height: 1.6; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .user-tag { font-size: 13px; padding: 5px 12px; border-radius: 20px;
+    background: rgba(124,58,237,.3); border: 1px solid rgba(255,255,255,.18); }
+  button {
+    padding: 10px 16px; border: none; border-radius: 11px; cursor: pointer;
+    background: linear-gradient(90deg, #7c3aed, #db2777); color: #fff;
+    font-size: 13.5px; font-weight: 600; letter-spacing: 1px; transition: opacity .2s;
+  }
+  button:hover { opacity: .9; }
+  button.ghost { background: transparent; border: 1px solid rgba(255,255,255,.28); color: rgba(255,255,255,.85); }
+  button.danger { background: linear-gradient(90deg, #9f1239, #db2777); }
+  button.sm { padding: 6px 11px; font-size: 12px; letter-spacing: .5px; }
+  input[type=text], input[type=password], textarea, select {
+    width: 100%; padding: 10px 13px; border-radius: 11px; border: 1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.09); color: #fff; font-size: 14px; outline: none; margin-top: 8px;
+  }
+  input:focus, textarea:focus, select:focus { border-color: #db2777; }
+  textarea { min-height: 90px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  .snap { border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 12px 14px; margin-top: 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; background: rgba(255,255,255,.04); }
+  .snap .info { font-size: 13px; line-height: 1.6; }
+  .snap .info b { color: #e9d5ff; }
+  .snap .acts { display: flex; gap: 8px; flex-shrink: 0; }
+  .files { max-height: 220px; overflow: auto; margin-top: 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 8px 10px; }
+  .files label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 2px; cursor: pointer; }
+  .files label:hover { background: rgba(255,255,255,.05); }
+  .files .sz { opacity: .5; font-size: 11px; margin-left: auto; }
+  .toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+    background: rgba(20,6,40,.92); border: 1px solid rgba(255,255,255,.2); color: #fff;
+    padding: 12px 20px; border-radius: 12px; font-size: 13.5px; opacity: 0; pointer-events: none;
+    transition: opacity .25s; z-index: 99; }
+  .toast.show { opacity: 1; }
+  .muted { opacity: .6; font-size: 12px; }
+  .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(255,255,255,.12); margin-left: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="title"><span class="em">🦋</span>数据管理</div>
+    <a class="back" href="/">← 返回许墨</a>
+  </div>
+
+  <!-- 账号 -->
+  <div class="card">
+    <h2>当前账号</h2>
+    <div class="desc">多用户模式下，每个账号的数据彼此隔离（聊天、记忆、世界、相册等各自独立）。</div>
+    <div class="row">
+      <span class="user-tag" id="whoami">检测中…</span>
+      <button class="ghost sm" onclick="doLogout()">退出登录</button>
+    </div>
+  </div>
+
+  <!-- 全量快照 -->
+  <div class="card">
+    <h2>全量数据快照</h2>
+    <div class="desc">把当前账号的全部数据（含图片、语音等媒体）复制成一份时间点存档，可随时整体恢复。恢复前会自动再备份当前状态。</div>
+    <div class="row">
+      <input type="text" id="snapNote" placeholder="给这份快照写个备注（可选）" style="max-width: 320px; margin-top:0;">
+      <button onclick="createSnap()">📸 创建快照</button>
+    </div>
+    <div id="snapList"></div>
+  </div>
+
+  <!-- 导出 -->
+  <div class="card">
+    <h2>导出数据</h2>
+    <div class="desc">
+      <b>JSON 包</b>：仅含文本数据，方便跨设备迁移；<b>ZIP 包</b>：含全部媒体文件，即完整备份。
+      可勾选指定模块（分模块导出），留空则导出全部。
+    </div>
+    <div class="grid">
+      <div>
+        <div class="muted" style="margin-bottom:4px;">① 选择要导出的模块</div>
+        <div class="files" id="fileList"><div class="muted">加载中…</div></div>
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:4px;">② 选择格式并导出</div>
+        <div class="row" style="margin-top:6px;">
+          <button onclick="exportData('json')">⬇ 导出 JSON</button>
+          <button onclick="exportData('zip')">⬇ 导出 ZIP（全量）</button>
+        </div>
+        <div class="muted" id="exportTip" style="margin-top:12px; line-height:1.7;">
+          提示：导出 JSON 可用于「分模块」迁移；导出 ZIP 包含图片/语音，体积更大。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入 -->
+  <div class="card">
+    <h2>导入数据</h2>
+    <div class="desc">从导出的 JSON 包或 ZIP 包恢复数据。<b>合并</b>：仅覆盖同名文件；<b>替换</b>：先清空当前全部数据再导入（慎用）。</div>
+    <div class="row" style="margin-bottom:10px;">
+      <select id="importMode" style="max-width:200px; margin-top:0;">
+        <option value="merge">合并（推荐）</option>
+        <option value="replace">替换（清空后导入）</option>
+      </select>
+      <input type="file" id="importFile" accept=".json,.zip" style="color:#fff;">
+      <button onclick="importData()">⬆ 导入</button>
+    </div>
+    <div class="muted">导入完成后，刷新对话页即可看到恢复的内容。</div>
+  </div>
+
+  <div class="muted" style="text-align:center;">许墨 · 数据管理 · 本地优先</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ALL_FILES = [];
+
+function toast(msg, ok=true) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.borderColor = ok ? 'rgba(255,255,255,.2)' : '#fda4af';
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (r.status === 401) { toast('未登录或会话已过期，请重新登录', false); setTimeout(()=>location.href='/', 1200); throw new Error('unauth'); }
+  return r;
+}
+
+async function refreshMe() {
+  try {
+    const r = await api('/api/auth/me'); const d = await r.json();
+    if (d.authenticated) {
+      const scope = d.scope === 'owner' ? '主人（本地）' : (d.scope === 'guest' ? '访客' : d.username);
+      $('whoami').textContent = '已登录：' + scope;
+    } else {
+      $('whoami').textContent = '未登录';
+    }
+  } catch(e) { $('whoami').textContent = '未登录'; }
+}
+async function doLogout() {
+  await api('/api/auth/logout', {method:'POST'});
+  toast('已退出登录'); setTimeout(()=>location.href='/', 800);
+}
+
+async function loadFiles() {
+  try {
+    const r = await api('/api/backup/files'); const d = await r.json();
+    ALL_FILES = d.files || [];
+    const box = $('fileList');
+    if (!ALL_FILES.length) { box.innerHTML = '<div class="muted">暂无可导出的数据</div>'; return; }
+    box.innerHTML = ALL_FILES.map(f =>
+      `<label><input type="checkbox" value="${f.path}"><span>${f.path}</span><span class="sz">${fmtSize(f.size)}</span></label>`
+    ).join('');
+  } catch(e) {}
+}
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+function selectedFiles() {
+  return [...document.querySelectorAll('#fileList input:checked')].map(c => c.value);
+}
+function exportData(fmt) {
+  const sel = selectedFiles();
+  let url = '/api/export?fmt=' + fmt;
+  if (sel.length) url += '&files=' + encodeURIComponent(sel.join(','));
+  // 触发浏览器下载
+  const a = document.createElement('a');
+  a.href = url; a.download = '';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast(fmt === 'zip' ? '正在打包全量数据…' : '正在导出 JSON…');
+}
+
+async function createSnap() {
+  const note = $('snapNote').value.trim();
+  const r = await api('/api/backup/snapshot', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({note})});
+  const d = await r.json();
+  if (d.ok) { toast('快照已创建：' + (d.snapshot.name)); $('snapNote').value=''; loadSnaps(); }
+  else toast('创建失败', false);
+}
+async function loadSnaps() {
+  const box = $('snapList');
+  try {
+    const r = await api('/api/backup/snapshots'); const d = await r.json();
+    const list = d.snapshots || [];
+    if (!list.length) { box.innerHTML = '<div class="muted" style="margin-top:10px;">还没有快照。点上方按钮创建第一份吧。</div>'; return; }
+    box.innerHTML = list.map(s => `
+      <div class="snap">
+        <div class="info">
+          <b>${s.time || s.name}</b> <span class="pill">${snapReason(s.reason)}</span><br>
+          <span class="muted">${s.count} 个文件${s.note ? ' · ' + s.note : ''}</span>
+        </div>
+        <div class="acts">
+          <button class="sm" onclick="restoreSnap('${s.name}')">恢复</button>
+          <button class="sm danger" onclick="delSnap('${s.name}')">删除</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { box.innerHTML = ''; }
+}
+function snapReason(r) {
+  return ({manual:'手动', 'restore-backup':'恢复前备份', reset:'重置前备份'}[r] || r || '快照');
+}
+async function restoreSnap(name) {
+  if (!confirm('恢复此快照？当前数据会先自动备份，再被这份快照覆盖。')) return;
+  const r = await api('/api/backup/snapshot/restore', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
+  const d = await r.json();
+  if (d.ok) toast('已恢复 ' + d.restored + ' 个文件（自动备份：' + d.backup + '）');
+  else toast('恢复失败', false);
+}
+async function delSnap(name) {
+  if (!confirm('确定删除这份快照？删除后无法找回。')) return;
+  const r = await api('/api/backup/snapshot', {method:'DELETE',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
+  const d = await r.json();
+  if (d.ok) { toast('已删除'); loadSnaps(); } else toast('删除失败', false);
+}
+
+async function importData() {
+  const f = $('importFile').files[0];
+  if (!f) { toast('请先选择要导入的文件', false); return; }
+  const mode = $('importMode').value;
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('mode', mode);
+  if (!confirm('导入模式：' + (mode==='replace'?'替换（先清空当前数据）':'合并') + '。确定继续？')) return;
+  toast('导入中…');
+  try {
+    const r = await api('/api/import', {method:'POST', body: fd});
+    const d = await r.json();
+    if (d.ok) toast('导入完成：' + d.imported + ' 个文件');
+    else toast(d.error || '导入失败', false);
+  } catch(e) { toast('导入失败', false); }
+}
+
+refreshMe(); loadFiles(); loadSnaps();
+</script>
+</body>
+</html>

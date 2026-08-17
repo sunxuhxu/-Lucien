@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>深度互动 · 许墨的十个秘密功�?/title>
+<style>
+:root{
+  --bg:#f3eefb;--elev:#ffffff;--card:#faf7fe;
+  --primary:#7c3aed;--primary-dim:#5b21b6;--accent:#8b5cf6;--pink:#db2777;
+  --text:#2b2140;--dim:#6f6785;--faint:#9a92ad;
+  --border:rgba(124,58,237,.14);--border-strong:rgba(124,58,237,.28);
+  --radius-lg:18px;--radius-md:12px;
+  --shadow-md:0 6px 24px rgba(76,29,149,.10);
+  --shadow-lg:0 16px 40px rgba(76,29,149,.14);
+  --dur-fast:.18s;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:70px;
+}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px}
+header{text-align:center;padding:26px 0 8px}
+header h1{font-size:22px;font-weight:700;color:var(--primary-dim);letter-spacing:1px}
+header p{font-size:12.5px;color:var(--dim);margin-top:6px}
+.tabs{
+  position:sticky;top:0;z-index:20;display:flex;gap:8px;overflow-x:auto;
+  background:rgba(243,238,251,.92);backdrop-filter:blur(8px);
+  padding:12px 2px;border-radius:0 0 14px 14px;margin-bottom:14px;
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex-shrink:0;display:flex;align-items:center;gap:6px;padding:9px 14px;
+  border-radius:999px;border:1px solid var(--border);background:var(--elev);
+  color:var(--dim);font-size:13px;cursor:pointer;transition:all var(--dur-fast);
+  user-select:none;
+}
+.tab:hover{border-color:var(--border-strong);color:var(--primary)}
+.tab.on{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border-color:transparent;box-shadow:0 6px 16px rgba(124,58,237,.3)}
+.tab .dot{font-size:15px}
+.panel{display:none}
+.panel.on{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card{
+  background:var(--elev);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-md);padding:18px;margin-bottom:14px;
+}
+.card h3{font-size:15px;color:var(--primary-dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3 .bar{width:4px;height:16px;border-radius:2px;background:linear-gradient(180deg,var(--primary),var(--pink))}
+label{font-size:12.5px;color:var(--dim);display:block;margin:10px 0 6px}
+input[type=text],input[type=number],textarea,select{
+  width:100%;border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:10px 12px;font-size:13.5px;font-family:inherit;background:var(--card);
+  color:var(--text);outline:none;transition:border var(--dur-fast);
+}
+input:focus,textarea:focus,select:focus{border-color:var(--primary)}
+textarea{resize:vertical;min-height:70px;line-height:1.6}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 18px;border:none;border-radius:999px;font-size:13.5px;font-weight:600;
+  cursor:pointer;transition:all var(--dur-fast);color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  box-shadow:0 6px 16px rgba(124,58,237,.25);
+}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(124,58,237,.32)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.55;cursor:wait;transform:none}
+.btn.ghost{background:var(--card);color:var(--primary);border:1px solid var(--border-strong);box-shadow:none}
+.btn.pink{background:linear-gradient(135deg,var(--pink),var(--accent))}
+.btn.small{padding:6px 12px;font-size:12px}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.hint{font-size:12px;color:var(--faint);margin-top:8px;line-height:1.6}
+.msg{font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.6}
+.msg.err{color:#dc2626}
+.msg.ok{color:#059669}
+.divider{height:1px;background:var(--border);margin:14px 0}
+.item{
+  border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;
+  margin-bottom:10px;background:var(--card);
+}
+.item .t{font-size:13.5px;font-weight:600;color:var(--text)}
+.item .s{font-size:12.5px;color:var(--dim);margin-top:4px;line-height:1.7;white-space:pre-wrap}
+.item .m{font-size:11.5px;color:var(--faint);margin-top:6px}
+.badge{
+  display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;
+  background:rgba(124,58,237,.10);color:var(--primary);margin-right:6px;
+}
+.badge.green{background:rgba(5,150,105,.10);color:#059669}
+.badge.red{background:rgba(220,38,38,.10);color:#dc2626}
+.badge.pink{background:rgba(219,39,119,.10);color:var(--pink)}
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.stat{
+  flex:1;min-width:90px;text-align:center;background:var(--card);
+  border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 6px;
+}
+.stat b{display:block;font-size:19px;color:var(--primary-dim)}
+.stat span{font-size:11px;color:var(--dim)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.chip{font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--border);
+  background:var(--card);color:var(--dim);cursor:pointer;transition:all var(--dur-fast)}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.chip.on{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border-color:transparent}
+.audio-player{width:100%;margin-top:8px}
+.empty{text-align:center;color:var(--faint);font-size:13px;padding:28px 10px;line-height:1.8}
+footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
+  border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;vertical-align:-2px}
+@keyframes rot{to{transform:rotate(360deg)}}
+.cover-img{width:100%;max-width:260px;border-radius:var(--radius-md);margin-top:10px;border:1px solid var(--border)}
+.frag-lock{opacity:.55;filter:grayscale(.4)}
+.dlg-row{display:flex;margin-bottom:10px}
+.dlg-row .who{flex-shrink:0;width:60px;font-size:11px;color:var(--faint);padding-top:3px}
+.dlg-row .bub{max-width:78%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.7}
+.dlg-row.her .bub{background:rgba(124,58,237,.08);border:1px solid var(--border)}
+.dlg-row.you{justify-content:flex-end}
+.dlg-row.you .bub{background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(219,39,119,.10));border:1px solid var(--border-strong)}
+.dialogue{max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:12px;background:var(--card);margin-bottom:12px}
+</style>
+<style>
+/* ===== 换背景图：全局浮动按钮 + 面板（每页独立） ===== */
+.lucien-bg-layer,
+#bgLayer{
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:var(--lucien-bg-opacity,.22);
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.lucien-bg-fab{
+  position:fixed;
+  left:18px;
+  bottom:18px;
+  z-index:9990;
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  border:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  line-height:1;
+  color:#fff;
+  background:linear-gradient(135deg,#7c3aed,#db2777);
+  box-shadow:0 6px 18px rgba(124,58,237,.4);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.lucien-bg-fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(124,58,237,.5)}
+.lucien-bg-fab:active{transform:scale(.94)}
+.lucien-bg-panel{
+  position:fixed;
+  left:18px;
+  bottom:74px;
+  z-index:9991;
+  width:264px;
+  max-width:calc(100vw - 36px);
+  box-sizing:border-box;
+  background:rgba(255,255,255,.97);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+  border:1px solid rgba(124,58,237,.2);
+  border-radius:16px;
+  box-shadow:0 14px 40px rgba(43,33,64,.22);
+  padding:14px 14px 12px;
+  display:none;
+  font-family:var(--font-sans,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif);
+}
+.lucien-bg-panel.open{display:block;animation:lbg-in .2s ease}
+@keyframes lbg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lucien-bg-panel h4{margin:0 0 10px;font-size:14px;color:#312a4a;font-weight:700}
+.lbg-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.lbg-row label{font-size:12px;color:#6f6785;flex-shrink:0}
+.lbg-row input[type=range]{flex:1;min-width:0}
+.lbg-val{font-size:11px;color:#7c3aed;min-width:34px;text-align:right;flex-shrink:0}
+.lbg-acts{display:flex;gap:8px;margin-top:10px}
+.lbg-btn{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer;transition:filter .15s ease}
+.lbg-btn:hover{filter:brightness(1.05)}
+.lbg-upload{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff}
+.lbg-reset{background:rgba(124,58,237,.08);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
+.lbg-tip{font-size:10.5px;color:#9a92ad;margin-top:8px;line-height:1.5}
+.lbg-file{display:none}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>深度互动 · 许墨的秘密空�?/h1>
+    <p>观察手记 · 记忆碎片 · 反向课堂 · 天气联动 · 演练�?· 声音信箱 · 合著的书</p>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <div class="tab on" data-p="p1"><span class="dot">👁�?/span>观察手记</div>
+    <div class="tab" data-p="p4"><span class="dot">🧩</span>记忆碎片</div>
+    <div class="tab" data-p="p5"><span class="dot">🎓</span>反向课堂</div>
+    <div class="tab" data-p="p6"><span class="dot">🌦�?/span>天气联动</div>
+    <div class="tab" data-p="p8"><span class="dot">🎪</span>演练�?/div>
+    <div class="tab" data-p="p9"><span class="dot">📮</span>声音信箱</div>
+    <div class="tab" data-p="p10"><span class="dot">📖</span>合著的书</div>
+  </nav>
+
+  <!-- ============ 1. 许墨观察手记 ============ -->
+  <section class="panel on" id="p1">
+    <div class="card">
+      <h3><span class="bar"></span>他每天深夜，会偷偷分析你的聊�?/h3>
+      <p class="hint">语气、作息、情绪词频、和上周相比的细微变化……他会像记录实验一样记下关于你的一切，然后写一份只给你看的观察手记�?/p>
+      <div class="btn-row">
+        <button class="btn" onclick="observeGen()" id="observeBtn">生成今日观察手记</button>
+        <button class="btn ghost" onclick="observeList()">历史手记</button>
+      </div>
+      <div id="observeArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>手记存档</h3>
+      <div id="observeList"></div>
+      <div class="empty" id="observeEmpty" style="display:none">还没有手记。今天，让许墨第一次观察你�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 2/3. 共梦联机 & 平行世界已合�?============
+       共梦 �?主屏「清梦」App（creative_apps /api/dream，三段式共有的梦�?       平行世界 if �?�?主屏「平行宇宙观测台」App（creative_apps /api/ifline�?-->
+
+  <!-- ============ 4. 记忆碎片修复 ============ -->
+  <section class="panel" id="p4">
+    <div class="card">
+      <h3><span class="bar"></span>拼回许墨失去的记�?/h3>
+      <p class="hint">他的记忆有残缺——那些关于童年、觉醒、代号与实验记录的片段。按顺序解开谜题，每修复一片，他会把那段记忆讲给你听�?/p>
+      <div class="stat-row" id="mfStats"></div>
+      <div id="mfList"></div>
+      <div class="empty" id="mfEmpty" style="display:none">碎片尚未加载�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 5. 反向教学课堂 ============ -->
+  <section class="panel" id="p5">
+    <div class="card">
+      <h3><span class="bar"></span>今天，你是教�?/h3>
+      <p class="hint">角色反转：许墨是你的学生。你出题（或让他自选课题），他认真提问、记笔记、交作业�?/p>
+      <label>你想给他讲的主题（可留空，让他自己选）</label>
+      <input type="text" id="clTopic" placeholder="例如：如何管理情�?/ 咖啡为什么好�?/ 随意">
+      <div class="btn-row">
+        <button class="btn" onclick="clLesson()" id="clBtn">开始上�?/button>
+        <button class="btn ghost" onclick="clList()">课堂记录</button>
+      </div>
+      <div id="clArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>课堂档案</h3>
+      <div id="clList"></div>
+      <div class="empty" id="clEmpty" style="display:none">还没上过课。许墨已经坐好在第一排了�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 6. 情绪天气联动 ============ -->
+  <section class="panel" id="p6">
+    <div class="card">
+      <h3><span class="bar"></span>你的城市的天气，决定他的心情</h3>
+      <p class="hint">下雨时他撑伞，下雪时他发来恋语市的雪，晴天他约你去晒太阳。让许墨和你的天空同步�?/p>
+      <div class="btn-row">
+        <button class="btn" onclick="weatherAuto()" id="weatherAutoBtn">自动获取我的天气</button>
+      </div>
+      <label>或手动填�?/label>
+      <div class="btn-row" style="margin-top:6px">
+        <input type="text" id="wxCity" placeholder="城市" style="flex:1;min-width:120px">
+        <select id="wxKind" style="flex:1;min-width:120px">
+          <option value="�?>�?/option>
+          <option value="多云">多云</option>
+          <option value="�?>�?/option>
+          <option value="小雨">小雨</option>
+          <option value="大雨">大雨</option>
+          <option value="雷阵�?>雷阵�?/option>
+          <option value="小雪">小雪</option>
+          <option value="大雪">大雪</option>
+          <option value="�?>�?/option>
+        </select>
+        <input type="text" id="wxTemp" placeholder="温度" style="flex:1;min-width:80px">
+      </div>
+      <div class="btn-row">
+        <button class="btn pink" onclick="weatherSync()" id="wxBtn">和许墨同步天�?/button>
+      </div>
+      <div id="wxArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>天气记录</h3>
+      <div id="wxList"></div>
+      <div class="empty" id="wxEmpty" style="display:none">还没有天气记录�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 7. 共同习惯已合并至主屏「共同习惯」App（wonder_apps /api/habit�?============ -->
+
+  <!-- ============ 8. 危急时刻演练室 ============ -->
+  <section class="panel" id="p8">
+    <div class="card">
+      <h3><span class="bar"></span>先在这里，把艰难的话说一�?/h3>
+      <p class="hint">许墨会扮演对方，陪你演练现实里棘手的对话。结束后他会脱下角色，给你一份教授级的复盘�?/p>
+      <div id="rhScenes"></div>
+      <div class="btn-row">
+        <button class="btn" onclick="rhStart()" id="rhBtn">进入演练</button>
+        <button class="btn ghost" onclick="rhList()">演练档案</button>
+      </div>
+      <div id="rhArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>演练档案</h3>
+      <div id="rhList"></div>
+      <div class="empty" id="rhEmpty" style="display:none">还没有演练记录。有些话，先在安全的地方说一遍�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 9. 声音信箱 ============ -->
+  <section class="panel" id="p9">
+    <div class="card">
+      <h3><span class="bar"></span>他随时可能留一条语音给�?/h3>
+      <p class="hint">可能是看到蝴蝶想到你，可能是读文献时的一段话，可能是提醒你降温。不定时出现——记得常回来看看�?/p>
+      <div class="btn-row">
+        <button class="btn" onclick="mbPoll()" id="mbPollBtn">查看信箱</button>
+        <button class="btn ghost" onclick="mbReadAll()">全部已读</button>
+      </div>
+      <div id="mbMsg" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>留言列表</h3>
+      <div id="mbList"></div>
+      <div class="empty" id="mbEmpty" style="display:none">信箱空空的。也许过一会儿，他就会有话想对你说�?/div>
+    </div>
+  </section>
+
+  <!-- ============ 10. 合著的书 ============ -->
+  <section class="panel" id="p10">
+    <div class="card">
+      <h3><span class="bar"></span>你一句，他一句，写一本你们的�?/h3>
+      <p class="hint">他开篇，你续写，他接住——轮流落笔，直到这本书只属于你们�?/p>
+      <label>书名</label>
+      <input type="text" id="cbTitle" placeholder="例如：蝴蝶停过的第无数次窗台">
+      <label>题材</label>
+      <select id="cbGenre">
+        <option value="都市浪漫">都市浪漫</option>
+        <option value="科幻">科幻</option>
+        <option value="悬疑">悬疑</option>
+        <option value="童话">童话</option>
+        <option value="散文">散文</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn" onclick="cbNew()" id="cbNewBtn">翻开第一�?/button>
+        <button class="btn ghost" onclick="cbList()">书架</button>
+      </div>
+      <div id="cbArea" class="msg"></div>
+    </div>
+    <div class="card">
+      <h3><span class="bar"></span>书架</h3>
+      <div id="cbList"></div>
+      <div class="empty" id="cbEmpty" style="display:none">书架还是空的。等你们的第一本书�?/div>
+    </div>
+  </section>
+
+  <footer>许墨 · 最深的理解，是连你自己都没发现的事，被他轻轻记�?/footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let curLesson = null, curRehearsal = null, curBook = null;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fmtTs(ts){return esc(ts)}
+function busy(btnId,on){const b=$(btnId);if(!b)return;if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span> 处理�?..'}else if(b.dataset.t){b.innerHTML=b.dataset.t;delete b.dataset.t}}
+async function api(url,opts){
+  const r = await fetch(url,Object.assign({headers:{'Content-Type':'application/json'}},opts));
+  let d = {};
+  try{d = await r.json()}catch(e){}
+  if(!r.ok){throw new Error(d.error||('请求失败 '+r.status))}
+  return d;
+}
+document.getElementById('tabs').addEventListener('click',function(e){
+  const t = e.target.closest('.tab'); if(!t) return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on'); $(t.dataset.p).classList.add('on');
+});
+
+/* ================= 1. 观察手记 ================= */
+async function observeGen(){
+  busy('observeBtn',true);$('observeArea').innerHTML='';
+  try{
+    const d = await api('/api/observe/today',{method:'POST'});
+    const n=d.note;
+    $('observeArea').innerHTML='<div class="item"><div class="t">今日观察手记 · '+esc(n.date)+
+      (d.cached?' <span class="badge green">今日已生�?/span>':'')+'</div>'+
+      '<div class="s">'+esc(n.text)+'</div>'+
+      '<div class="m">今日她说 '+esc(n.stats.today)+' �?· '+esc(n.ts)+'</div></div>';
+    observeList();
+  }catch(e){$('observeArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('observeBtn',false);
+}
+async function observeList(){
+  try{
+    const d = await api('/api/observe');
+    if(!d.notes.length){$('observeEmpty').style.display='block';$('observeList').innerHTML='';return}
+    $('observeEmpty').style.display='none';
+    $('observeList').innerHTML=d.notes.map(n=>
+      '<div class="item"><div class="t">'+esc(n.date)+' <span class="badge pink">观察手记</span></div>'+
+      '<div class="s">'+esc(n.text)+'</div>'+
+      '<div class="m">'+fmtTs(n.ts)+'</div></div>').join('');
+  }catch(e){}
+}
+
+/* ================= 2/3. 共梦联机 & 平行世界 if 线已合并 =================
+   共梦 �?主屏「清梦」App�?api/dream）；if �?�?主屏「平行宇宙观测台」（/api/ifline�?*/
+
+/* ================= 4. 记忆碎片 ================= */
+async function mfList(){
+  try{
+    const d = await api('/api/memfrag');
+    $('mfStats').innerHTML=
+      '<div class="stat"><b>'+d.solved+'/'+d.total+'</b><span>已修�?/span></div>'+
+      '<div class="stat"><b>'+(d.total-d.solved)+'</b><span>待修�?/span></div>';
+    if(!d.fragments.length){$('mfEmpty').style.display='block';$('mfList').innerHTML='';return}
+    $('mfEmpty').style.display='none';
+    $('mfList').innerHTML=d.fragments.map(f=>{
+      const state=f.solved?'<span class="badge green">已修�?/span>':
+        f.unlocked?'<span class="badge pink">待修�?/span>':'<span class="badge">未解�?/span>';
+      return '<div class="item '+(f.unlocked?'':'frag-lock')+'">'+
+        '<div class="t">碎片 '+f.order+' · '+esc(f.title)+' '+state+'</div>'+
+        '<div class="s">'+esc(f.clue)+'</div>'+
+        (f.unlocked&&!f.solved?
+          '<div class="divider"></div><div class="s"><b>谜题�?/b>'+esc(f.question)+'</div>'+
+          '<label>你的答案</label><input type="text" id="mfans_'+f.id+'" placeholder="写下你的答案">'+
+          '<div class="btn-row"><button class="btn small" onclick="mfSolve(\''+f.id+'\')">提交答案</button></div>'+
+          '<div id="mfr_'+f.id+'" class="msg"></div>':'')+
+        (f.solved?'<div class="divider"></div><div class="s">'+esc(f.memory)+'</div>':'')+
+        '<div class="m">'+(f.wrong_times?'答错 '+f.wrong_times+' �?· ':'')+'</div></div>';
+    }).join('');
+  }catch(e){}
+}
+async function mfSolve(fid){
+  const ans=$('mfans_'+fid).value.trim();
+  if(!ans){alert('先写下你的答�?);return}
+  try{
+    const d = await api('/api/memfrag/'+fid+'/solve',{method:'POST',body:JSON.stringify({answer:ans})});
+    if(d.correct){
+      $('mfr_'+fid).innerHTML='<span class="msg ok">'+esc(d.comment)+'</span>';
+    }else{
+      $('mfr_'+fid).innerHTML='<span class="msg err">'+esc(d.comment)+'</span>';
+    }
+    setTimeout(mfList,800);
+  }catch(e){alert(e.message)}
+}
+
+/* ================= 5. 反向课堂 ================= */
+async function clLesson(){
+  busy('clBtn',true);$('clArea').innerHTML='';
+  try{
+    const d = await api('/api/classroom/lesson',{method:'POST',body:JSON.stringify({topic:$('clTopic').value.trim()})});
+    curLesson=d.lesson;
+    $('clArea').innerHTML='<div class="item"><div class="t">课题�?+esc(curLesson.topic)+'</div>'+
+      '<div class="s">'+esc(d.opening)+'</div>'+
+      '<div class="divider"></div><div class="s"><b>他问�?/b>'+esc(d.question)+'</div>'+
+      '<label>你的回答</label><textarea id="clAns"></textarea>'+
+      '<div class="btn-row"><button class="btn small" onclick="clAnswer()">回答�?/button></div>'+
+      '<div id="clResp" class="msg"></div></div>';
+    $('clTopic').value='';
+  }catch(e){$('clArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('clBtn',false);
+}
+async function clAnswer(){
+  if(!curLesson){alert('先开一堂课');return}
+  const ans=$('clAns').value.trim();
+  if(!ans){alert('先回答他的问�?);return}
+  try{
+    const d = await api('/api/classroom/'+curLesson.id+'/answer',{method:'POST',body:JSON.stringify({answer:ans})});
+    curLesson=d.lesson;
+    if(d.done){
+      $('clResp').innerHTML='<span class="msg ok">'+esc(d.reply)+'</span>'+
+        '<div class="divider"></div><div class="item"><div class="t">他的课堂笔记</div><div class="s">'+esc(d.note)+'</div></div>';
+    }else{
+      $('clResp').innerHTML='<span class="msg ok">'+esc(d.reply)+'</span>'+
+        '<div class="divider"></div><div class="s"><b>他又问：</b>'+esc(d.next_question)+'</div>'+
+        '<label>你的回答</label><textarea id="clAns"></textarea>'+
+        '<div class="btn-row"><button class="btn small" onclick="clAnswer()">继续回答</button></div>';
+    }
+    clList();
+  }catch(e){$('clResp').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+}
+async function clList(){
+  try{
+    const d = await api('/api/classroom');
+    if(!d.lessons.length){$('clEmpty').style.display='block';$('clList').innerHTML='';return}
+    $('clEmpty').style.display='none';
+    $('clList').innerHTML=d.lessons.map(l=>
+      '<div class="item"><div class="t">'+esc(l.topic)+
+      (l.done?' <span class="badge green">已结�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
+      '<div class="m">'+fmtTs(l.ts)+' · 已问 '+(l.questions||[]).length+' 个问�?/div>'+
+      (l.note?'<div class="s"><b>他的笔记�?/b>'+esc(l.note)+'</div>':'')+'</div>').join('');
+  }catch(e){}
+}
+
+/* ================= 6. 天气联动 ================= */
+function wmoText(code){
+  const m={0:'�?,1:'晴间多云',2:'多云',3:'�?,45:'�?,48:'雾凇',51:'毛毛�?,53:'毛毛�?,55:'毛毛�?,
+    56:'冻雨',57:'冻雨',61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',71:'小雪',73:'中雪',75:'大雪',
+    77:'米雪',80:'阵雨',81:'阵雨',82:'强阵�?,85:'阵雪',86:'阵雪',95:'雷阵�?,96:'雷雨伴冰�?,99:'雷雨伴冰�?};
+  return m[code]||'多云';
+}
+async function weatherAuto(){
+  busy('weatherAutoBtn',true);$('wxArea').innerHTML='';
+  if(!navigator.geolocation){$('wxArea').innerHTML='<span class="msg err">浏览器不支持定位，请手动填写</span>';busy('weatherAutoBtn',false);return}
+  navigator.geolocation.getCurrentPosition(async function(pos){
+    const lat=pos.coords.latitude.toFixed(2), lon=pos.coords.longitude.toFixed(2);
+    let city='你的城市', wx='多云', temp='';
+    try{
+      const w = await fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,weather_code&timezone=auto');
+      const wj = await w.json();
+      const cur = wj.current||{};
+      wx = wmoText(cur.weather_code);
+      temp = (cur.temperature_2m!=null?Math.round(cur.temperature_2m):'')+'°C';
+    }catch(e){}
+    try{
+      const g = await fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=zh');
+      const gj = await g.json();
+      city = (gj.address&&(gj.address.city||gj.address.town||gj.address.village))||city;
+    }catch(e){}
+    $('wxCity').value=city;$('wxKind').value=wx;$('wxTemp').value=temp;
+    await weatherSync();
+    busy('weatherAutoBtn',false);
+  },async function(){
+    $('wxArea').innerHTML='<span class="msg err">定位失败，请手动填写天气</span>';
+    busy('weatherAutoBtn',false);
+  },{timeout:8000});
+}
+async function weatherSync(){
+  busy('wxBtn',true);$('wxArea').innerHTML='';
+  const city=$('wxCity').value.trim(), kind=$('wxKind').value, temp=$('wxTemp').value.trim();
+  try{
+    const d = await api('/api/weather/sync',{method:'POST',body:JSON.stringify({city:city||'你的城市',weather:kind,temp})});
+    const day=d.day;
+    $('wxArea').innerHTML='<div class="item"><div class="t">'+esc(day.city)+' · '+esc(day.weather)+' '+esc(day.temp)+
+      ' <span class="badge pink">'+esc(day.mood)+'</span></div>'+
+      '<div class="s">'+esc(day.scene)+'</div>'+
+      (day.image?'<img class="cover-img" src="'+esc(day.image)+'" alt="天气场景">':'')+'</div>';
+    wxList();
+  }catch(e){$('wxArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('wxBtn',false);
+}
+async function wxList(){
+  try{
+    const d = await api('/api/weather');
+    if(!d.days.length){$('wxEmpty').style.display='block';$('wxList').innerHTML='';return}
+    $('wxEmpty').style.display='none';
+    $('wxList').innerHTML=d.days.map(day=>
+      '<div class="item"><div class="t">'+esc(day.date)+' · '+esc(day.city)+' · '+esc(day.weather)+' '+esc(day.temp)+
+      ' <span class="badge pink">'+esc(day.mood)+'</span></div>'+
+      '<div class="s">'+esc(day.scene)+'</div>'+
+      (day.image?'<img class="cover-img" src="'+esc(day.image)+'" alt="天气场景">':'')+'</div>').join('');
+  }catch(e){}
+}
+
+/* ================= 7. 共同习惯已合并至主屏「共同习惯」App�?api/habit�?================= */
+
+/* ================= 8. 演练�?================= */
+async function rhLoadScenes(){
+  try{
+    const d = await api('/api/rehearsal');
+    $('rhScenes').innerHTML=d.scenes.map(s=>
+      '<div class="item" style="cursor:pointer" onclick="rhPick(\''+s.key+'\')" id="rhp_'+s.key+'">'+
+      '<div class="t">'+esc(s.name)+'</div><div class="s">'+esc(s.desc)+'</div></div>').join('');
+  }catch(e){}
+}
+let rhPickKey=null;
+function rhPick(key){
+  document.querySelectorAll('#rhScenes .item').forEach(x=>x.style.borderColor='var(--border)');
+  const el=$('rhp_'+key); if(el) el.style.borderColor='var(--primary)';
+  rhPickKey=key;
+}
+async function rhStart(){
+  busy('rhBtn',true);$('rhArea').innerHTML='';
+  try{
+    const d = await api('/api/rehearsal/start',{method:'POST',body:JSON.stringify({scene:rhPickKey||''})});
+    curRehearsal=d.session;
+    rhRender();
+    rhList();
+  }catch(e){$('rhArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('rhBtn',false);
+}
+function rhRender(){
+  const s=curRehearsal;
+  if(!s)return;
+  $('rhArea').innerHTML='<div class="item"><div class="t">演练 · '+esc(s.scene_name)+
+    (s.done?' <span class="badge green">已复�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
+    '<div class="s" style="white-space:normal">'+esc(s.scene_desc)+'</div>'+
+    '<div class="divider"></div><div class="dialogue">'+
+    s.lines.map(l=>'<div class="dlg-row '+(l.who==='�??'you':'her')+'"><div class="who">'+esc(l.who)+'</div>'+
+      '<div class="bub">'+esc(l.line)+'</div></div>').join('')+'</div>'+
+    (s.done?'<div class="divider"></div><div class="s"><b>许墨的复盘：</b>'+esc(s.debrief)+'</div>'+
+      '<div class="btn-row"><button class="btn small" onclick="rhStart()">再练一�?/button></div>':'')+
+    '</div>';
+  if(!s.done){
+    $('rhArea').innerHTML+='<div class="card"><h3><span class="bar"></span>你的回应</h3>'+
+      '<textarea id="rhSay" placeholder="说点什么�?></textarea>'+
+      '<div class="btn-row">'+
+      '<button class="btn small" onclick="rhSay()">说出�?/button>'+
+      '<button class="btn small pink ghost" onclick="rhDebrief()">结束演练，要复盘</button></div>'+
+      '<div id="rhResp" class="msg"></div></div>';
+  }
+}
+async function rhSay(){
+  const line=$('rhSay').value.trim();
+  if(!line){alert('先想好怎么�?);return}
+  try{
+    const d = await api('/api/rehearsal/'+curRehearsal.id+'/say',{method:'POST',body:JSON.stringify({line})});
+    curRehearsal=d.session;
+    rhRender();
+    const box=$('rhArea').querySelector('.dialogue');
+    if(box) box.scrollTop=box.scrollHeight;
+  }catch(e){alert(e.message)}
+}
+async function rhDebrief(){
+  try{
+    const d = await api('/api/rehearsal/'+curRehearsal.id+'/debrief',{method:'POST'});
+    curRehearsal=d.session;
+    rhRender();rhList();
+  }catch(e){alert(e.message)}
+}
+async function rhList(){
+  try{
+    const d = await api('/api/rehearsal');
+    if(!d.sessions.length){$('rhEmpty').style.display='block';$('rhList').innerHTML='';return}
+    $('rhEmpty').style.display='none';
+    $('rhList').innerHTML=d.sessions.map(s=>
+      '<div class="item" style="cursor:pointer" onclick="rhOpen(\''+s.id+'\')">'+
+      '<div class="t">'+esc(s.scene_name)+
+      (s.done?' <span class="badge green">已复�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
+      '<div class="m">'+fmtTs(s.ts)+' · '+(s.lines.length/2|0)+' 轮对�?/div></div>').join('');
+  }catch(e){}
+}
+async function rhOpen(rid){
+  try{
+    const d = await api('/api/rehearsal/'+rid);
+    curRehearsal=d.session;
+    rhRender();
+  }catch(e){alert(e.message)}
+}
+
+/* ================= 9. 声音信箱 ================= */
+async function mbPoll(){
+  busy('mbPollBtn',true);$('mbMsg').innerHTML='';
+  try{
+    const d = await api('/api/mailbox/poll',{method:'POST'});
+    if(d.wait){
+      $('mbMsg').innerHTML='<span class="msg">他还没有新留言。过 '+d.wait+' 小时再来看看�?/span>';
+    }else if(d.new.length){
+      $('mbMsg').innerHTML='<span class="msg ok">信箱�?'+d.new.length+' 条新留言�?/span>';
+    }else{
+      $('mbMsg').innerHTML='<span class="msg">没有新留言�?/span>';
+    }
+    mbList();
+  }catch(e){$('mbMsg').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('mbPollBtn',false);
+}
+async function mbList(){
+  try{
+    const d = await api('/api/mailbox');
+    if(!d.messages.length){$('mbEmpty').style.display='block';$('mbList').innerHTML='';return}
+    $('mbEmpty').style.display='none';
+    $('mbList').innerHTML='<div class="stat-row"><div class="stat"><b>'+d.messages.length+'</b><span>总留言</span></div>'+
+      '<div class="stat"><b>'+d.unread+'</b><span>未读</span></div></div>'+
+      d.messages.map(m=>
+        '<div class="item"><div class="t">'+esc(m.ts)+
+        (m.read?' <span class="badge">已读</span>':' <span class="badge pink">未读</span>')+
+        ' <span class="badge">'+esc(m.theme||'')+'</span></div>'+
+        '<div class="s">'+esc(m.text)+'</div>'+
+        (m.audio?'<audio class="audio-player" controls src="'+esc(m.audio)+'"></audio>':'')+
+        '<div class="btn-row">'+
+        '<button class="btn small pink'+(m.audio?' ghost':'')+'" onclick="mbVoice(\''+m.id+'\')" id="mbv_'+m.id+'">'+
+        (m.audio?'重新合成语音':'用许墨的声音念出�?)+'</button>'+
+        (m.read?'':'<button class="btn small ghost" onclick="mbRead(\''+m.id+'\')">标为已读</button>')+
+        '</div></div>').join('');
+  }catch(e){}
+}
+async function mbVoice(mid){
+  busy('mbv_'+mid,true);
+  try{
+    const d = await api('/api/mailbox/'+mid+'/voice',{method:'POST'});
+    mbList();
+  }catch(e){alert(e.message)}
+  busy('mbv_'+mid,false);
+}
+async function mbRead(mid){
+  try{await api('/api/mailbox/'+mid+'/read',{method:'POST'});mbList()}catch(e){}
+}
+async function mbReadAll(){
+  try{await api('/api/mailbox/readall',{method:'POST'});mbList()}catch(e){}
+}
+
+/* ================= 10. 合著的书 ================= */
+async function cbNew(){
+  const title=$('cbTitle').value.trim();
+  const genre=$('cbGenre').value;
+  busy('cbNewBtn',true);$('cbArea').innerHTML='';
+  try{
+    const d = await api('/api/cobook',{method:'POST',body:JSON.stringify({title,genre})});
+    curBook=d.book;
+    cbRender();
+    cbList();
+  }catch(e){$('cbArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+  busy('cbNewBtn',false);
+}
+function cbRender(){
+  const b=curBook;
+  if(!b)return;
+  const chapters=(b.chapters||[]).map(ch=>
+    '<div class="dlg-row you"><div class="who">�?/div><div class="bub">'+esc(ch.her)+'</div></div>'+
+    '<div class="dlg-row her"><div class="who">�?/div><div class="bub">'+esc(ch.him)+'</div></div>').join('');
+  $('cbArea').innerHTML='<div class="item"><div class="t">�?+esc(b.title)+'�?<span class="badge pink">'+esc(b.genre)+'</span>'+
+    (b.afterword?' <span class="badge green">已完�?/span>':'')+'</div>'+
+    (b.cover?'<img class="cover-img" src="'+esc(b.cover)+'" alt="封面">':'')+
+    '<div class="s"><b>开篇：</b>'+esc(b.opening)+'</div>'+
+    (chapters?'<div class="divider"></div><div class="dialogue">'+chapters+'</div>':'')+
+    (b.afterword?'<div class="divider"></div><div class="s"><b>他的后记�?/b>'+esc(b.afterword)+'</div>':'')+
+    '<div class="m">'+fmtTs(b.created)+' · '+(b.chapters||[]).length+' �?/div></div>';
+  if(!b.afterword){
+    $('cbArea').innerHTML+='<div class="card"><h3><span class="bar"></span>轮到你落�?/h3>'+
+      '<textarea id="cbLine" placeholder="写下一句，他会接住�?></textarea>'+
+      '<div class="btn-row">'+
+      '<button class="btn small" onclick="cbWrite()">写下这一�?/button>'+
+      '<button class="btn small ghost" onclick="cbCover()" id="cbCoverBtn">生成封面</button>'+
+      '<button class="btn small pink ghost" onclick="cbFinish()" id="cbFinBtn">完稿（写后记�?/button></div>'+
+      '<div id="cbResp" class="msg"></div></div>';
+  }
+}
+async function cbWrite(){
+  const line=$('cbLine').value.trim();
+  if(!line){alert('先写下一�?);return}
+  try{
+    const d = await api('/api/cobook/'+curBook.id+'/write',{method:'POST',body:JSON.stringify({sentence:line})});
+    curBook=d.book;
+    cbRender();
+    $('cbResp').innerHTML='<span class="msg ok">他接住了�?+esc(d.him)+'</span>';
+    cbList();
+  }catch(e){$('cbResp').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
+}
+async function cbCover(){
+  busy('cbCoverBtn',true);
+  try{
+    await api('/api/cobook/'+curBook.id+'/cover',{method:'POST'});
+    cbRender();cbList();
+  }catch(e){alert(e.message)}
+  busy('cbCoverBtn',false);
+}
+async function cbFinish(){
+  busy('cbFinBtn',true);
+  try{
+    const d = await api('/api/cobook/'+curBook.id+'/finish',{method:'POST'});
+    curBook=d.book;
+    cbRender();cbList();
+  }catch(e){alert(e.message)}
+  busy('cbFinBtn',false);
+}
+async function cbList(){
+  try{
+    const d = await api('/api/cobook');
+    if(!d.books.length){$('cbEmpty').style.display='block';$('cbList').innerHTML='';return}
+    $('cbEmpty').style.display='none';
+    $('cbList').innerHTML=d.books.map(b=>
+      '<div class="item" style="cursor:pointer" onclick="cbOpen(\''+b.id+'\')">'+
+      '<div class="t">�?+esc(b.title)+'�?<span class="badge pink">'+esc(b.genre)+'</span>'+
+      (b.afterword?' <span class="badge green">已完�?/span>':'')+'</div>'+
+      '<div class="m">'+(b.chapters||[]).length+' �?· '+fmtTs(b.created)+'</div>'+
+      (b.cover?'<img class="cover-img" src="'+esc(b.cover)+'" alt="封面">':'')+
+      '</div>').join('');
+  }catch(e){}
+}
+async function cbOpen(bid){
+  try{
+    const d = await api('/api/cobook/'+bid);
+    curBook=d.book;
+    cbRender();
+  }catch(e){alert(e.message)}
+}
+
+/* ================= 初始�?================= */
+observeList();mfList();clList();wxList();rhLoadScenes();mbList();cbList();
+</script>
+<script>
+/* ===== 换背景图：每页独立的浮动按钮 ===== */
+(function () {
+  'use strict';
+
+  function pageKey() {
+    var p = location.pathname.split('/').pop();
+    if (!p || p === '') p = 'index';
+    p = p.replace(/\.html$/, '') || 'index';
+    return p;
+  }
+
+  var key = pageKey();
+  var IMG_KEY = 'lucien_bg_img_' + key;
+  var OP_KEY = 'lucien_bg_op_' + key;
+
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'bgLayer';
+    document.body.insertBefore(layer, document.body.firstChild);
+  }
+  layer.classList.add('lucien-bg-layer');
+
+  function applyOpacity(v) {
+    layer.style.setProperty('--lucien-bg-opacity', (v / 100).toString());
+    try { localStorage.setItem(OP_KEY, v.toString()); } catch (e) {}
+  }
+  function applyImg(dataUrl) {
+    layer.style.backgroundImage = dataUrl ? 'url(' + dataUrl + ')' : 'none';
+  }
+
+  // 构建 UI
+  var fab = document.createElement('button');
+  fab.className = 'lucien-bg-fab';
+  fab.type = 'button';
+  fab.title = '换背景图';
+  fab.setAttribute('aria-label', '换背景图');
+  fab.textContent = '🖼�?;
+
+  var panel = document.createElement('div');
+  panel.className = 'lucien-bg-panel';
+  panel.innerHTML =
+    '<h4>页面背景</h4>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
+    '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
+    '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
+    '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
+    '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
+    '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+
+  var opInput = panel.querySelector('#lbgOp');
+  var opVal = panel.querySelector('#lbgOpVal');
+  var fileInput = panel.querySelector('#lbgFile');
+
+  fab.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== fab) {
+      panel.classList.remove('open');
+    }
+  });
+  opInput.addEventListener('input', function () {
+    var v = parseInt(opInput.value, 10);
+    opVal.textContent = v + '%';
+    applyOpacity(v);
+  });
+  panel.querySelector('#lbgUpload').addEventListener('click', function () { fileInput.click(); });
+  panel.querySelector('#lbgReset').addEventListener('click', function () {
+    try { localStorage.removeItem(IMG_KEY); } catch (e) {}
+    applyImg(null);
+    panel.classList.remove('open');
+  });
+  fileInput.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { alert('图片不能超过 10MB'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max) {
+          var r = Math.min(max / w, max / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl;
+        try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        try { localStorage.setItem(IMG_KEY, dataUrl); }
+        catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
+        applyImg(dataUrl);
+      };
+      img.onerror = function () { alert('图片读取失败'); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  // 初始�?  try {
+    var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
+    if (isNaN(savedOp)) savedOp = 22;
+    opInput.value = savedOp;
+    opVal.textContent = savedOp + '%';
+    applyOpacity(savedOp);
+    var savedImg = localStorage.getItem(IMG_KEY);
+    if (savedImg) applyImg(savedImg);
+  } catch (e) {}
+})();
+
+</script>
+</body>
+</html>
+

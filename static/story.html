@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>许墨 · 互动养成空间</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel2:#1f2330; --line:#2a2f3d;
+    --txt:#e8eaf0; --sub:#9aa3b2; --accent:#7c9cff; --accent2:#ff8fb1;
+    --gold:#e9c46a; --green:#5fd0a0; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#1b2030 0,var(--bg) 60%);color:var(--txt);}
+  a{color:var(--accent);text-decoration:none}
+  .app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+  /* sidebar */
+  .side{background:linear-gradient(180deg,#141722,#0f1117);border-right:1px solid var(--line);
+    padding:18px 12px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh}
+  .brand{font-size:18px;font-weight:700;margin:6px 8px 14px;letter-spacing:1px}
+  .brand small{display:block;color:var(--sub);font-weight:400;font-size:11px;margin-top:2px}
+  .nav{display:flex;flex-direction:column;gap:4px}
+  .nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;
+    background:transparent;color:var(--sub);padding:11px 12px;border-radius:12px;cursor:pointer;
+    font-size:14px;transition:.15s}
+  .nav button .em{font-size:18px;width:22px;text-align:center}
+  .nav button:hover{background:var(--panel2);color:var(--txt)}
+  .nav button.active{background:linear-gradient(90deg,#26304a,#1b2030);color:#fff;
+    box-shadow:inset 0 0 0 1px #34406a}
+  .nav .meta{margin-top:auto;font-size:11px;color:var(--sub);padding:8px}
+  /* main */
+  .main{padding:26px 32px;max-width:1080px}
+  .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .head h1{font-size:22px;margin:0}
+  .head .tag{color:var(--sub);font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-bottom:16px}
+  .muted{color:var(--sub);font-size:13px;line-height:1.7}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;gap:12px}
+  .cols-3{grid-template-columns:repeat(3,1fr)}
+  .cols-2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:860px){.cols-3,.cols-2{grid-template-columns:1fr}.app{grid-template-columns:1fr}.side{position:static;height:auto;flex-direction:row;overflow:auto}.nav{flex-direction:row;flex-wrap:wrap}.nav .meta{display:none}.main{padding:16px}}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;
+    transition:.15s}
+  .chip:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .chip.sel{border-color:var(--accent);box-shadow:0 0 0 2px #2b3a66 inset}
+  .chip .t{font-weight:600;margin:4px 0}
+  .chip .d{color:var(--sub);font-size:12px}
+  .btn{background:linear-gradient(90deg,var(--accent),#5b7bff);border:0;color:#fff;padding:11px 18px;
+    border-radius:12px;cursor:pointer;font-size:14px;font-weight:600;transition:.15s}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  .btn.pink{background:linear-gradient(90deg,var(--accent2),#ff6f9d)}
+  .btn.gold{background:linear-gradient(90deg,var(--gold),#d4a23c);color:#1a1408}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  input,textarea,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:12px;padding:11px 12px;font-size:14px;font-family:inherit;outline:none}
+  textarea{resize:vertical;min-height:84px;line-height:1.6}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  label{display:block;font-size:12px;color:var(--sub);margin:10px 0 5px}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:999px;padding:6px 12px;font-size:12px;color:var(--sub)}
+  .pill b{color:var(--txt)}
+  .story-node{background:linear-gradient(180deg,#1c2233,#161a25);border:1px solid var(--line);
+    border-radius:14px;padding:18px;line-height:1.9;font-size:15px;white-space:pre-wrap}
+  .choice{display:block;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--line);
+    color:var(--txt);padding:13px 15px;border-radius:12px;margin-top:10px;cursor:pointer;transition:.15s}
+  .choice:hover{border-color:var(--accent);background:#20283c}
+  .choice .hint{display:block;color:var(--sub);font-size:12px;margin-top:3px}
+  .memo-card{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--line);
+    background:#11131b}
+  .memo-card img{width:100%;display:block;max-height:340px;object-fit:cover}
+  .memo-card .mc-body{padding:16px}
+  .memo-card .mc-title{font-size:19px;font-weight:700}
+  .memo-card .mc-quote{color:var(--accent2);font-style:italic;margin:8px 0}
+  .memo-card .mc-text{color:var(--sub);line-height:1.8}
+  .tag-end{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.55);padding:5px 12px;border-radius:999px;
+    font-size:12px;border:1px solid var(--line)}
+  .img{width:100%;border-radius:14px;border:1px solid var(--line);margin-top:10px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222838;border:1px solid var(--line);
+    color:var(--txt);padding:12px 18px;border-radius:12px;opacity:0;transition:.3s;z-index:50;max-width:90vw}
+  .toast.show{opacity:1}
+  .log{font-size:13px;color:var(--sub);line-height:1.9}
+  .log .ic{margin-right:6px}
+  .item{display:flex;gap:12px;align-items:center;background:var(--panel2);border:1px solid var(--line);
+    border-radius:12px;padding:12px}
+  .item .em{font-size:24px}
+  .bar{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;margin-top:6px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .sec-title{font-size:15px;font-weight:700;margin:18px 0 10px;display:flex;align-items:center;gap:8px}
+  .sec-title .em{font-size:18px}
+  .voice-btn{margin-left:8px}
+  .hidden{display:none}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;background:#2a3350;color:#aebfff}
+  .loading{opacity:.6;pointer-events:none}
+</style>
+<style>
+/* ===== 换背景图：全局浮动按钮 + 面板（每页独立） ===== */
+.lucien-bg-layer,
+#bgLayer{
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  opacity:var(--lucien-bg-opacity,.22);
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.lucien-bg-fab{
+  position:fixed;
+  left:18px;
+  bottom:18px;
+  z-index:9990;
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  border:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  line-height:1;
+  color:#fff;
+  background:linear-gradient(135deg,#7c3aed,#db2777);
+  box-shadow:0 6px 18px rgba(124,58,237,.4);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.lucien-bg-fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(124,58,237,.5)}
+.lucien-bg-fab:active{transform:scale(.94)}
+.lucien-bg-panel{
+  position:fixed;
+  left:18px;
+  bottom:74px;
+  z-index:9991;
+  width:264px;
+  max-width:calc(100vw - 36px);
+  box-sizing:border-box;
+  background:rgba(255,255,255,.97);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+  border:1px solid rgba(124,58,237,.2);
+  border-radius:16px;
+  box-shadow:0 14px 40px rgba(43,33,64,.22);
+  padding:14px 14px 12px;
+  display:none;
+  font-family:var(--font-sans,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif);
+}
+.lucien-bg-panel.open{display:block;animation:lbg-in .2s ease}
+@keyframes lbg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lucien-bg-panel h4{margin:0 0 10px;font-size:14px;color:#312a4a;font-weight:700}
+.lbg-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.lbg-row label{font-size:12px;color:#6f6785;flex-shrink:0}
+.lbg-row input[type=range]{flex:1;min-width:0}
+.lbg-val{font-size:11px;color:#7c3aed;min-width:34px;text-align:right;flex-shrink:0}
+.lbg-acts{display:flex;gap:8px;margin-top:10px}
+.lbg-btn{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer;transition:filter .15s ease}
+.lbg-btn:hover{filter:brightness(1.05)}
+.lbg-upload{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff}
+.lbg-reset{background:rgba(124,58,237,.08);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
+.lbg-tip{font-size:10.5px;color:#9a92ad;margin-top:8px;line-height:1.5}
+.lbg-file{display:none}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">许墨 · 互动养成<small>六大系统 · 剧情 / 经济 / 养成 / 晚安 / 树洞 / 节日</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="meta">数据随账号隔�?· 树洞聊完即焚</div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <h1 id="pageTitle">互动剧情副本</h1>
+      <span class="tag" id="pageTag">多结局恋爱 / 冒险互动叙事</span>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<audio id="audio" style="display:none"></audio>
+
+<script>
+const FEATURES = [
+  {key:"story", em:"📖", name:"互动剧情副本", tag:"多结局恋爱 / 冒险互动叙事"},
+  {key:"economy", em:"💰", name:"许墨工作经济", tag:"工资攒钱 · 共同基金 · 晋升剧情"},
+  {key:"traits", em:"🌱", name:"特质养成系统", tag:"行为驱动成长 · 主页展示"},
+  {key:"night", em:"🌙", name:"定制晚安故事", tag:"基于今日互动 · TTS 朗读"},
+  {key:"treehole", em:"🕳�?, name:"树洞模式", tag:"匿名倾诉 · 聊完即焚"},
+  {key:"festival", em:"🎉", name:"节日事件引擎", tag:"自动识别节日 / 生日 / 纪念�?},
+];
+let cur="story";
+const state={story:{sid:null}};
+
+/* ---------- helpers ---------- */
+function $(h){return h;}
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);}
+async function api(method,path,body){
+  const opt={method,credentials:'same-origin',headers:{}};
+  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  const r=await fetch(path,opt);
+  let data=null;try{data=await r.json();}catch(e){}
+  if(!r.ok){toast((data&&data.error)||('请求失败 '+r.status));throw new Error(data&&data.error||r.status);}
+  return data;
+}
+function ttsBtn(text){
+  if(!text) return '';
+  return `<button class="btn ghost voice-btn" onclick="playTTS(${JSON.stringify(text).replace(/"/g,'&quot;')})">🔊 朗读</button>`;
+}
+async function playTTS(text){
+  if(!text) return;
+  try{
+    const r=await fetch('/api/tts',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,280)})});
+    if(!r.ok){toast('语音服务未启�?);return;}
+    const blob=await r.blob();const url=URL.createObjectURL(blob);
+    const a=document.getElementById('audio');a.src=url;a.play();
+  }catch(e){toast('语音合成失败');}
+}
+
+/* ---------- nav ---------- */
+function buildNav(){
+  const n=document.getElementById('nav');n.innerHTML='';
+  FEATURES.forEach(f=>{
+    const b=el(`<button data-k="${f.key}"><span class="em">${f.em}</span><span>${f.name}</span></button>`);
+    if(f.key===cur)b.classList.add('active');
+    b.onclick=()=>{cur=f.key;buildNav();document.getElementById('pageTitle').textContent=f.name;document.getElementById('pageTag').textContent=f.tag;render();};
+    n.appendChild(b);
+  });
+}
+
+/* ---------- render dispatch ---------- */
+function render(){
+  const v=document.getElementById('view');
+  const map={story:viewStory,economy:viewEconomy,traits:viewTraits,night:viewNight,treehole:viewTreehole,festival:viewFestival};
+  v.innerHTML='';map[cur](v);
+}
+
+/* ============ 1. 互动剧情副本 ============ */
+async function viewStory(v){
+  v.appendChild(el(`<div class="card"><div class="muted">选择主题开启一段多结局互动叙事。你的每个选择都会改变剧情走向，抵达结局时可生成专属<strong>纪念�?+ 配图</strong>�?/div>
+    <div class="sec-title"><span class="em">🎨</span>选择剧本主题</div><div class="grid cols-3" id="themes"></div>
+    <label>自定义标题（可选）</label><input id="storyTitle" placeholder="留空则使用主题名"/>
+    <div class="row" style="margin-top:14px"><button class="btn" id="startBtn">�?开启剧�?/button><span class="muted" id="themeHint"></span></div></div>`));
+  let themes=[];try{const d=await api('GET','/api/story/themes');themes=d.themes||[];}catch(e){}
+  let sel=themes[0]?themes[0].key:'campus';
+  const tc=document.getElementById('themes');
+  themes.forEach(t=>{
+    const c=el(`<div class="chip" data-k="${t.key}"><div class="em" style="font-size:22px">${t.emoji}</div><div class="t">${esc(t.name)}</div><div class="d">${esc(t.desc)}</div></div>`);
+    if(t.key===sel)c.classList.add('sel');
+    c.onclick=()=>{[...tc.children].forEach(x=>x.classList.remove('sel'));c.classList.add('sel');sel=t.key;document.getElementById('themeHint').textContent='已选：'+t.name;};
+    tc.appendChild(c);
+  });
+  document.getElementById('startBtn').onclick=async()=>{
+    const btn=document.getElementById('startBtn');btn.disabled=true;btn.textContent='生成中�?;
+    try{
+      const d=await api('POST','/api/story/start',{theme:sel,title:document.getElementById('storyTitle').value});
+      state.story.sid=d.session.id;showStoryNode(v,d.session);
+    }catch(e){}finally{btn.disabled=false;btn.textContent='�?开启剧�?;}
+  };
+  // sessions list
+  v.appendChild(el(`<div class="sec-title"><span class="em">🗂�?/span>我的剧情存档</div>`));
+  const list=el(`<div class="grid cols-2" id="sessions"></div>`);v.appendChild(list);
+  try{const d=await api('GET','/api/story/sessions');(d.sessions||[]).forEach(s=>{
+    const c=el(`<div class="chip"><div class="t">${esc(s.title)} ${s.is_ending?'<span class="badge">已结局·'+(s.ending_type||'')+'</span>':''}</div><div class="d">${s.steps} �?· ${esc(s.created)} ${s.has_card?'· 💌有纪念卡':''}</div></div>`);
+    c.onclick=async()=>{const sd=await api('GET','/api/story/'+s.id);state.story.sid=s.id;showStoryNode(v,sd.session);};
+    list.appendChild(c);
+  });}catch(e){}
+}
+async function showStoryNode(v,session){
+  // clear and show interactive panel
+  v.innerHTML='';
+  const wrap=el(`<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(session.title)}</b> · �?${session.step} �?/div><span class="pill">${esc(session.genre)}</span></div><div id="nodeBox"></div></div>`);
+  v.appendChild(wrap);
+  renderNode(wrap.querySelector('#nodeBox'),session);
+}
+function renderNode(box,session){
+  box.innerHTML='';
+  const node=session.current_node;
+  box.appendChild(el(`<div class="story-node">${esc(node.narrative)}</div>`));
+  if(session.is_ending){
+    box.appendChild(el(`<div class="tag-end">${esc(session.ending_type||'结局')}</div>`));
+    const end=el(`<div class="muted" style="margin-top:12px">这段剧情已抵达结局。为它生成一张专属纪念卡吧�?/div>`);
+    box.appendChild(end);
+    const b=el(`<button class="btn gold" style="margin-top:10px">💌 生成纪念�?+ 配图</button>`);
+    b.onclick=async()=>{
+      b.disabled=true;b.textContent='生成中�?;
+      try{const d=await api('POST','/api/story/'+state.story.sid+'/card');showCard(box,d.card);}catch(e){}finally{b.disabled=false;b.textContent='💌 生成纪念�?+ 配图';}
+    };
+    box.appendChild(b);
+    if(session.card) showCard(box,session.card);
+    return;
+  }
+  (node.choices||[]).forEach((c,i)=>{
+    const btn=el(`<button class="choice">${esc(c.text)}<span class="hint">${esc(c.hint||'')}</span></button>`);
+    btn.onclick=async()=>{
+      [...box.querySelectorAll('.choice')].forEach(x=>x.disabled=true);
+      try{
+        const d=await api('POST','/api/story/choose',{session_id:state.story.sid,choice_index:i});
+        // re-render whole node area
+        const card=box.closest('.card');card.querySelector('#nodeBox').innerHTML='';renderNode(card.querySelector('#nodeBox'),d.session);
+      }catch(e){}
+    };
+    box.appendChild(btn);
+  });
+}
+function showCard(box,card){
+  const old=box.querySelector('.memo-card');if(old)old.remove();
+  const c=el(`<div class="memo-card" style="margin-top:14px">
+    ${card.image?`<img src="${esc(card.image)}"/>`:''}
+    <div class="mc-body">
+      <div class="mc-title">${esc(card.title||'纪念�?)} <span class="badge">${esc(card.ending_type||'')}</span></div>
+      <div class="mc-quote">�?{esc(card.quote||'')}�?/div>
+      <div class="mc-text">${esc(card.card_text||'')}</div>
+      ${ttsBtn((card.quote||'')+' '+(card.card_text||''))}
+    </div></div>`);
+  box.appendChild(c);
+}
+
+/* ============ 2. 工作经济系统 ============ */
+async function viewEconomy(v){
+  v.appendChild(el(`<div class="card" id="econCard"><div class="muted">许墨有自己的职业、工资与攒钱计划。你们设�?strong>共同基金</strong>一起买约会礼物、纪念品，并会随着晋升开启新剧情�?/div></div>`));
+  const card=document.getElementById('econCard');
+  let d;try{d=await api('GET','/api/economy/state');}catch(e){return;}
+  const s=d;
+  card.appendChild(el(`<div class="grid cols-3" style="margin-top:14px">
+    <div class="item"><div class="em">💼</div><div><div class="muted">职业 / 职级</div><b>${esc(s.job_name)} · ${esc(s.title)}</b></div></div>
+    <div class="item"><div class="em">💵</div><div><div class="muted">月薪</div><b>${s.salary} �?/b></div></div>
+    <div class="item"><div class="em">📅</div><div><div class="muted">已结算天�?/div><b>${s.day} �?/b></div></div>
+    <div class="item"><div class="em">🏦</div><div><div class="muted">个人存款</div><b>${s.savings} �?/b></div></div>
+    <div class="item"><div class="em">💞</div><div><div class="muted">共同基金</div><b>${s.joint_fund} �?/b></div></div>
+    <div class="item"><div class="em">🎖�?/div><div><div class="muted">晋升次数</div><b>${s.promotions} �?/b></div></div>
+  </div>`));
+  const act=el(`<div class="row" style="margin-top:16px">
+    <button class="btn" id="dailyBtn">📅 结算今日工资</button>
+    <button class="btn pink" id="promoBtn">🎉 触发晋升剧情</button>
+    <button class="btn ghost" id="jobBtn">💼 更换职业</button>
+  </div>`);
+  card.appendChild(act);
+  card.appendChild(el(`<div class="sec-title"><span class="em">🛍�?/span>共同基金 · 约会礼物 / 纪念�?/div>`));
+  const shop=el(`<div class="grid cols-3" id="shop"></div>`);card.appendChild(shop);
+  (d.shop||[]).forEach(it=>{
+    const c=el(`<div class="item"><div class="em">${it.emoji}</div><div style="flex:1"><div><b>${esc(it.name)}</b> · <span class="muted">${it.price} �?/span></div><div class="muted" style="font-size:12px">${esc(it.note)}</div></div><button class="btn ghost" data-id="${it.id}">购买</button></div>`);
+    c.querySelector('button').onclick=async(btn)=>{btn.disabled=true;try{await api('POST','/api/economy/buy',{item_id:it.id});toast('已用共同基金购入 🎁');refreshEcon();}catch(e){}finally{btn.disabled=false;}};
+    shop.appendChild(c);
+  });
+  card.appendChild(el(`<div class="sec-title"><span class="em">🎁</span>已拥有的心意</div>`));
+  const owned=el(`<div class="grid cols-2" id="owned"></div>`);card.appendChild(owned);
+  (s.items||[]).forEach(it=>{owned.appendChild(el(`<div class="item"><div class="em">${it.emoji}</div><div><b>${esc(it.name)}</b><div class="muted" style="font-size:12px">${esc(it.for)} · ${esc(it.time)}</div></div></div>`));});
+  if(!(s.items||[]).length)owned.appendChild(el(`<div class="muted">还没有用共同基金买过礼物，去挑一件吧�?/div>`));
+  card.appendChild(el(`<div class="sec-title"><span class="em">📜</span>经济流水</div>`));
+  card.appendChild(el(`<div class="log" id="elog"></div>`));
+  (s.log||[]).forEach(l=>{document.getElementById('elog').appendChild(el(`<div><span class="ic">${l.icon}</span>${esc(l.text)} ${l.amount?('<b>'+(l.amount>0?'+':'')+l.amount+'</b>'):''} <span class="muted">· ${esc(l.time)}</span></div>`));});
+
+  document.getElementById('dailyBtn').onclick=async(b)=>{b.disabled=true;try{const r=await api('POST','/api/economy/daily');toast('今日工资已结�?💰');refreshEcon();}catch(e){}finally{b.disabled=false;}};
+  document.getElementById('promoBtn').onclick=async(b)=>{b.disabled=true;b.textContent='生成剧情中�?;try{const r=await api('POST','/api/economy/promote');toast('许墨升职�?🎉');if(r.story)showStoryModal('晋升 · '+s.job_name,r.story);refreshEcon();}catch(e){}finally{b.disabled=false;b.textContent='🎉 触发晋升剧情';}};
+  document.getElementById('jobBtn').onclick=async()=>{
+    const key=prompt('输入职业 key（researcher/designer/doctor/teacher/engineer）：','researcher');if(!key)return;
+    try{await api('POST','/api/economy/setjob',{job_key:key});toast('职业已更�?);refreshEcon();}catch(e){}
+  };
+}
+async function refreshEcon(){const v=document.getElementById('view');v.innerHTML='';viewEconomy(v);}
+
+/* ============ 3. 特质养成 ============ */
+async function viewTraits(v){
+  v.appendChild(el(`<div class="card" id="traitCard"><div class="muted">许墨会因为你�?strong>生长出新的样�?/strong>——新口头禅、新技能、新习惯。这些由你们真实的行为互动驱动解锁，并展现在主页上�?/div></div>`));
+  const card=document.getElementById('traitCard');
+  let d;try{d=await api('GET','/api/traits');}catch(e){return;}
+  card.appendChild(el(`<div class="row" style="margin-top:12px"><span class="pill">养成等级 <b>Lv.${d.level}</b></span><span class="pill">经验 <b>${d.exp}</b></span><span class="pill">距下�?<b>${d.next_exp}</b></span></div>
+    <div class="bar"><i style="width:${100-d.next_exp}%"></i></div>`));
+  const sec=(em,t)=>card.appendChild(el(`<div class="sec-title"><span class="em">${em}</span>${t}</div>`));
+  const list=(arr,key)=>{const g=el(`<div class="grid cols-2" id="${key}"></div>`);card.appendChild(g);(arr||[]).forEach(x=>{g.appendChild(el(`<div class="item"><div class="em">${key==='catchphrases'?'💬':key==='skills'?'🛠�?:'🔁'}</div><div style="flex:1"><b>${esc(x.text||x.name)}</b><div class="muted" style="font-size:12px">${esc(x.src||'')}${x.reason?(' · '+esc(x.reason)):''} · ${esc(x.time||'')}</div></div></div>`));});if(!(arr||[]).length)g.appendChild(el(`<div class="muted">暂无，去「行为解锁」试试�?/div>`));};
+  sec('💬','新口头禅');list(d.catchphrases,'catchphrases');
+  sec('🛠�?,'新技�?);list(d.skills,'skills');
+  sec('🔁','新习�?);list(d.habits,'habits');
+
+  card.appendChild(el(`<div class="sec-title"><span class="em">�?/span>行为驱动解锁</div>
+    <div class="muted">描述一段你与许墨的互动，看他会因此长出什么新特质�?/div>
+    <textarea id="beh" placeholder="例如：今天我难过低落，许墨什么也没说，只是默默陪我坐了一整晚�?></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="observeBtn">🌱 观察并解�?/button><button class="btn ghost" id="scanBtn">🔍 扫描今日聊天建议</button></div>
+    <div id="obResult"></div>`));
+  document.getElementById('observeBtn').onclick=async(b)=>{const t=document.getElementById('beh').value.trim();if(!t){toast('先描述一段互�?);return;}b.disabled=true;b.textContent='观察中�?;try{const r=await api('POST','/api/traits/observe',{behavior:t});if(r.unlocked){toast('解锁新特�?�?);document.getElementById('obResult').appendChild(el(`<div class="item" style="margin-top:10px"><div class="em">�?/div><div><b>${esc(r.unlocked.text||r.unlocked.name)}</b><div class="muted" style="font-size:12px">${esc(r.unlocked.reason||'')}</div></div></div>`));}else{document.getElementById('obResult').appendChild(el(`<div class="muted" style="margin-top:10px">这段互动暂时还不足以长出新特质，多陪伴就好～</div>`));}refreshTraits();}catch(e){}finally{b.disabled=false;b.textContent='🌱 观察并解�?;}};
+  document.getElementById('scanBtn').onclick=async(b)=>{b.disabled=true;try{const r=await api('POST','/api/traits/scan');const box=document.getElementById('obResult');(r.suggestions||[]).forEach(s=>{box.appendChild(el(`<div class="item" style="margin-top:8px"><div class="em">💡</div><div style="flex:1"><b>${esc(s.text)}</b><div class="muted" style="font-size:12px">${esc(s.reason||'')}</div></div><button class="btn ghost" onclick="confirmTrait(${JSON.stringify(s.kind)}, ${JSON.stringify(s.text)})">确认解锁</button></div>`));});if(!(r.suggestions||[]).length)box.appendChild(el(`<div class="muted" style="margin-top:8px">${esc(r.note||'今天暂无新发�?)}</div>`));}catch(e){}finally{b.disabled=false;}};
+}
+window.confirmTrait=async(kind,text)=>{try{await api('POST','/api/traits/log',{kind,text:text});toast('已记�?�?);refreshTraits();}catch(e){}};
+async function refreshTraits(){const v=document.getElementById('view');v.innerHTML='';viewTraits(v);}
+
+/* ============ 4. 定制晚安故事 ============ */
+async function viewNight(v){
+  v.appendChild(el(`<div class="card" id="nightCard"><div class="muted">许墨会根�?strong>今天你们真实的聊天互�?/strong>，生成一段只属于你们的睡前故事，可听他温柔读给你听，并配上图�?/div>
+    <div class="row" style="margin-top:14px"><button class="btn" id="genBtn">🌙 生成今日晚安故事</button><span class="muted" id="nightHint"></span></div>
+    <div id="nightOut"></div></div>`));
+  const out=document.getElementById('nightOut');
+  let d;try{d=await api('GET','/api/nightstory/today');}catch(e){}
+  if(d&&d.story){renderNight(out,d.story);document.getElementById('nightHint').textContent='今日已生成，可重新生成覆�?;}
+  document.getElementById('genBtn').onclick=async(b)=>{b.disabled=true;b.textContent='编织中�?;try{const r=await api('POST','/api/nightstory/generate',{});renderNight(out,r.story);toast('晚安故事已生�?🌙');}catch(e){}finally{b.disabled=false;b.textContent='🌙 生成今日晚安故事';}};
+}
+function renderNight(out,s){
+  out.innerHTML='';
+  out.appendChild(el(`<div class="story-node" style="margin-top:14px">${esc(s.text)}</div>${s.image?`<img class="img" src="${esc(s.image)}"/>`:''}
+    <div class="row" style="margin-top:10px">${ttsBtn(s.text)}<span class="muted">${esc(s.tone||'')} · ${esc(s.generated_at||'')}</span></div>`));
+}
+
+/* ============ 5. 树洞模式 ============ */
+function viewTreehole(v){
+  v.appendChild(el(`<div class="card">
+    <div class="muted">这里�?strong>匿名树洞</strong>。你可以卸下所有伪装倾诉，许墨会用最温柔的方式接住你�?    <span style="color:var(--accent2)">聊完即焚</span>——这里的内容不会被记住，也不会写入任何记忆，刷新或关闭即消失，零负担�?/div>
+    <div id="thBox" style="margin-top:14px;display:flex;flex-direction:column;gap:10px"></div>
+    <textarea id="thInput" style="margin-top:12px" placeholder="想说什么都行，这里只有风和你�?></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn pink" id="thSend">🌿 倾诉</button><button class="btn ghost" id="thBurn">🔥 聊完即焚（清空）</button></div>
+  </div>`));
+  const box=document.getElementById('thBox');
+  function addMsg(role,text){box.appendChild(el(`<div class="story-node" style="${role==='user'?'background:#20283c':'background:linear-gradient(180deg,#241a26,#1a141e);border-color:#3a2a36'}">${esc(text)}</div>`));box.scrollTop=box.scrollHeight;}
+  let sid='';
+  document.getElementById('thSend').onclick=async(b)=>{const t=document.getElementById('thInput').value.trim();if(!t){toast('说点什么吧');return;}addMsg('user',t);document.getElementById('thInput').value='';b.disabled=true;try{const r=await api('POST','/api/treehole/chat',{text:t,session_id:sid});sid=r.session_id;addMsg('assistant',r.reply);}catch(e){}finally{b.disabled=false;}};
+  document.getElementById('thBurn').onclick=async()=>{if(sid){try{await api('POST','/api/treehole/close',{session_id:sid});}catch(e){}}sid='';box.innerHTML='';toast('已焚毁，如风过无�?🔥');};
+}
+
+/* ============ 6. 节日事件引擎 ============ */
+async function viewFestival(v){
+  v.appendChild(el(`<div class="card" id="festCard"><div class="muted">系统�?strong>自动识别</strong>今天的节�?/ 你的生日 / 你们的纪念日，并触发专属剧情、礼物与场景图�?/div>
+    <div class="row" style="margin-top:14px"><button class="btn" id="genFest">🎉 生成本日专属事件</button></div>
+    <div id="festOut"></div></div>`));
+  const out=document.getElementById('festOut');
+  let d;try{d=await api('GET','/api/festival/today');}catch(e){}
+  if(d){
+    if(d.events&&d.events.length){
+      out.appendChild(el(`<div class="sec-title"><span class="em">📌</span>今日识别�?/div>`));
+      d.events.forEach(e=>out.appendChild(el(`<div class="item"><div class="em">${e.emoji}</div><div><b>${esc(e.name)}</b> <span class="badge">${esc(e.cat)}</span><div class="muted" style="font-size:12px">${esc(e.desc)}</div></div></div>`)));
+      if(d.generated)renderFest(out,d.generated);
+    }else{
+      out.appendChild(el(`<div class="muted" style="margin-top:10px">今天没有自动识别到特殊日子，但你可以强制生成一份小小惊�?🎁</div>`));
+    }
+  }
+  document.getElementById('genFest').onclick=async(b)=>{b.disabled=true;b.textContent='生成中�?;try{const r=await api('POST','/api/festival/generate',{force:true});renderFest(out,r.generated,r.event);toast('专属事件已生�?🎉');}catch(e){}finally{b.disabled=false;b.textContent='🎉 生成本日专属事件';}};
+  // history
+  try{const h=await api('GET','/api/festival/history');if(h.history&&h.history.length){out.appendChild(el(`<div class="sec-title"><span class="em">📜</span>往期事�?/div>`));const g=el(`<div class="grid cols-2"></div>`);out.appendChild(g);h.history.slice(0,8).forEach(r=>{g.appendChild(el(`<div class="item"><div class="em">${r.event?r.event.emoji:'🎉'}</div><div style="flex:1"><b>${esc(r.event?r.event.name:'事件')}</b><div class="muted" style="font-size:12px">${esc(r.date)}</div></div></div>`));});}}catch(e){}
+}
+function renderFest(out,rec,ev){
+  out.appendChild(el(`<div class="memo-card" style="margin-top:14px">
+    ${rec.image?`<img src="${esc(rec.image)}"/>`:''}
+    <div class="mc-body">
+      <div class="mc-title">${(ev&&ev.emoji)||'🎉'} ${esc((ev&&ev.name)||(rec.event&&rec.event.name)||'专属事件')}</div>
+      <div class="mc-text">${esc(rec.story||'')}</div>
+      ${rec.gift?`<div class="item" style="margin-top:10px"><div class="em">${rec.gift.emoji||'🎁'}</div><div><b>${esc(rec.gift.gift||'')}</b><div class="muted" style="font-size:12px">${esc(rec.gift.why||'')}</div></div></div>`:''}
+      ${ttsBtn(rec.story||'')}
+    </div></div>`));
+}
+
+/* ---------- story modal (promotion etc.) ---------- */
+function showStoryModal(title,text){
+  const m=el(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:60;padding:20px" onclick="this.remove()">
+    <div class="card" style="max-width:520px" onclick="event.stopPropagation()">
+      <div class="mc-title">${esc(title)}</div>
+      <div class="story-node" style="margin-top:12px">${esc(text)}</div>
+      <div class="row" style="margin-top:12px">${ttsBtn(text)}<button class="btn ghost" onclick="this.closest('[style*=fixed]').remove()">关闭</button></div>
+    </div></div>`);
+  document.body.appendChild(m);
+}
+
+/* ---------- boot ---------- */
+buildNav();render();
+</script>
+<script>
+/* ===== 换背景图：每页独立的浮动按钮 ===== */
+(function () {
+  'use strict';
+
+  function pageKey() {
+    var p = location.pathname.split('/').pop();
+    if (!p || p === '') p = 'index';
+    p = p.replace(/\.html$/, '') || 'index';
+    return p;
+  }
+
+  var key = pageKey();
+  var IMG_KEY = 'lucien_bg_img_' + key;
+  var OP_KEY = 'lucien_bg_op_' + key;
+
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'bgLayer';
+    document.body.insertBefore(layer, document.body.firstChild);
+  }
+  layer.classList.add('lucien-bg-layer');
+
+  function applyOpacity(v) {
+    layer.style.setProperty('--lucien-bg-opacity', (v / 100).toString());
+    try { localStorage.setItem(OP_KEY, v.toString()); } catch (e) {}
+  }
+  function applyImg(dataUrl) {
+    layer.style.backgroundImage = dataUrl ? 'url(' + dataUrl + ')' : 'none';
+  }
+
+  // 构建 UI
+  var fab = document.createElement('button');
+  fab.className = 'lucien-bg-fab';
+  fab.type = 'button';
+  fab.title = '换背景图';
+  fab.setAttribute('aria-label', '换背景图');
+  fab.textContent = '🖼�?;
+
+  var panel = document.createElement('div');
+  panel.className = 'lucien-bg-panel';
+  panel.innerHTML =
+    '<h4>页面背景</h4>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
+    '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
+    '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
+    '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
+    '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
+    '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+
+  var opInput = panel.querySelector('#lbgOp');
+  var opVal = panel.querySelector('#lbgOpVal');
+  var fileInput = panel.querySelector('#lbgFile');
+
+  fab.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== fab) {
+      panel.classList.remove('open');
+    }
+  });
+  opInput.addEventListener('input', function () {
+    var v = parseInt(opInput.value, 10);
+    opVal.textContent = v + '%';
+    applyOpacity(v);
+  });
+  panel.querySelector('#lbgUpload').addEventListener('click', function () { fileInput.click(); });
+  panel.querySelector('#lbgReset').addEventListener('click', function () {
+    try { localStorage.removeItem(IMG_KEY); } catch (e) {}
+    applyImg(null);
+    panel.classList.remove('open');
+  });
+  fileInput.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { alert('图片不能超过 10MB'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max) {
+          var r = Math.min(max / w, max / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl;
+        try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        try { localStorage.setItem(IMG_KEY, dataUrl); }
+        catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
+        applyImg(dataUrl);
+      };
+      img.onerror = function () { alert('图片读取失败'); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  // 初始�?  try {
+    var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
+    if (isNaN(savedOp)) savedOp = 22;
+    opInput.value = savedOp;
+    opVal.textContent = savedOp + '%';
+    applyOpacity(savedOp);
+    var savedImg = localStorage.getItem(IMG_KEY);
+    if (savedImg) applyImg(savedImg);
+  } catch (e) {}
+})();
+
+</script>
+</body>
+</html>
+
+

@@ -1,0 +1,226 @@
+{
+  "meta": {
+    "name": "恋语市 · 地点素材图鉴",
+    "version": 1,
+    "updatedAt": "2026-08-16",
+    "source": "基于《恋与制作人》官方资料及玩家社区整理",
+    "cityPrototype": "恋语市以上海为原型（地铁站参照浦东大道站；部分场景窗外可见东方明珠）",
+    "coordNote": "坐标体系与 static/world-data.js 的 POIS 一致（144x144 tile），x/y 为左上角，w/h 为占格。type: build(建筑) | area(区域) | mark(地标点) | street(街道)。坐标为示意布局，可按需调整；与现有 POIS 重叠处（univ/lab 等）可合并替换。",
+    "fields": {
+      "district": "所属分区 id",
+      "tags": "场景标签：约会/日常/剧情/官方场景 等",
+      "relatedTo": "关联角色",
+      "desc": "地点简介",
+      "memory": "官方剧情记忆点 / 台词钩子，可直接用于约会剧情与对话生成"
+    }
+  },
+  "districts": [
+    { "id": "huapu",   "name": "花浦街区",       "color": "#e8a0bf", "desc": "恋语市最浪漫的一角，石板路与花影之间，发生过许多心动邂逅" },
+    { "id": "campus",  "name": "大学城",         "color": "#7fb8a0", "desc": "恋语大学及周边学区，书香与梧桐并存" },
+    { "id": "oldtown", "name": "西月街·如意镇",  "color": "#d4a95c", "desc": "中式古镇街区，节庆灯会与游园叙话的举办地" },
+    { "id": "finance", "name": "金融街",         "color": "#7a86b8", "desc": "写字楼林立的商务区，加班、偶遇与深夜火锅" },
+    { "id": "seaside", "name": "东部滨海",       "color": "#8fb8d4", "desc": "城市东缘的滨海地带，烟火与夜空的最佳观赏位" }
+  ],
+  "locations": [
+    {
+      "id": "huapu-street", "name": "花浦街", "type": "street", "icon": "🌸", "color": "#e8a0bf",
+      "district": "huapu", "x": 58, "y": 76, "w": 10, "h": 2,
+      "tags": ["约会", "官方场景", "漫展再现"],
+      "relatedTo": ["许墨"],
+      "desc": "恋语市的浪漫一角。官方漫展曾将整条街的风景原样再现——遇见餐厅、照相馆、白色电话亭与娃娃机都在这里。",
+      "memory": "城市漫步的经典路线。和他并肩走完整条街，不需要特意去哪里——重要的不是看什么，而是和谁一起看。"
+    },
+    {
+      "id": "meet-rest", "name": "遇见餐厅", "type": "build", "icon": "🍽️", "color": "#c4788e",
+      "district": "huapu", "x": 60, "y": 79, "w": 3, "h": 2,
+      "tags": ["约会", "官方场景", "餐厅"],
+      "relatedTo": ["许墨"],
+      "desc": "花浦街上「有着浪漫回忆的餐厅」，暖色灯光，靠窗的位置最抢手。",
+      "memory": "「下一次的约会，只有我们两个人。」"
+    },
+    {
+      "id": "photo-studio", "name": "照相馆", "type": "build", "icon": "📷", "color": "#b8a48e",
+      "district": "huapu", "x": 64, "y": 79, "w": 3, "h": 2,
+      "tags": ["约会", "官方场景", "回忆"],
+      "relatedTo": ["许墨"],
+      "desc": "屋檐上住着一只淘气的小猫。门口可以拍一张心动合影，把此刻定格。",
+      "memory": "他有一双善于发现世间美好的眼睛。把相机交给他，那些美好的回忆会被永远定格。"
+    },
+    {
+      "id": "phone-booth", "name": "白色电话亭", "type": "mark", "icon": "☎️", "color": "#e8e8f0",
+      "district": "huapu", "x": 61, "y": 82, "w": 1, "h": 1,
+      "tags": ["日常", "官方场景", "电话"],
+      "relatedTo": ["许墨"],
+      "desc": "散落在花浦街边的白色电话亭。走进去，也许会突然响起铃声——话筒里是熟悉的声音。",
+      "memory": "「我很喜欢你刚才那句话，希望可以常常听到。」"
+    },
+    {
+      "id": "claw-machine", "name": "娃娃机", "type": "mark", "icon": "🧸", "color": "#d4a0b8",
+      "district": "huapu", "x": 64, "y": 82, "w": 1, "h": 1,
+      "tags": ["日常", "官方场景", "游戏"],
+      "relatedTo": ["许墨"],
+      "desc": "照相馆旁的娃娃机，抓中球可以兑换限定徽章。",
+      "memory": "他不常玩游戏，但逻辑推理极强。如果输了——大概率是他故意的。"
+    },
+    {
+      "id": "xinguang-dept", "name": "新光百货", "type": "build", "icon": "🏬", "color": "#a88ab8",
+      "district": "huapu", "x": 68, "y": 74, "w": 5, "h": 4,
+      "tags": ["约会", "官方场景", "购物", "电影院"],
+      "relatedTo": ["许墨"],
+      "desc": "老牌百货，顶层有电影院。日用、服饰、毛线手工区一应俱全。",
+      "memory": "「进去吧，吃的喝的我都买好了。」——你一心只想着爆米花，其实他早就到了。"
+    },
+    {
+      "id": "lvying-plaza", "name": "绿盈广场", "type": "area", "icon": "🌿", "color": "#8fc486",
+      "district": "huapu", "x": 52, "y": 70, "w": 6, "h": 5,
+      "tags": ["日常", "官方场景", "广场"],
+      "relatedTo": ["许墨"],
+      "desc": "地铁站边上的开放式广场，周末常有市集。",
+      "memory": "「不是都说手织的围巾会更加温暖吗？我想要验证一下。——不过相对的，我希望你可以，只为我一个人织。」"
+    },
+    {
+      "id": "metro-station", "name": "恋语地铁站", "type": "build", "icon": "🚇", "color": "#7a8aa0",
+      "district": "huapu", "x": 46, "y": 72, "w": 4, "h": 3,
+      "tags": ["交通", "官方场景"],
+      "relatedTo": ["许墨"],
+      "desc": "恋语市轨道交通枢纽之一（原型：上海地铁浦东大道站）。",
+      "memory": "帮迷路的老奶奶指路后，身后传来他的声音：「我倒是觉得刚刚的老奶奶说得很对。」——他到底听了多久？"
+    },
+    {
+      "id": "chunxi-teahouse", "name": "春溪茶社", "type": "build", "icon": "🍵", "color": "#9ab886",
+      "district": "huapu", "x": 56, "y": 68, "w": 3, "h": 2,
+      "tags": ["约会", "官方场景", "茶饮"],
+      "relatedTo": ["许墨"],
+      "desc": "安静的茶社，招牌是白茶。最后一包常常被人提前买走。",
+      "memory": "「我买回去，本来也就是打算和你一起品尝的。正好是休息日，茶点我也备好了。」"
+    },
+    {
+      "id": "zhenshan-rest", "name": "珍膳酒楼", "type": "build", "icon": "🍜", "color": "#c49a6a",
+      "district": "huapu", "x": 52, "y": 64, "w": 3, "h": 2,
+      "tags": ["日常", "官方场景", "餐厅"],
+      "relatedTo": [],
+      "desc": "老字号酒楼，新茶上市的季节一座难求（茶不单卖是老规矩）。",
+      "memory": "适合一桌人热热闹闹吃饭的地方。"
+    },
+    {
+      "id": "linglong-rest", "name": "玲珑阁", "type": "build", "icon": "🐟", "color": "#c4705a",
+      "district": "campus", "x": 40, "y": 58, "w": 4, "h": 3,
+      "tags": ["日常", "官方场景", "餐厅"],
+      "relatedTo": ["李泽言"],
+      "desc": "招牌是花椒水煮鱼、香辣口水蛙。附近有李总裁指定的红酒酒庄。",
+      "memory": "「天下没有免费的午餐，做任何事情，都要付出代价。」"
+    },
+    {
+      "id": "wine-shop", "name": "红酒酒庄", "type": "build", "icon": "🍷", "color": "#8e4a5c",
+      "district": "campus", "x": 45, "y": 60, "w": 3, "h": 2,
+      "tags": ["日常", "官方场景"],
+      "relatedTo": ["李泽言"],
+      "desc": "玲珑阁附近的老牌酒庄，品酒室的灯光永远昏暗惬意。",
+      "memory": "有人会被使唤着来跑腿品酒——然后顺便记住你喜欢的口感。"
+    },
+    {
+      "id": "chaowen-cafe", "name": "朝闻路咖啡馆", "type": "build", "icon": "☕", "color": "#b0703c",
+      "district": "campus", "x": 66, "y": 63, "w": 3, "h": 2,
+      "tags": ["日常", "官方场景", "外卖"],
+      "relatedTo": ["许墨"],
+      "desc": "小资情调的街角咖啡馆，许教授偶尔会喊话送外卖。",
+      "memory": "「咖啡店外带的热美式，和他喝的同款。」——黑咖啡，不加糖不加奶。"
+    },
+    {
+      "id": "lianyu-univ", "name": "恋语大学", "type": "build", "icon": "🎓", "color": "#4f8f7a",
+      "district": "campus", "x": 74, "y": 60, "w": 5, "h": 4,
+      "tags": ["剧情", "官方场景", "大学"],
+      "relatedTo": ["许墨", "凌肖"],
+      "desc": "许墨任教的客座学府（脑科学研究院在此），考古系研究生的实验室也在东区。",
+      "memory": "「没关系，就算我的讲座很催眠，能让你好好睡一觉，也很好。」"
+    },
+    {
+      "id": "xumo-lab", "name": "许墨生命科学研究所", "type": "build", "icon": "🧪", "color": "#5f6fb0",
+      "district": "campus", "x": 82, "y": 66, "w": 5, "h": 4,
+      "tags": ["剧情", "官方场景", "研究所"],
+      "relatedTo": ["许墨"],
+      "desc": "许墨24岁回国后创立的脑科学研究所。玻璃幕墙后是永远亮到深夜的灯。",
+      "memory": "「还没有（忙完），但偶尔也需要好好休息一下。和你一起，就是最好的休息。」"
+    },
+    {
+      "id": "xumo-home", "name": "教工公寓", "type": "build", "icon": "🏢", "color": "#7a7fb0",
+      "district": "campus", "x": 86, "y": 76, "w": 3, "h": 3,
+      "tags": ["日常", "住所"],
+      "relatedTo": ["许墨"],
+      "desc": "大学城的教工公寓，许墨的住处。清晨五点之后，这里的窗帘会拉得很严。",
+      "memory": "他睡得很少，但睡着的时侯，手机永远开着铃声——只有一个号码打来会接。"
+    },
+    {
+      "id": "music-room", "name": "音乐室", "type": "build", "icon": "🎹", "color": "#9a8ab8",
+      "district": "campus", "x": 62, "y": 74, "w": 2, "h": 2,
+      "tags": ["日常", "官方场景", "彩蛋"],
+      "relatedTo": [],
+      "desc": "琴房街的旧音乐室。到了晚上，窗外能望见远处「东方明珠」形状的塔影。",
+      "memory": "城市彩蛋：恋语市与那座南方大都市的微妙重叠。"
+    },
+    {
+      "id": "fin-street", "name": "金融街", "type": "street", "icon": "🏙️", "color": "#7a86b8",
+      "district": "finance", "x": 84, "y": 88, "w": 12, "h": 2,
+      "tags": ["日常", "官方场景", "商务"],
+      "relatedTo": [],
+      "desc": "写字楼林立的商务主街。晚高峰的地铁口，全是刚「终于下班」的人。",
+      "memory": "「顾梦：老板你不是约了人看电影吗？怎么还在？」——赶紧跑，他到了。"
+    },
+    {
+      "id": "lianyu-tv", "name": "恋语卫视", "type": "build", "icon": "📺", "color": "#8a7ab0",
+      "district": "finance", "x": 92, "y": 84, "w": 4, "h": 3,
+      "tags": ["剧情", "官方场景", "电视台"],
+      "relatedTo": ["女主"],
+      "desc": "恋语市地标媒体大楼（原型：东方卫视）。女主的节目《发现奇迹》曾在这里艰难求生。",
+      "memory": "为了把节目炒热，她鼓起勇气约到了那位「很难约的许教授」。"
+    },
+    {
+      "id": "midnight-hotpot", "name": "深夜火锅店", "type": "build", "icon": "🍲", "color": "#c45a4a",
+      "district": "finance", "x": 78, "y": 88, "w": 3, "h": 2,
+      "tags": ["日常", "官方场景", "餐厅"],
+      "relatedTo": ["白起"],
+      "desc": "营业到凌晨两点的小火锅店，特警和特遣署的人下班后常来。",
+      "memory": "「你和信仰，我都会誓死守护。」"
+    },
+    {
+      "id": "conv-store", "name": "街角便利店", "type": "build", "icon": "🛒", "color": "#c8b84a",
+      "district": "seaside", "x": 96, "y": 80, "w": 2, "h": 2,
+      "tags": ["日常", "官方场景", "初遇"],
+      "relatedTo": ["周棋洛"],
+      "desc": "24小时便利店。货架第三排永远缺一包特定口味的薯片。",
+      "memory": "「You are the apple of my eye.」——一切都从一包薯片开始。"
+    },
+    {
+      "id": "souvenir-rest", "name": "Souvenir 餐厅", "type": "build", "icon": "🍮", "color": "#b08a5c",
+      "district": "seaside", "x": 104, "y": 82, "w": 3, "h": 2,
+      "tags": ["约会", "官方场景", "餐厅"],
+      "relatedTo": ["李泽言"],
+      "desc": "主厨身份成谜的法餐厅，招牌布丁的配方从不外传。名字意为「回忆」。",
+      "memory": "「我不过圣诞节。不过你要请我的话，勉强可以接受。」"
+    },
+    {
+      "id": "camphor-tree", "name": "香樟树", "type": "mark", "icon": "🌳", "color": "#5d9b53",
+      "district": "seaside", "x": 102, "y": 64, "w": 1, "h": 1,
+      "tags": ["剧情", "官方场景", "初遇", "回忆"],
+      "relatedTo": ["许墨", "女主"],
+      "desc": "公园深处那棵老香樟树。19年前，一个8岁的男孩在这里画画，遇到了一个快5岁的小女孩。",
+      "memory": "「大哥哥，你叫什么名字？」「我今年8岁，我叫许墨。」——19年后：「我知道了有个女孩在等我，就来了。」"
+    },
+    {
+      "id": "orphanage", "name": "阳光孤儿院", "type": "build", "icon": "🧒", "color": "#d4b86a",
+      "district": "seaside", "x": 110, "y": 70, "w": 4, "h": 3,
+      "tags": ["剧情", "官方场景", "公益"],
+      "relatedTo": ["许墨", "女主"],
+      "desc": "两人一起探访过的孤儿院。孩子们最喜欢这位会蹲下来讲恐龙故事的许教授。",
+      "memory": "在他眼里她曾是「样本」，在孩子们眼里他只是「温柔的大哥哥」——那一刻，观察者的记录第一次停笔。"
+    },
+    {
+      "id": "ruyi-town", "name": "西月街·如意镇", "type": "area", "icon": "🏮", "color": "#d4a95c",
+      "district": "oldtown", "x": 30, "y": 76, "w": 14, "h": 12,
+      "tags": ["剧情", "官方场景", "节庆"],
+      "relatedTo": ["许墨"],
+      "desc": "恋语市郊的中式古镇街区。花灯、石桥、游园会——七周年「地久天长·游园叙话」在此举办。",
+      "memory": "婚礼主题「痴情诗」：「以春秋为证，只要牵住你的手，就是一辈子的约定。」「关于你所有的炽热、好奇和不安，我都一一写进了诗里。」"
+    }
+  ]
+}
