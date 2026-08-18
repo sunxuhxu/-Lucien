@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>login helper</title></head>
+<body><div id="status">logging in...</div>
+<script>
+(function(){
+  var code = new URLSearchParams(location.search).get('code') || '';
+  fetch('/api/verify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code: code})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    document.getElementById('status').textContent = 'verify ok=' + d.ok;
+    setTimeout(function(){ location.href = '/?xab_debug=1'; }, 300);
+  }).catch(function(e){
+    document.getElementById('status').textContent = 'err ' + e;
+  });
+})();
+</script>
+</body>
+</html>

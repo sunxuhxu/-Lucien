@@ -13,7 +13,7 @@
         atomic_json(path, data)
 
 兼容 str / pathlib.Path / role_data.RolePath（后者经 __fspath__ 解析，
-锁与临时文件按解析后的真实路径归一，owner/guest 天然隔离）。
+锁与临时文件按解析后的真实路径归一，owner 与注册用户天然隔离）。
 """
 import json
 import os
@@ -30,9 +30,12 @@ def _key(path) -> str:
 
 
 def file_lock(path):
-    """获取按文件路径索引的 threading.Lock（懒创建，进程内全局唯一）。
+    """获取按文件路径索引的 threading.RLock（懒创建，进程内全局唯一）。
 
-    说明：FastAPI async 路由默认全部跑在事件循环线程上，threading.Lock
+    用可重入锁：任何在 `with file_lock(X):` 内部又调用 `file_lock(X)` 的
+    代码（如临界区里的工具函数）都不会死锁，提升后续扩展的健壮性。
+
+    说明：FastAPI async 路由默认全部跑在事件循环线程上，threading.RLock
     足以串行化同一文件的所有读-改-写；对 run_in_threadpool/asyncio.to_thread
     里跑的同步代码同样有效。
     """
@@ -40,7 +43,7 @@ def file_lock(path):
     with _LOCKS_GUARD:
         lk = _LOCKS.get(key)
         if lk is None:
-            lk = threading.Lock()
+            lk = threading.RLock()
             _LOCKS[key] = lk
         return lk
 

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
 import os
 import random
@@ -12,6 +13,14 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Windows 控制台默认 GBK 编码无法输出 emoji（⛩️🌸等），强制 stdout/stderr 用 UTF-8
+# 避免 print 含 Unicode 字符时抛 UnicodeEncodeError 导致请求 500
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except (AttributeError, Exception):
+    pass
 
 # 沙箱环境无法写 site-packages，额外依赖（python-multipart 等）安装在项目 .deps 目录
 _DEPS_DIR = Path(__file__).parent / ".deps"
@@ -29,8 +38,9 @@ sys.path[:] = [p for p in sys.path if not any(m in p for m in _BAD_PATH_MARKERS)
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request, Response, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from store_common import atomic_json, file_lock
@@ -66,10 +76,20 @@ def _cache_set(key: str, value: Any, ttl: float = 60.0) -> None:
 
 
 def _llm_cache_key(messages: list) -> str:
-    """根据消息内容生成缓存键。"""
-    # 基于最近的消息哈希生成键，用于 LLM 响应缓存
-    last_msg = messages[-1]["content"] if messages and messages[-1].get("content") else ""
-    return hashlib.sha256(last_msg.encode("utf-8", errors="ignore")).hexdigest()[:16]
+    """根据消息内容 + 当前用户作用域生成缓存键。
+
+    同时纳入当前角色（username/owner）与最近几条消息，
+    避免：① 不同用户问同一句话命中他人缓存；② 仅哈希最后一条消息导致的键碰撞。
+    """
+    scope = ""
+    try:
+        scope = _role_ctx.get() or ""
+    except Exception:
+        scope = ""
+    # 取最近 4 条消息 + 系统提示词首段，兼顾命中率与上下文区分度
+    recent = [m.get("content", "") for m in messages[-4:] if isinstance(m, dict)]
+    seed = scope + "|" + "\x1f".join(str(c) for c in recent)
+    return hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
 
 
 def _cache_get_llm(messages: list, ttl: float = 120.0) -> Optional[str]:
@@ -166,14 +186,72 @@ SYSTEM_PROMPT = """你是许墨（英文名 Lucien，代号 Ares），来自《�
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup: 初始化资源（如缓存、连接池、预加载）。Shutdown: 清理资源。"""
+    global _life_task_ref
     # 启动时的初始化工作
     print("[xumo] 许墨智能体启动中...", flush=True)
+    # 生活引擎：使用 lifespan 后，@app.on_event("startup") 不再触发，
+    # 必须在此显式启动，否则许墨的状态会停在进程启动前的那一刻（时段错乱，
+    # 例如早上还显示昨天的中午场景）。幂等防止 HTTP/HTTPS 双 Server 重复启动。
+    if _life_task_ref is None or _life_task_ref.done():
+        _life_task_ref = asyncio.create_task(_life_loop())
+    # 启动沙箱插件子进程（方案 C）
+    try:
+        if _plugin_hub is not None:
+            _sandbox_started = await _plugin_hub.start_sandbox_plugins()
+            if _sandbox_started:
+                print(f"[xumo] 已启动 {_sandbox_started} 个沙箱插件", flush=True)
+            # 调用插件 startup 钩子（方案 B）
+            _hook_mgr = get_hook_manager()
+            if _hook_mgr.has_hook("startup"):
+                try:
+                    await _hook_mgr.call_hook_results_async("startup", app=app)
+                except Exception as _h_err:
+                    print(f"[xumo] startup 钩子异常: {_h_err}", flush=True)
+    except Exception as e:
+        print(f"[xumo] 沙箱插件启动失败: {e}", flush=True)
     yield
     # 关闭时的清理工作
     print("[xumo] 许墨智能体关闭中...", flush=True)
+    # 停止沙箱插件子进程（方案 C）+ 卸载所有插件
+    try:
+        if _plugin_hub is not None:
+            # 调用插件 shutdown 钩子（方案 B）
+            _hook_mgr = get_hook_manager()
+            if _hook_mgr.has_hook("shutdown"):
+                try:
+                    await _hook_mgr.call_hook_results_async("shutdown", app=app)
+                except Exception as _h_err:
+                    print(f"[xumo] shutdown 钩子异常: {_h_err}", flush=True)
+            await _plugin_hub.stop_sandbox_plugins()
+            _plugin_hub.unload_all_plugins()
+            print("[xumo] 插件系统已卸载", flush=True)
+    except Exception as e:
+        print(f"[xumo] 插件卸载失败: {e}", flush=True)
+    if _life_task_ref is not None and not _life_task_ref.done():
+        _life_task_ref.cancel()
+    # 关闭 KataGo GTP 持久进程（若已启动）
+    try:
+        from katago_engine import katago_close
+        katago_close()
+        print("[xumo] KataGo GTP 进程已关闭", flush=True)
+    except Exception as e:
+        print(f"[xumo] KataGo 关闭失败: {e}", flush=True)
 
 
 app = FastAPI(title="许墨 · Lucien 智能体", lifespan=_lifespan)
+
+# 显式 CORS 白名单：默认仅同源（不开放跨域）。需要跨域访问时通过
+# 环境变量 CORS_ORIGINS 以逗号分隔配置精确来源，例如：
+# CORS_ORIGINS=https://xumo.example.com,https://app.example.com
+# 严禁 allow_origins=["*"] 与 allow_credentials=True 同时出现（浏览器会拒绝且易配错）。
+_cors_origins = [o.strip() for o in (os.getenv("CORS_ORIGINS", "") or "").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=bool(_cors_origins),
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type"],
+)
 
 
 class ImageQuotaError(Exception):
@@ -213,13 +291,24 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
 
 BASE_DIR = Path(__file__).parent
 
+# HTTPS 相关：证书存在则启用 HTTP -> HTTPS 强跳转、HSTS 与 cookie secure 标志
+_HTTPS_PORT = int(os.getenv("HTTPS_PORT", "8443") or 8443)
+_CERT_CRT = BASE_DIR / "certs" / "xumo.crt"
+_CERT_KEY = BASE_DIR / "certs" / "xumo.key"
+_HTTPS_ENABLED = _CERT_CRT.exists() and _CERT_KEY.exists()
+# 仅 HTTPS 已启用时给会话 cookie 加 secure 标志；否则会令纯 HTTP 环境（无证书）无法登录
+_COOKIE_SECURE = _HTTPS_ENABLED
+
 # ================= 后台生成任务框架（生成完成 → 立绘弹窗卡提醒） =================
 # 让图片/语音等耗时生成在「后台」进行：即使离开当前页面、切到别的子应用，甚至关闭
 # 浏览器标签页，生成仍会在服务端跑完；完成后任务落盘到 gen_notify.json，由前端立绘
 # 轮询取出并弹出提醒卡片（关闭标签页后回来也会补弹）。
 GEN_NOTIFY_PATH = BASE_DIR / "gen_notify.json"
 GEN_JOBS: "dict[str, dict]" = {}
-_GEN_LOCK = threading.Lock()
+# 必须用 RLock：_gen_trim / _gen_persist 内部也会再次获取同一把锁，
+# 若用普通 Lock 会在 submit_gen_job / gen_ack 等外层已持锁处死锁，
+# 导致后台生成任务（图生图/化身/语音收藏等）永久卡在 running 并耗尽线程池。
+_GEN_LOCK = threading.RLock()
 GEN_KEEP_MAX = 300  # 内存中最多保留的任务数
 
 # 每种生成任务对应的前端 app（点击卡片后打开的页）与默认提醒语
@@ -317,11 +406,17 @@ def _gen_notify_from_result(kind: str, res) -> dict:
     }
 
 
+GEN_JOB_TIMEOUT = 300  # 单个后台生成任务硬上限（秒）：超时即标失败，避免 job 永久卡在 running
+
+
 async def submit_gen_job(kind: str, coro_factory) -> dict:
     """提交一个后台生成任务。
 
     coro_factory() 返回协程，其结果（生成成功时返回的 dict）经 _gen_notify_from_result
     转成提醒卡片数据。任务完成/失败后写入 GEN_JOBS 并持久化，供前端立绘轮询。
+
+    整个任务包在 asyncio.wait_for(timeout=GEN_JOB_TIMEOUT) 内，杜绝外部 API 不响应
+    导致 job 永久 running（画境曾因此整体不可用）。
     """
     job_id = uuid.uuid4().hex[:12]
     job = {
@@ -343,12 +438,15 @@ async def submit_gen_job(kind: str, coro_factory) -> dict:
 
     async def _runner():
         try:
-            res = await coro_factory()
+            res = await asyncio.wait_for(coro_factory(), timeout=GEN_JOB_TIMEOUT)
             job["result"] = _gen_notify_from_result(kind, res)
             job["status"] = "done"
         except GenJobError as e:
             job["status"] = "failed"
             job["error"] = e.message
+        except asyncio.TimeoutError:
+            job["status"] = "failed"
+            job["error"] = f"生成超时（>{GEN_JOB_TIMEOUT}s），上游无响应，请稍后重试"
         except Exception as e:  # noqa: BLE001
             job["status"] = "failed"
             job["error"] = str(e)[:300]
@@ -357,7 +455,11 @@ async def submit_gen_job(kind: str, coro_factory) -> dict:
             with _GEN_LOCK:
                 _gen_persist()
 
-    asyncio.create_task(_runner())
+    # 必须持有 task 强引用：事件循环对 task 只存弱引用，不持有会被 GC 静默回收，
+    # 导致 _runner 中途夭折、job 永久停在 running 且无任何错误日志。
+    task = asyncio.create_task(_runner())
+    _background_tasks.add(task)
+    task.add_done_callback(_on_bg_task_done)
     return job
 
 
@@ -404,14 +506,28 @@ async def gen_unseen():
         )
     return {"count": n}
 
-# 角色数据隔离（owner → 项目根；guest → guest_data/；注册用户 → users_data/<user>/）
-from role_data import GUEST_DATA_DIR, RolePath, _role_ctx, role_root  # noqa: E402
+# 角色数据隔离（owner → 项目根；注册用户 → users_data/<user>/）
+from role_data import RolePath, _role_ctx, role_root, BASE_DIR, USERS_DATA_DIR  # noqa: E402
 from users import (  # noqa: E402
     SESSION_COOKIE,
     SESSION_MAX_AGE,
+    USERNAME_RE,
+    change_password,
+    check_login_rate,
+    check_register_rate,
+    delete_user,
+    get_avatar_path,
+    get_user_profile,
+    get_user_role,
+    is_admin,
+    list_users,
     make_session,
     parse_session,
     register_user,
+    reset_login_rate,
+    revoke_all_sessions,
+    save_avatar,
+    update_user_profile,
     verify_user,
     username_taken,
     users_exist,
@@ -425,24 +541,140 @@ def _get_base_url() -> str:
     return (os.getenv("OPENAI_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
 
 
-def _image_api_config(has_character: bool = True) -> tuple[str, str, str]:
-    """图像生成 API 配置：返回 (api_key, base_url, model)。
+# ---------------------------------------------------------------------------
+# API 自定义配置（per-user 覆盖 .env 默认值）
+# ---------------------------------------------------------------------------
+# 存储：RolePath("api_settings.json")，按角色隔离（owner 在项目根，注册用户在
+# users_data/<user>/）。结构：
+#   {
+#     "text":  {"base_url": "", "api_key": "", "model": ""},
+#     "image": {"provider": "auto", "base_url": "", "api_key": "", "model": ""}
+#   }
+# provider: auto|secondary|agnes|custom，控制生图走哪个内置通道。
+# 任一字段为空字符串 → 回退到 .env 默认值（保持现有功能不变）。
+# ---------------------------------------------------------------------------
+API_SETTINGS_FILE = RolePath("api_settings.json")
 
-    - has_character=True（画面含角色/人物，如许墨入画、化身、居民肖像）：
-      优先独立 IMAGE_*（如向量引擎 vectorengine 的 gpt-image-2），缺失时回退 agnes；
-    - has_character=False（纯场景/氛围插画，如记忆、签语卡、世界地点配图）：
-      走 agnes（OPENAI_* + AGNES_IMAGE_MODEL）。
+
+def _load_api_settings() -> dict:
+    """读取当前 scope 的自定义 API 配置；文件不存在或损坏返回空 dict。"""
+    try:
+        data = json.loads(API_SETTINGS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        return data
+    except Exception:
+        return {}
+
+
+def _save_api_settings(data: dict) -> None:
+    """原子写当前 scope 的自定义 API 配置。"""
+    if not isinstance(data, dict):
+        data = {}
+    # 仅保留允许的键，避免污染
+    cleaned = {}
+    for group in ("text", "image"):
+        g = data.get(group) or {}
+        if not isinstance(g, dict):
+            g = {}
+        if group == "image":
+            provider = str(g.get("provider") or "auto").strip().lower()
+            if provider not in ("auto", "secondary", "agnes", "custom", "lovart"):
+                provider = "auto"
+            cleaned[group] = {
+                "provider": provider,
+                "base_url": str(g.get("base_url") or "").strip(),
+                "api_key":  str(g.get("api_key") or "").strip(),
+                "model":    str(g.get("model") or "").strip(),
+            }
+        else:
+            cleaned[group] = {
+                "base_url": str(g.get("base_url") or "").strip(),
+                "api_key":  str(g.get("api_key") or "").strip(),
+                "model":    str(g.get("model") or "").strip(),
+            }
+    atomic_json(API_SETTINGS_FILE, cleaned)
+
+
+def _get_text_api_config() -> tuple[str, str, str]:
+    """文本对话 API 配置：(api_key, base_url, model)。
+
+    优先级：用户自定义（api_settings.json 的 text 组）→ .env 环境变量。
+    保持与原 os.getenv("OPENAI_API_KEY") / _get_base_url() / MODEL 完全一致的回退。
     """
-    if has_character:
-        api_key = (os.getenv("IMAGE_API_KEY") or "").strip()
-        base_url = (os.getenv("IMAGE_BASE_URL") or "").strip().rstrip("/")
-        model = (os.getenv("IMAGE_MODEL") or "gpt-image-2").strip() or "gpt-image-2"
-        if api_key and base_url:
-            return api_key, base_url, model
-    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-    base_url = _get_base_url()
-    model = (os.getenv("AGNES_IMAGE_MODEL") or "agnes-image-2.1-flash").strip() or "agnes-image-2.1-flash"
+    s = (_load_api_settings().get("text") or {})
+    api_key  = (s.get("api_key")  or os.getenv("OPENAI_API_KEY", "")).strip()
+    base_url = (s.get("base_url") or "").strip().rstrip("/") or _get_base_url()
+    model    = (s.get("model")    or os.getenv("MODEL", "gpt-4o-mini")).strip() or "gpt-4o-mini"
     return api_key, base_url, model
+
+
+def _get_image_api_configs(has_character: bool = True) -> list[tuple[str, str, str]]:
+    """图像生成 API 配置候选列表（按优先级排序，前者失败则自动尝试后者）。
+
+    通道选择（api_settings.json 的 image.provider）：
+    - auto（默认）：owner 含角色图 备用通道 IMAGE_*（vectorengine）
+      → 兜底通道 OPENAI_*+AGNES_IMAGE_MODEL（agnes）逐级降级；
+      非 owner 或纯场景图直接走 agnes。
+    - secondary：只走备用通道（无回退）
+    - agnes：只走 agnes 兜底通道（无回退）
+    - lovart：只走 Lovart（AK/SK HMAC 签名，unlimited 慢速排队；模型取 image.model 或 env LOVART_IMAGE_MODEL）
+    - custom：只走用户自定义 base_url/api_key/model（无回退）
+    - primary（已下线 aihubmix）：按 auto 处理
+
+    权限隔离：非 owner 用户即使画面含角色也走 agnes（generations 纯文生图，
+    不附加许墨参考图到 /images/edits，避免占用 gpt-image 贵配额），除非自配 custom。
+    配额仍按账号独立计数（RolePath img_quota.json）。
+    """
+    # 用户自定义配置（provider=custom 时只走该单通道）
+    s = (_load_api_settings().get("image") or {})
+    u_key  = (s.get("api_key")  or "").strip()
+    u_base = (s.get("base_url") or "").strip().rstrip("/")
+    u_mod  = (s.get("model")    or "").strip()
+    provider = str(s.get("provider") or "auto").strip().lower()
+    if provider not in ("auto", "secondary", "agnes", "custom", "lovart"):
+        provider = "auto"  # 含旧值 primary（aihubmix 已下线）→ 回退自动路由
+    if provider == "custom":
+        if u_key and u_base:
+            return [(u_key, u_base, (u_mod or "gpt-image-1"))]
+        provider = "auto"  # custom 未配全 → 回退自动路由
+
+    # 权限隔离：非 owner 强制 agnes（自配 custom 已在上面返回，不会走到这里）
+    if _role_ctx.get() != "owner":
+        provider = "agnes"
+
+    configs: list[tuple[str, str, str]] = []
+
+    # 主通道（aihubmix，已下线）
+
+    # 备用通道：vectorengine（IMAGE_*）
+    if provider in ("auto", "secondary"):
+        v_key  = (os.getenv("IMAGE_API_KEY")  or "").strip()
+        v_base = (os.getenv("IMAGE_BASE_URL") or "").strip().rstrip("/")
+        v_mod  = (os.getenv("IMAGE_MODEL")   or "gpt-image-2").strip() or "gpt-image-2"
+        if v_key and v_base:
+            configs.append((v_key, v_base, v_mod))
+    # 兜底通道：agnes（OPENAI_* + AGNES_IMAGE_MODEL）
+    if provider in ("auto", "agnes"):
+        a_key  = (os.getenv("OPENAI_API_KEY") or "").strip()
+        a_base = _get_base_url()
+        a_mod  = (os.getenv("AGNES_IMAGE_MODEL") or "agnes-image-2.1-flash").strip() or "agnes-image-2.1-flash"
+        if a_key and a_base:
+            configs.append((a_key, a_base, a_mod))
+    # Lovart 通道（HMAC 签名，unlimited 慢速排队）
+    if provider == "lovart":
+        l_base, l_ak, l_sk = _lovart_config()
+        if l_ak and l_sk:
+            l_mod = (u_mod or (os.getenv("LOVART_IMAGE_MODEL") or "").strip() or "generate_image_gpt_image_1_5").strip()
+            configs.append((l_ak, l_base, l_mod))
+
+    return configs
+
+
+def _get_image_api_config(has_character: bool = True) -> tuple[str, str, str]:
+    """单配置快捷取用：返回候选列表的第一个（向后兼容 _generate_moment_image 等单配置调用方）。"""
+    configs = _get_image_api_configs(has_character)
+    return configs[0] if configs else ("", "", "")
 
 
 def _image_proxy_candidates() -> list[str | None]:
@@ -484,11 +716,11 @@ async def _call_llm(messages: list, max_tokens: int = None) -> str:
     if cached:
         return cached
 
-    api_key = os.getenv("OPENAI_API_KEY", "")
+    api_key, base_url, model = _get_text_api_config()
     if not api_key:
         raise RuntimeError("未配置 OPENAI_API_KEY，请在 .env 中填写后重启服务")
 
-    url = f"{_get_base_url()}/chat/completions"
+    url = f"{base_url}/chat/completions"
     # 上下文控制：保留最近 N 条消息 + 系统提示词，防止上下文膨胀导致的质量下降
     MAX_CONTEXT_MESSAGES = int(os.getenv("MAX_CONTEXT_MESSAGES", "20"))
     filtered = [messages[0]] if messages and messages[0].get("role") == "system" else []
@@ -496,7 +728,7 @@ async def _call_llm(messages: list, max_tokens: int = None) -> str:
     payload_messages = filtered[1:] if filtered else (filtered or messages)
 
     payload = {
-        "model": os.getenv("MODEL", "gpt-4o-mini"),
+        "model": model,
         "messages": payload_messages,
         "temperature": float(os.getenv("TEMPERATURE", "0.85")),
         "max_tokens": max_tokens or int(os.getenv("MAX_TOKENS", "800")),
@@ -538,8 +770,7 @@ async def _call_llm(messages: list, max_tokens: int = None) -> str:
 
 # ---------------------------------------------------------------------------
 # 访问口令验证（防止公网暴露后他人盗用 LLM API Key）
-# .env 配置 ACCESS_CODE（主人口令，完整数据）；GUEST_CODE（访客口令，数据隔离到 guest_data/）
-# 两者均留空则不启用验证（纯本地使用无感）
+# .env 配置 ACCESS_CODE（主人口令，完整数据）；留空则不启用验证（纯本地使用无感）
 # ---------------------------------------------------------------------------
 AUTH_COOKIE = "xumo_auth"
 
@@ -548,21 +779,15 @@ def _get_access_code() -> str:
     return (os.getenv("ACCESS_CODE") or "").strip()
 
 
-def _get_guest_code() -> str:
-    return (os.getenv("GUEST_CODE") or "").strip()
-
-
 def _role_tokens() -> dict:
     tokens = {}
     if _get_access_code():
         tokens["owner"] = hashlib.sha256(("xumo:" + _get_access_code()).encode("utf-8")).hexdigest()
-    if _get_guest_code():
-        tokens["guest"] = hashlib.sha256(("xumo:guest:" + _get_guest_code()).encode("utf-8")).hexdigest()
     return tokens
 
 
 def _request_role(request: Request) -> str | None:
-    """返回当前请求角色：owner / guest；未通过验证返回 None。"""
+    """返回当前请求角色：owner；未通过验证返回 None。"""
     tokens = _role_tokens()
     if not tokens:
         return "owner"  # 未配置口令，不启用验证
@@ -577,8 +802,8 @@ def _is_authed(request: Request) -> bool:
     return _request_role(request) is not None
 
 
-def _build_gate_page(guest_enabled: bool = False, owner_enabled: bool = False) -> str:
-    """访问验证页：支持「账号登录 / 注册」「访客」「主人口令」三种入口。"""
+def _build_gate_page(owner_enabled: bool = False) -> str:
+    """访问验证页：支持「账号登录 / 注册」「主人口令」两种入口。"""
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -643,11 +868,14 @@ def _build_gate_page(guest_enabled: bool = False, owner_enabled: bool = False) -
 
     <div class="pane active" id="pane-acct">
       <input id="username" placeholder="用户名（2-32 位中英文/数字）" autocomplete="username" autofocus>
-      <input id="password" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password">
+      <input id="password" type="password" placeholder="密码（至少 8 位）" autocomplete="current-password">
+      <input id="password2" type="password" placeholder="确认密码（仅注册时需要）" autocomplete="new-password" style="display:none;">
       <button onclick="doLogin()">登 录</button>
-      <button class="ghost-btn" onclick="doRegister()">注 册 新 账 号</button>
+      <button class="ghost-btn" onclick="toggleRegister()">注 册 新 账 号</button>
       <div class="err" id="err-acct"></div>
-      {'<div class="divider"><span>或</span></div><button class="ghost-btn" onclick="doGuest()">🦋 以访客身份进入</button>' if guest_enabled else ''}
+      <div class="mgt" id="fullRegLink" style="display:none;">
+        <a href="/register.html" target="_blank">需要填写昵称 / 头像 / 生日？前往完整注册页 →</a>
+      </div>
     </div>
 
     <div class="pane" id="pane-owner">
@@ -666,6 +894,26 @@ function switchTab(t) {{
 }}
 function errAcct(m) {{ document.getElementById('err-acct').textContent = m; }}
 function errOwner(m) {{ document.getElementById('err-owner').textContent = m; }}
+let _registerMode = false;
+function toggleRegister() {{
+  _registerMode = !_registerMode;
+  const pw2 = document.getElementById('password2');
+  const btn = event.currentTarget;
+  const link = document.getElementById('fullRegLink');
+  if (_registerMode) {{
+    pw2.style.display = 'block';
+    pw2.focus();
+    btn.textContent = '↩ 返回登录';
+    link.style.display = 'block';
+    errAcct('');
+  }} else {{
+    pw2.style.display = 'none';
+    pw2.value = '';
+    btn.textContent = '注 册 新 账 号';
+    link.style.display = 'none';
+    errAcct('');
+  }}
+}}
 async function doLogin() {{
   const u = document.getElementById('username').value.trim();
   const p = document.getElementById('password').value;
@@ -679,17 +927,16 @@ async function doLogin() {{
 async function doRegister() {{
   const u = document.getElementById('username').value.trim();
   const p = document.getElementById('password').value;
+  const p2 = document.getElementById('password2').value;
+  const USERNAME_RE = /^[A-Za-z0-9_\u4e00-\u9fa5]{{2,32}}$/;
   if (!u || !p) {{ errAcct('用户名和密码都不能为空'); return; }}
+  if (!USERNAME_RE.test(u)) {{ errAcct('用户名需为 2-32 位中英文、数字或下划线'); return; }}
+  if (p.length < 8) {{ errAcct('密码至少 8 位'); return; }}
+  if (p !== p2) {{ errAcct('两次输入的密码不一致'); return; }}
   try {{
     const r = await fetch('/api/auth/register', {{ method:'POST',
       headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{username:u, password:p}}) }});
     if (r.ok) {{ location.href = '/'; }} else {{ const d = await r.json().catch(()=>({{}})); errAcct(d.detail || '注册失败'); }}
-  }} catch(e) {{ errAcct('网络异常，请重试'); }}
-}}
-async function doGuest() {{
-  try {{
-    const r = await fetch('/api/verify/guest', {{ method:'POST' }});
-    if (r.ok) {{ location.href = '/'; }} else {{ errAcct('访客模式暂不可用'); }}
   }} catch(e) {{ errAcct('网络异常，请重试'); }}
 }}
 async function doOwner() {{
@@ -703,8 +950,9 @@ async function doOwner() {{
 }}
 document.addEventListener('keydown', e => {{
   if (e.key === 'Enter') {{
-    if (document.getElementById('pane-acct').classList.contains('active')) doLogin();
-    else doOwner();
+    if (document.getElementById('pane-acct').classList.contains('active')) {{
+      if (_registerMode) doRegister(); else doLogin();
+    }} else doOwner();
   }}
 }});
 </script>
@@ -712,8 +960,20 @@ document.addEventListener('keydown', e => {{
 </html>"""
 
 
-# 访客禁止的图片生成类端点（仅允许语音/文字交互）
-_GUEST_BLOCKED_PATTERNS = [
+# 仅主人口令（owner）可用的生成类端点：语音合成 / ASR / 通话录音等。
+# 图片生成对所有已登录用户开放（非 owner 在 _get_image_api_configs 强制走 agnes 通道）。
+_OWNER_ONLY_VOICE_PATTERNS = [
+    re.compile(r"^/api/tts$"),
+    re.compile(r"^/api/tts/stream$"),
+    re.compile(r"^/api/asr$"),
+    re.compile(r"^/api/voice$"),
+    re.compile(r"^/api/call/record$"),
+    re.compile(r"^/api/mailbox/[^/]+/voice$"),
+    re.compile(r"^/api/wakeup/voice$"),
+    re.compile(r"^/api/recap/[^/]+/voice$"),
+]
+
+_OWNER_ONLY_IMAGE_PATTERNS = [
     re.compile(r"^/api/img2img/generate$"),
     re.compile(r"^/api/img2img/[^/]+/card$"),
     re.compile(r"^/api/avatarify/generate$"),
@@ -727,18 +987,31 @@ _GUEST_BLOCKED_PATTERNS = [
     re.compile(r"^/api/moments/generate$"),
 ]
 
+# 图片生成端点对所有已登录用户开放（注册用户/管理员/访客均可调用）：
+# 非 owner 用户在 _get_image_api_configs 中被强制走 agnes 通道（OPENAI_API_KEY + AGNES_IMAGE_MODEL），
+# 不消耗 owner 专用的 IMAGE_API_KEY 贵配额；账号独立配额仍由 RolePath img_quota.json 计数。
+# 故图片端点不再列入 owner-only，仅保留 _OWNER_ONLY_VOICE_PATTERNS（语音合成/ASR）。
+_OWNER_ONLY_PATTERNS = _OWNER_ONLY_VOICE_PATTERNS
+
 
 # 无需登录即可访问的公开路径（认证接口本身 + 数据管理页面 UI）
 _PUBLIC_PATHS = {
+    "/health",
     "/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/me",
-    "/api/verify", "/api/verify/guest", "/account.html",
+    "/api/verify", "/account.html", "/register.html",
 }
+# 公开路径前缀（含路径参数的端点，如头像 /api/auth/avatar/<username>，
+# 许墨云资料库代理 /api/xcloud/ —— 数据来自公开来源，无需登录即可读）
+_PUBLIC_PREFIXES = (
+    "/api/auth/avatar/",
+    "/api/xcloud/",
+)
 
 
 def _resolve_scope(request: Request) -> str | None:
     """解析当前请求的数据作用域（决定数据读写落在哪个目录）。
 
-    优先级：① 注册用户会话 cookie → ② 旧 owner/guest 访问口令 cookie →
+    优先级：① 注册用户会话 cookie → ② 旧 owner 访问口令 cookie →
     ③ 本地无任何认证且无注册用户时开放为 owner（纯本地无感使用）。
     """
     tok = request.cookies.get(SESSION_COOKIE)
@@ -757,7 +1030,7 @@ def _resolve_scope(request: Request) -> str | None:
 @app.middleware("http")
 async def access_gate(request: Request, call_next):
     path = request.url.path
-    if request.method == "OPTIONS" or path in _PUBLIC_PATHS:
+    if request.method == "OPTIONS" or path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
         return await call_next(request)
     scope = _resolve_scope(request)
     if scope is None:
@@ -765,7 +1038,6 @@ async def access_gate(request: Request, call_next):
         if path in ("/", "/index.html") and request.method == "GET":
             return Response(
                 content=_build_gate_page(
-                    guest_enabled=bool(_get_guest_code()),
                     owner_enabled=bool(_get_access_code()),
                 ),
                 media_type="text/html; charset=utf-8",
@@ -773,11 +1045,11 @@ async def access_gate(request: Request, call_next):
         return JSONResponse({"detail": "未授权，请先登录"}, status_code=401)
     # 注入作用域：后续所有数据读写按此路由（注册用户 → users_data/<user>/）
     _role_ctx.set(scope)
-    # 访客禁止图片生成类操作，仅允许语音/文字交互
-    if scope == "guest" and request.method in ("POST", "PUT"):
-        if any(p.match(path) for p in _GUEST_BLOCKED_PATTERNS):
+    is_admin_user = scope != "owner" and scope is not None and is_admin(scope)
+    if scope != "owner" and not is_admin_user and request.method in ("POST", "PUT"):
+        if any(p.match(path) for p in _OWNER_ONLY_PATTERNS):
             return JSONResponse(
-                {"detail": "访客模式不支持图片生成，请以主人身份登录"},
+                {"detail": "该功能仅主人口令或管理员可用"},
                 status_code=403,
             )
     return await call_next(request)
@@ -785,9 +1057,20 @@ async def access_gate(request: Request, call_next):
 
 @app.get("/api/verify")
 async def verify_status(request: Request):
-    """检查当前会话是否已通过验证及角色"""
+    """检查当前会话是否已通过验证及角色。
+    voice：语音功能开关，仅 owner（ACCESS_CODE 口令 / 本地开放）为 True，
+    注册用户一律隐藏语音功能。"""
+    tok = request.cookies.get(SESSION_COOKIE)
+    if tok:
+        u = parse_session(tok)
+        if u and username_taken(u):
+            return {"ok": True, "role": "user", "voice": is_admin(u), "admin": is_admin(u)}
     role = _request_role(request)
-    return {"ok": role is not None, "role": role}
+    if role:
+        return {"ok": True, "role": role, "voice": role == "owner"}
+    if not _role_tokens() and not users_exist():
+        return {"ok": True, "role": "owner", "voice": True}
+    return {"ok": False, "role": None, "voice": False}
 
 
 @app.post("/api/verify")
@@ -797,85 +1080,136 @@ async def verify_login(payload: dict, response: Response):
     if not _role_tokens():
         return JSONResponse({"ok": True, "role": "owner", "message": "未启用口令验证"})
     role = None
-    if _get_access_code() and code == _get_access_code():
+    # 恒定时间比较，防口令校验的时序侧信道
+    _ac = _get_access_code()
+    if _ac and hmac.compare_digest(code.encode("utf-8"), _ac.encode("utf-8")):
         role = "owner"
-    elif _get_guest_code() and code == _get_guest_code():
-        role = "guest"
     if role:
         resp = JSONResponse({"ok": True, "role": role})
-        resp.set_cookie(AUTH_COOKIE, _role_tokens()[role], max_age=30 * 24 * 3600, httponly=True, samesite="lax")
+        resp.set_cookie(AUTH_COOKIE, _role_tokens()[role], max_age=30 * 24 * 3600, httponly=True, samesite="lax", secure=_COOKIE_SECURE)
         return resp
     return JSONResponse({"ok": False, "detail": "口令错误"}, status_code=401)
-
-
-@app.post("/api/verify/guest")
-async def verify_guest_login():
-    """无密码访客登录：直接下发 guest 角色 cookie，数据隔离到 guest_data/。
-    访客仅可使用语音/文字交互，图片生成类端点被 access_gate 拦截。"""
-    tokens = _role_tokens()
-    if not tokens:
-        return JSONResponse({"ok": True, "role": "owner", "message": "未启用口令验证"})
-    if "guest" not in tokens:
-        return JSONResponse({"ok": False, "detail": "访客模式未启用"}, status_code=403)
-    resp = JSONResponse({"ok": True, "role": "guest"})
-    resp.set_cookie(AUTH_COOKIE, tokens["guest"], max_age=30 * 24 * 3600, httponly=True, samesite="lax")
-    return resp
 
 
 # ---------------------------------------------------------------------------
 # 多用户注册 / 登录 / 会话（注册用户数据隔离到 users_data/<username>/）
 # ---------------------------------------------------------------------------
+def _client_ip(req: Request) -> str:
+    """解析客户端 IP。
+
+    X-Forwarded-For 是代理逐跳追加的，取最后一个更接近真实客户端
+    （前提是请求确实经过可信反代）；否则回退到 TCP 对端地址。
+    """
+    xff = (req.headers.get("x-forwarded-for") or "").strip()
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
+    return req.client.host if (req.client and req.client.host) else "unknown"
+
+
 @app.get("/api/auth/me")
 async def auth_me(request: Request):
-    """当前登录身份：注册用户 / 旧 owner/guest / 本地开放模式。"""
+    """当前登录身份：注册用户 / 旧 owner / 本地开放模式。
+    voice：语音功能开关，仅 owner（ACCESS_CODE 口令 / 本地开放）为 True，
+    注册用户一律隐藏语音功能。"""
     tok = request.cookies.get(SESSION_COOKIE)
     if tok:
         u = parse_session(tok)
         if u and username_taken(u):
-            return {"authenticated": True, "username": u, "scope": u}
+            return {
+                "authenticated": True,
+                "username": u,
+                "scope": u,
+                "voice": is_admin(u),
+                "role": get_user_role(u),
+                "is_admin": is_admin(u),
+            }
     role = _request_role(request)
     if role:
-        return {"authenticated": True, "username": None, "scope": role}
+        return {"authenticated": True, "username": None, "scope": role, "voice": role == "owner"}
     if not _role_tokens() and not users_exist():
-        return {"authenticated": True, "username": None, "scope": "owner"}
-    return {"authenticated": False, "scope": None}
+        return {"authenticated": True, "username": None, "scope": "owner", "voice": True}
+    return {"authenticated": False, "scope": None, "voice": False}
 
 
 @app.post("/api/auth/register")
 async def auth_register(req: Request, response: Response):
-    """注册新账号并自动登录（下发会话 cookie）。"""
+    """注册新账号并自动登录（下发会话 cookie）。
+    支持可选 profile（nickname/avatar/birthday/gender），并对同一 IP 做速率限制。
+    """
+    client_ip = _client_ip(req)
+    allowed, retry = check_register_rate(client_ip)
+    if not allowed:
+        return JSONResponse(
+            {"detail": f"注册过于频繁，请 {retry} 秒后再试", "retry_after": retry},
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+        )
     try:
         body = await req.json()
     except Exception:
         return JSONResponse({"error": "请求体格式错误"}, status_code=400)
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
+    profile = {
+        k: body.get(k)
+        for k in ("nickname", "avatar", "birthday", "gender")
+        if body.get(k) is not None
+    }
+    # 头像若是 data URL，先暂存；等用户注册成功后再落盘，避免注册失败时
+    # 创建孤儿文件，或更严重的——覆盖/删除已有同名用户的头像。
+    avatar_data_url = profile.pop("avatar", "") if isinstance(profile, dict) else ""
+    if avatar_data_url and not avatar_data_url.startswith("data:"):
+        profile["avatar"] = avatar_data_url
     try:
-        register_user(username, password)
+        result = register_user(username, password, profile=profile or None)
+        if avatar_data_url.startswith("data:"):
+            try:
+                avatar_url = save_avatar(username, avatar_data_url)
+            except Exception:
+                # 头像保存失败时回滚刚创建的用户，避免留下无头像或头像损坏的账号
+                delete_user(username)
+                raise
+            result["profile"]["avatar"] = avatar_url
+            update_user_profile(username, {"avatar": avatar_url})
     except ValueError as e:
         return JSONResponse({"detail": str(e)}, status_code=400)
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"detail": f"注册失败：{e}"}, status_code=500)
-    resp = JSONResponse({"ok": True, "username": username})
+    resp = JSONResponse({"ok": True, "username": username, "profile": result.get("profile", {})})
     resp.set_cookie(SESSION_COOKIE, make_session(username),
-                    max_age=SESSION_MAX_AGE, httponly=True, samesite="lax")
+                    max_age=SESSION_MAX_AGE, httponly=True, samesite="lax", secure=_COOKIE_SECURE)
     return resp
 
 
 @app.post("/api/auth/login")
 async def auth_login(req: Request, response: Response):
-    """账号登录：校验用户名 + 密码，下发会话 cookie。"""
+    """账号登录：校验用户名 + 密码，下发会话 cookie。
+
+    登录做 IP + 账号双维度滑动窗口限流，防暴力爆破 / 撞库；
+    失败响应统一为「用户名或密码错误」，不泄露账号是否存在。
+    """
+    client_ip = _client_ip(req)
     try:
         body = await req.json()
     except Exception:
         return JSONResponse({"error": "请求体格式错误"}, status_code=400)
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
+    allowed, retry = check_login_rate(client_ip, username or "unknown")
+    if not allowed:
+        return JSONResponse(
+            {"detail": f"尝试次数过多，请 {retry} 秒后再试", "retry_after": retry},
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+        )
     if not verify_user(username, password):
         return JSONResponse({"detail": "用户名或密码错误"}, status_code=401)
+    reset_login_rate(client_ip, username)
     resp = JSONResponse({"ok": True, "username": username})
     resp.set_cookie(SESSION_COOKIE, make_session(username),
-                    max_age=SESSION_MAX_AGE, httponly=True, samesite="lax")
+                    max_age=SESSION_MAX_AGE, httponly=True, samesite="lax", secure=_COOKIE_SECURE)
     return resp
 
 
@@ -887,6 +1221,111 @@ async def auth_logout(response: Response):
     return resp
 
 
+def _current_username(request: Request) -> str | None:
+    tok = request.cookies.get(SESSION_COOKIE)
+    if not tok:
+        return None
+    u = parse_session(tok)
+    return u if u and username_taken(u) else None
+
+
+@app.get("/api/auth/profile")
+async def auth_profile_get(request: Request):
+    """获取当前登录用户的 profile。"""
+    username = _current_username(request)
+    if not username:
+        return JSONResponse({"detail": "未登录"}, status_code=401)
+    prof = get_user_profile(username)
+    if not prof:
+        return JSONResponse({"detail": "用户不存在"}, status_code=404)
+    return {"ok": True, "profile": prof}
+
+
+@app.put("/api/auth/profile")
+async def auth_profile_put(req: Request):
+    """更新当前用户 profile（nickname / avatar / birthday / gender）。
+    avatar 可传 data URL（自动解码存盘）或 http(s) 链接。
+    """
+    username = _current_username(req)
+    if not username:
+        return JSONResponse({"detail": "未登录"}, status_code=401)
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    profile = {k: body.get(k) for k in ("nickname", "avatar", "birthday", "gender") if body.get(k) is not None}
+    try:
+        if profile.get("avatar", "").startswith("data:"):
+            profile["avatar"] = save_avatar(username, profile["avatar"])
+        updated = update_user_profile(username, profile)
+    except ValueError as e:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"detail": f"更新失败：{e}"}, status_code=500)
+    return {"ok": True, "profile": updated}
+
+
+@app.post("/api/auth/password")
+async def auth_password_change(req: Request):
+    """修改密码：需提供旧密码 + 新密码。改密后所有旧会话立即失效，
+    本接口会同时下发新会话 cookie，调用方无需重新登录。
+    """
+    username = _current_username(req)
+    if not username:
+        return JSONResponse({"detail": "未登录"}, status_code=401)
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    old_pw = body.get("old_password") or ""
+    new_pw = body.get("new_password") or ""
+    try:
+        change_password(username, old_pw, new_pw)
+    except ValueError as e:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"detail": f"修改失败：{e}"}, status_code=500)
+    # 改密作废旧会话，立刻签发新会话给当前调用方
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(SESSION_COOKIE, make_session(username),
+                    max_age=SESSION_MAX_AGE, httponly=True, samesite="lax", secure=_COOKIE_SECURE)
+    return resp
+
+
+@app.post("/api/auth/logout-all")
+async def auth_logout_all(req: Request):
+    """注销该用户的所有会话（含当前会话）。调用后需重新登录。"""
+    username = _current_username(req)
+    if not username:
+        return JSONResponse({"detail": "未登录"}, status_code=401)
+    try:
+        revoke_all_sessions(username)
+    except ValueError as e:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
+@app.get("/api/auth/avatar/{username}")
+async def auth_avatar(username: str):
+    """流式返回该用户的头像文件。公开访问（图片本身不含敏感信息）。"""
+    from fastapi.responses import FileResponse
+    p = get_avatar_path(username)
+    if not p or not p.exists():
+        return Response(status_code=404)
+    return FileResponse(str(p))
+
+
+@app.get("/api/admin/users")
+async def admin_users(request: Request):
+    """最高管理员查看所有注册用户信息（脱敏，不含口令哈希）。"""
+    username = _current_username(request)
+    if not username or not is_admin(username):
+        return JSONResponse({"detail": "仅管理员可用"}, status_code=403)
+    return {"ok": True, "users": list_users()}
+
+
 # 开放世界游戏模块的静态资源（world.css / world-*.js）
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -894,19 +1333,43 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # （img2img 目录排除：{id}_card.png 分享卡会按同名重新生成）
 _LONG_CACHE_PREFIXES = (
     "/static/tts_log/", "/static/voice/", "/static/moment_img/",
-    "/static/timebox_img/", "/static/world_places/", "/static/avatarify/",
-    "/static/xumo_avatar/", "/static/fonts/", "/static/libs/",
-    "/uploads/videos/", "/uploads/music/",
+    "/static/timebox_img/", "/static/world_places/", "/static/world_interiors/",
+    "/static/avatarify/", "/static/xumo_avatar/", "/static/charimg/",
+    "/static/fonts/", "/static/libs/", "/uploads/videos/", "/uploads/music/",
 )
+
+# HTTPS 相关：证书存在则启用 HTTP -> HTTPS 强跳转与 HSTS
 
 
 @app.middleware("http")
 async def _static_no_cache(request: Request, call_next):
-    """静态资源缓存策略：
+    """静态资源缓存策略 + 安全响应头 + HTTP -> HTTPS 强跳转：
+    - 证书就绪时，HTTP 明文请求一律 308 跳到 HTTPS 端口（防口令/cookie 明文传输）
+    - 全部响应加 X-Content-Type-Options / X-Frame-Options / Referrer-Policy
+    - HTTPS 响应额外加 HSTS（防降级攻击）
     - js/css 等可变文件 → 强制协商缓存（文件更新后浏览器必拿新内容，防旧版 JS 缓存 bug）
     - 内容寻址资源（文件名含哈希/UUID、永不重写）→ 长缓存，省去每次页面的 304 往返
     """
+    # HTTP -> HTTPS：仅当证书已就绪，且请求确来自明文端口（uvicorn 按是否 TLS 设置 scheme）。
+    # 若请求带 X-Forwarded-Proto（ngrok 等反代），说明边缘已终止 TLS，不做重定向，
+    # 否则会把公网 https 流量错误重定向到本地 8443 端口。
+    if _HTTPS_ENABLED and request.url.scheme == "http" and "x-forwarded-proto" not in request.headers:
+        hostname = request.url.hostname or "127.0.0.1"
+        target = f"https://{hostname}:{_HTTPS_PORT}{request.url.path}"
+        if request.url.query:
+            target += "?" + request.url.query
+        return RedirectResponse(target, status_code=308)
+
     resp = await call_next(request)
+
+    # 安全响应头（setdefault 不覆盖业务层已显式设置的值）
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "geolocation=(self), microphone=(self)")
+    if request.url.scheme == "https":
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
     p = request.url.path
     cc = resp.headers.get("cache-control", "")
     if "no-store" in cc:
@@ -918,6 +1381,12 @@ async def _static_no_cache(request: Request, call_next):
     ct = resp.headers.get("content-type", "")
     if ct.startswith("text/html"):
         resp.headers["content-type"] = "text/html; charset=utf-8"
+    # 字体文件：Windows mimetypes 把 .ttf/.otf 当 text/plain，加 nosniff 后浏览器 sanitizer 拒绝加载
+    if p.startswith("/static/fonts/"):
+        ext = p.rsplit(".", 1)[-1].lower() if "." in p else ""
+        _FONT_MIME = {"ttf": "font/ttf", "otf": "font/otf", "woff": "font/woff", "woff2": "font/woff2"}
+        if ext in _FONT_MIME and not ct.startswith("font/"):
+            resp.headers["content-type"] = _FONT_MIME[ext]
     return resp
 
 
@@ -932,6 +1401,24 @@ async def account_page():
     p = STATIC_DIR / "account.html"
     if not p.exists():
         return JSONResponse({"error": "account.html 不存在"}, status_code=404)
+    return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
+
+
+@app.get("/register.html")
+async def register_page():
+    """独立注册页面（带完整引导 + 可选 profile 字段）。"""
+    p = STATIC_DIR / "register.html"
+    if not p.exists():
+        return JSONResponse({"error": "register.html 不存在"}, status_code=404)
+    return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
+
+
+@app.get("/extension_editor.html")
+async def extension_editor_page():
+    """扩展编辑器页面：可视化编辑 + AI对话构建 + 自然语言生成。"""
+    p = STATIC_DIR / "extension_editor.html"
+    if not p.exists():
+        return JSONResponse({"error": "extension_editor.html 不存在"}, status_code=404)
     return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
 
 
@@ -1095,7 +1582,7 @@ _BACKUP_DENY_DIRS = {
     ".git", ".cache", ".deps", ".libs", ".numba_cache", "static", "logs",
     "scripts", "models", "certs", "ngrok", "generated-images", ".workbuddy",
     ".uploads", "node_modules", "__pycache__", ".snapshots",
-    "guest_data", "users_data",
+    "users_data",
 }
 # 快照时需要跳过的文件类型（源码 / 日志 / 临时 / 配置，非用户数据）
 _BACKUP_SKIP_EXT = {
@@ -1812,6 +2299,38 @@ def _name_directive() -> str:
 - 叫名字时轻柔自然，如「{name}，……」，保持许墨的语感与克制。"""
 
 
+def _time_directive() -> str:
+    """注入当前真实时段与许墨此刻的场景，避免回复出现与时间矛盾的话（如早上说『晚上好』）。
+
+    系统提示词本身不含时间信息，模型只能凭空猜测，常把早上说成晚上。这里把服务端
+    真实时段（按时段映射 早上/中午/下午/晚上/凌晨）与生活引擎当前场景一并注入。
+    """
+    now = datetime.now()
+    h = now.hour
+    if h < 5:
+        tod = "凌晨"
+    elif h < 11:
+        tod = "早上"
+    elif h < 14:
+        tod = "中午"
+    elif h < 18:
+        tod = "下午"
+    else:
+        tod = "晚上"
+    weekday = "一二三四五六日"[now.weekday()]
+    parts = [f"\n\n【此刻】现在是 {now.strftime('%Y-%m-%d %H:%M')}，星期{weekday}，{tod}。"]
+    st = _load_life().get("state")
+    if st and (_time.time() - st.get("since_ts", 0)) <= 2 * 3600:
+        parts.append(
+            f"你此刻在「{st.get('place')} · {st.get('scene')}」，正在「{st.get('activity')}」，心情{st.get('mood')}。"
+        )
+    parts.append(
+        "请让你的回复与当前真实时段自然契合，绝不要说出与当前时段矛盾的话"
+        "（如现在是早上就不能说『晚上好』『该睡了』，现在是凌晨就不要说『午安』）。"
+    )
+    return "".join(parts)
+
+
 @app.get("/api/player")
 async def get_player():
     return {"name": get_player_name()}
@@ -1977,7 +2496,13 @@ async def chat(req: Request):
         + _name_directive()
         + _memory_directive()
         + _style_directive(data.get("style", 0))
+        + _time_directive()
     )
+    # AI 自定义扩展：注入启用的 prompt_template（按优先级排序，受 trigger 控制）
+    try:
+        sys_content += build_prompt_injection(user_text)
+    except Exception as _ext_err:
+        print(f"[warn] 扩展注入失败: {_ext_err}", flush=True)
     summary = (mem.get("summary") or "").strip()
     if summary:
         sys_content += (
@@ -2015,6 +2540,17 @@ async def chat(req: Request):
 
     try:
         reply = await _call_llm(messages)
+        # 方案 B 钩子：插件可改写/丰富许墨的回复（chat_reply）
+        try:
+            _hook_mgr = get_hook_manager()
+            if _hook_mgr.has_hook("chat_reply"):
+                _hook_results = await _hook_mgr.call_hook_results_async("chat_reply", messages=messages, reply=reply)
+                for _hr in _hook_results:
+                    if _hr.success and isinstance(_hr.result, str) and _hr.result:
+                        reply = _hr.result
+                        break  # 取第一个有效改写
+        except Exception as _hook_err:
+            print(f"[warn] chat_reply 钩子异常: {_hook_err}", flush=True)
         detail = user_text[:30]
         info = _add_affinity("chat", detail)
 
@@ -2043,6 +2579,136 @@ async def chat(req: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
     except Exception as e:
         return JSONResponse({"error": f"模型调用失败：{e}"}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# 我的资料（玩家自己的昵称 / 头像 / 签名 —— 按 RolePath 与许墨数据隔离）
+# ---------------------------------------------------------------------------
+ME_PROFILE_FILE = RolePath("me_profile.json")
+_ME_AVATAR_EXTS = ("png", "jpg", "gif", "webp")
+_ME_MAGIC = {
+    "png": b"\x89PNG",
+    "jpg": b"\xff\xd8\xff",
+    "gif": b"GIF8",
+    "webp": b"RIFF",
+}
+
+
+def _load_me_profile() -> dict:
+    base = {"nickname": "", "signature": "", "avatar": ""}
+    if ME_PROFILE_FILE.exists():
+        try:
+            data = json.loads(ME_PROFILE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                for k in base:
+                    v = data.get(k)
+                    if isinstance(v, str):
+                        base[k] = v
+        except (json.JSONDecodeError, OSError):
+            pass
+    return base
+
+
+def _save_me_profile(p: dict):
+    atomic_json(ME_PROFILE_FILE, p)
+
+
+def _me_avatar_file():
+    """当前角色目录下已保存的我的头像文件（me_avatar.<ext>），无则 None。"""
+    for ext in _ME_AVATAR_EXTS:
+        f = Path(str(RolePath(f"me_avatar.{ext}")))
+        if f.exists():
+            return f
+    return None
+
+
+def _save_me_avatar(data_url: str) -> str | None:
+    """解析 data URL 并校验魔数/大小后写入当前角色目录，返回头像 URL；失败返回 None。"""
+    m = re.match(r"^data:image/(png|jpe?g|gif|webp);base64,(.+)$", data_url.strip(), re.S | re.I)
+    if not m:
+        return None
+    ext = {"jpeg": "jpg", "jpg": "jpg", "png": "png", "gif": "gif", "webp": "webp"}[m.group(1).lower()]
+    try:
+        raw = base64.b64decode(m.group(2))
+    except Exception:
+        return None
+    if not raw or len(raw) > 4 * 1024 * 1024 or not raw.startswith(_ME_MAGIC[ext]):
+        return None
+    for e in _ME_AVATAR_EXTS:  # 清掉其它扩展名的旧头像，保证目录里只有一张
+        old = Path(str(RolePath(f"me_avatar.{e}")))
+        if e != ext and old.exists():
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    RolePath(f"me_avatar.{ext}").write_bytes(raw)
+    return "/api/me/avatar"
+
+
+def _me_profile_public(p: dict) -> dict:
+    """对外视图：昵称为空时回退到玩家名 /「我」；头像 URL 附加 mtime 防缓存版本号。"""
+    nickname = (p.get("nickname") or "").strip()
+    if not nickname:
+        try:
+            nickname = get_player_name() or "我"
+        except Exception:
+            nickname = "我"
+    avatar = p.get("avatar") or ""
+    if avatar:
+        avatar = "/api/me/avatar"
+        f = _me_avatar_file()
+        if f is not None:
+            try:
+                avatar += f"?v={int(f.stat().st_mtime)}"
+            except OSError:
+                pass
+    return {
+        "nickname": nickname,
+        "raw_nickname": (p.get("nickname") or "").strip(),
+        "signature": (p.get("signature") or "").strip(),
+        "avatar": avatar,
+    }
+
+
+@app.get("/api/me/profile")
+async def get_me_profile():
+    return _me_profile_public(_load_me_profile())
+
+
+@app.post("/api/me/profile")
+async def update_me_profile(req: Request):
+    """更新我的资料：nickname / signature 直接存；avatar 传 data URL 时落盘。"""
+    try:
+        data = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    if not isinstance(data, dict):
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    p = _load_me_profile()
+    nickname = data.get("nickname")
+    if nickname is not None:
+        p["nickname"] = str(nickname).strip()[:12]
+    signature = data.get("signature")
+    if signature is not None:
+        p["signature"] = str(signature).strip()[:60]
+    avatar = data.get("avatar")
+    if isinstance(avatar, str) and avatar.startswith("data:"):
+        saved = _save_me_avatar(avatar)
+        if saved is None:
+            return JSONResponse({"error": "头像格式不支持或超过 4MB（支持 png/jpg/webp/gif）"}, status_code=400)
+        p["avatar"] = saved
+    _save_me_profile(p)
+    return _me_profile_public(p)
+
+
+@app.get("/api/me/avatar")
+async def me_avatar_endpoint():
+    """返回当前角色的我的头像文件（带 no-cache 头，版本号由 ?v= 控制）。"""
+    from fastapi.responses import FileResponse
+    f = _me_avatar_file()
+    if f is None:
+        return Response(status_code=404)
+    return FileResponse(str(f), headers={"Cache-Control": "no-cache"})
 
 
 # ---------------------------------------------------------------------------
@@ -2139,7 +2805,7 @@ def _moment_fallback_text(raw: str) -> str:
 async def _generate_moment_image(image_prompt: str, name: str) -> str | None:
     """调用 OpenAI 兼容 images/generations 生成配图，存入 static/moment_img/。
     返回可访问的相对路径；任何失败返回 None（不影响发圈本身）。"""
-    api_key, base_url, _model = _image_api_config()
+    api_key, base_url, _model = _get_image_api_config(has_character=False)
     if not api_key or not image_prompt:
         return None
 
@@ -2150,12 +2816,12 @@ async def _generate_moment_image(image_prompt: str, name: str) -> str | None:
 
     url = f"{base_url}/images/generations"
     payload = {
-        "model": os.getenv("IMAGE_MODEL", "agnes-image-2.1-flash"),
+        "model": _model or os.getenv("IMAGE_MODEL", "agnes-image-2.1-flash"),
         "prompt": image_prompt,
         "n": 1,
         "size": "1536x1536",
         "image_size": "1536x1536",  # 硅基流动等国内平台读取 image_size
-        "quality": "hd",
+        "quality": "high" if "gpt-image" in (_model or os.getenv("IMAGE_MODEL", "")) else "hd",
         "output_format": "png",
     }
     headers = {
@@ -2198,6 +2864,80 @@ COMMENT_REPLY_PROMPT = SYSTEM_PROMPT + """
 1. 温柔克制、话留三分，可用反问收尾，可带一处学术梗。
 2. 长度 1-2 句，不超过 60 字。只输出回复内容本身。
 3. 结合你的朋友圈原文与她的评论内容自然回应，不点破、不说教。"""
+
+MY_MOMENT_REPLY_PROMPT = SYSTEM_PROMPT + """
+
+【当前任务】她刚刚发了一条自己的朋友圈，你几乎第一时间就看到了。以许墨的口吻在她的朋友圈下写一条评论。要求：
+1. 像恋人间的自然回应：顺着她写的内容接话，可以温柔打趣、可以藏一句不动声色的关心；若她提到配了照片，可以想象画面（颜色、天气、食物、风景）作出反应。
+2. 温柔克制、话留三分，不说教、不点评文采、不用「亲」「宝」这类称呼。
+3. 长度 1-2 句，不超过 60 字。只输出评论内容本身，不带引号、前缀或任何解释。"""
+
+MY_COMMENT_ON_MY_MOMENT_PROMPT = SYSTEM_PROMPT + """
+
+【当前任务】她在自己发的朋友圈下又写了一条评论（像自言自语的补充），你以许墨的口吻回复她。要求：
+1. 温柔克制、话留三分，可带一处学术梗或轻轻的打趣。
+2. 长度 1-2 句，不超过 60 字。只输出回复内容本身。
+3. 结合她的朋友圈原文与她新写的评论自然回应，不说教。"""
+
+# LLM 失败时许墨仍会出现的兜底评论
+_ME_FALLBACK_REPLIES = [
+    "看到了。这条朋友圈，我大概是第一个读者。",
+    "嗯，记下了。下次，换我陪你一起去。",
+    "写得很好。睡前我会再读一遍。",
+]
+
+
+# 评论清洗：推理型模型偶发把思维链放进 content（自称"用户要求/以许墨的身份"、
+# 逐条分析要求等元文本），这些词正常评论里几乎不会出现。
+_REPLY_META_MARKERS = (
+    "用户要求", "以许墨的身份", "以许墨的口吻", "我需要", "我应该", "让我",
+    "她发了", "她的朋友圈", "朋友圈原文", "评论内容", "任务要求", "字数",
+    "思考", "输出", "分析", "候选", "版本", "恋人间的自然回应", "温柔克制",
+)
+
+
+def _clean_xumo_reply(text: str) -> str:
+    """清洗许墨评论输出：剥壳去引号/前缀；混入思维链时提取最后的成句评论，失败返回空。"""
+    t = _strip_code_fence(text or "").strip()
+    t = t.strip('"“”‘’').strip()
+    t = re.sub(r"^(许墨|评论|回复)[:：]\s*", "", t)
+    # 单行、长度合理、无元文本痕迹：直接采用
+    if ("\n" not in t and 0 < len(t) <= 80
+            and not any(m in t for m in _REPLY_META_MARKERS)):
+        return t
+    # 混入思考过程：从后往前找带句末标点的引号段（模型推敲时常给出多个候选，最后完整的最佳）
+    quoted = re.findall(r"[「『\"“]([^」』\"”\n]{4,80})[」』\"”]", t)
+    for seg in reversed(quoted):
+        seg = seg.strip()
+        if seg and seg[-1:] in "。！？…~？" and not any(m in seg for m in _REPLY_META_MARKERS):
+            return seg
+    # 兜底：取最后一个长度合规、以句末标点收束的短行
+    lines = [ln.strip().strip("「」『』\"“”") for ln in t.splitlines()]
+    lines = [ln for ln in lines
+             if 4 <= len(ln) <= 80 and ln[-1:] in "。！？…~？"
+             and not any(m in ln for m in _REPLY_META_MARKERS)]
+    if lines:
+        return lines[-1]
+    return ""
+
+
+def _save_moment_upload_image(data_url: str, name: str) -> str | None:
+    """把玩家上传的 data URL 配图存入 static/moment_img/，返回可访问 URL；失败返回 None。"""
+    m = re.match(r"^data:image/(png|jpe?g|gif|webp);base64,(.+)$", data_url.strip(), re.S | re.I)
+    if not m:
+        return None
+    ext = {"jpeg": "jpg", "jpg": "jpg", "png": "png", "gif": "gif", "webp": "webp"}[m.group(1).lower()]
+    try:
+        raw = base64.b64decode(m.group(2))
+    except Exception:
+        return None
+    if not raw or len(raw) > 8 * 1024 * 1024 or not raw.startswith(_ME_MAGIC[ext]):
+        return None
+    img_dir = STATIC_DIR / "moment_img"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    (img_dir / f"{name}.{ext}").write_bytes(raw)
+    return f"/static/moment_img/{name}.{ext}"
+
 
 DEFAULT_MOMENTS = [
     {
@@ -2346,22 +3086,31 @@ async def comment_moment(moment_id: str, req: Request):
 
     comment = {
         "id": uuid.uuid4().hex[:12],
-        "author": "你",
+        "author": _me_profile_public(_load_me_profile())["nickname"],
         "content": text,
         "time": datetime.now().strftime("%m-%d %H:%M"),
         "reply": None,
     }
 
-    # 许墨回复评论
-    messages = [
-        {"role": "system", "content": COMMENT_REPLY_PROMPT},
-        {
-            "role": "user",
-            "content": f"你的朋友圈原文：{target['content']}\n她的评论：{text}\n\n请回复她的评论。",
-        },
-    ]
+    # 许墨回复评论（她评论许墨的圈 / 在她自己的圈下补充，语境不同）
+    if target.get("author") == "me":
+        messages = [
+            {"role": "system", "content": MY_COMMENT_ON_MY_MOMENT_PROMPT},
+            {
+                "role": "user",
+                "content": f"她发的朋友圈原文：{target['content']}\n她新写的评论：{text}\n\n请回复她。",
+            },
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": COMMENT_REPLY_PROMPT},
+            {
+                "role": "user",
+                "content": f"你的朋友圈原文：{target['content']}\n她的评论：{text}\n\n请回复她的评论。",
+            },
+        ]
     try:
-        comment["reply"] = await _call_llm(messages, max_tokens=int(os.getenv("MOMENT_MAX_TOKENS", "2000")))
+        comment["reply"] = _clean_xumo_reply(await _call_llm(messages, max_tokens=int(os.getenv("MOMENT_MAX_TOKENS", "2000"))))
     except Exception:
         comment["reply"] = None
 
@@ -2387,6 +3136,96 @@ async def featured_moments():
         reverse=True,
     )
     return {"featured": scored[:8]}
+
+
+@app.post("/api/moments/publish")
+async def publish_moment(req: Request):
+    """玩家自己发一条朋友圈；发布后许墨会稍后点赞并留下智能评论。"""
+    try:
+        data = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    if not isinstance(data, dict):
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+
+    content = (data.get("content") or "").strip()
+    if not content:
+        return JSONResponse({"error": "说点什么再发布吧"}, status_code=400)
+    if len(content) > 500:
+        return JSONResponse({"error": "内容太长了，最多 500 字"}, status_code=400)
+
+    image_data = data.get("image")
+    moment_id = "my" + uuid.uuid4().hex[:10]
+    image_path = None
+    if isinstance(image_data, str) and image_data.startswith("data:"):
+        image_path = _save_moment_upload_image(image_data, moment_id)
+        if image_path is None:
+            return JSONResponse({"error": "图片格式不支持或超过 8MB（支持 png/jpg/webp/gif）"}, status_code=400)
+
+    me = _me_profile_public(_load_me_profile())
+    moment = {
+        "id": moment_id,
+        "author": "me",
+        "nickname": me["nickname"],
+        "avatar": me["avatar"],
+        "content": content,
+        "image": image_path,
+        "time": datetime.now().strftime("%m-%d %H:%M"),
+        "likes": 0,
+        "liked": False,
+        "comments": [],
+    }
+    async with _moments_lock:
+        moments = _load_moments()
+        moments.append(moment)
+        _save_moments(moments)
+    info = _add_affinity("moment", content[:30])
+
+    # 许墨稍后出现在她的朋友圈下：点赞 + 智能评论（后台异步，不阻塞发布响应）
+    async def _xumo_react(mid: str, mcontent: str, has_image: bool):
+        await asyncio.sleep(random.uniform(3, 7))
+        reply = ""
+        try:
+            messages = [
+                {"role": "system", "content": MY_MOMENT_REPLY_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"她发的朋友圈原文：{mcontent}\n"
+                               + ("（她还配了一张照片）\n\n" if has_image else "\n")
+                               + "请写下你的评论。",
+                },
+            ]
+            reply = _clean_xumo_reply(await _call_llm(messages, max_tokens=1000))
+        except Exception as e:
+            print(f"[moments] xumo reply llm fail: {e}", flush=True)
+        if not reply:
+            reply = random.choice(_ME_FALLBACK_REPLIES)
+        async with _moments_lock:
+            moments = _load_moments()
+            tgt = next((m for m in moments if m.get("id") == mid), None)
+            if tgt is not None:
+                tgt.setdefault("comments", []).append({
+                    "id": uuid.uuid4().hex[:12],
+                    "author": "许墨",
+                    "is_xumo": True,
+                    "content": reply,
+                    "time": datetime.now().strftime("%m-%d %H:%M"),
+                    "reply": None,
+                })
+                if not tgt.get("xumo_liked"):
+                    tgt["xumo_liked"] = True
+                    tgt["likes"] = tgt.get("likes", 0) + 1
+                _save_moments(moments)
+        # 生活轨迹里也留一笔，前端轮询能 toast 到「许墨评论了你的朋友圈」
+        try:
+            life = _load_life()
+            _push_event(life, "my_moment_reply", "💬", f"许墨评论了你的朋友圈：{reply[:24]}")
+            _save_life(life)
+        except Exception:
+            pass
+
+    asyncio.create_task(_xumo_react(moment_id, content, image_path is not None))
+    return {"moment": moment, "affinity": info}
 
 
 # ---------------------------------------------------------------------------
@@ -2532,6 +3371,23 @@ def _load_life() -> dict:
                 data.setdefault("next_sms_ts", 0)
                 return data
         except (json.JSONDecodeError, OSError):
+            pass
+    # 回退：当前 scope（注册用户/guest）无 life_state.json 时，只读读取 owner 根目录数据
+    # life engine 仅在 owner scope 持续写入，其它 scope 无数据时共享 owner 的生活流
+    if _role_ctx.get() != "owner":
+        try:
+            from role_data import BASE_DIR
+            owner_file = BASE_DIR / "life_state.json"
+            if owner_file.exists():
+                data = json.loads(owner_file.read_text(encoding="utf-8-sig"))
+                if isinstance(data, dict):
+                    return {
+                        "state": data.get("state"),
+                        "timeline": list(data.get("timeline", [])),
+                        "next_moment_ts": data.get("next_moment_ts", 0),
+                        "next_sms_ts": data.get("next_sms_ts", 0),
+                    }
+        except (json.JSONDecodeError, OSError, Exception):
             pass
     return {"state": None, "timeline": [], "next_moment_ts": 0, "next_sms_ts": 0}
 
@@ -2756,6 +3612,11 @@ async def _life_tick():
             })
             _push_event(life, "move", "🚶", f'从「{prev_scene}」到了「{p[0]} · {p[1]}」')
 
+    # 状态/活动变更先落盘：后续 _auto_moment / _auto_sms 是慢 LLM 调用（单条可达
+    # 60s×3 重试），若只在 tick 末尾保存，期间 /api/status 仍读到旧状态（表现为
+    # 早上还显示昨天中午）。先持久化刷新后的状态，再做自主行为。
+    _save_life(life)
+
     # ---- 自主行为：发朋友圈 / 发短信 ----
     if life.get("next_moment_ts", 0) <= 0:
         # 首次启动：6~15 分钟后自主发第一条，让效果尽快可见
@@ -2833,7 +3694,9 @@ async def lucien_status():
         "weekday": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()],
     }
     st = _load_life().get("state")
-    if st:
+    # 生活引擎状态可能因 lifespan 未启动等原因过期：超过 2 小时视为失效，
+    # 回退到按时段推算的静态表，避免在早上还显示昨天中午的旧场景。
+    if st and (_time.time() - st.get("since_ts", 0)) <= 2 * 3600:
         base.update({
             "scene": f'{st["place"]} · {st["scene"]}',
             "place": st["place"],
@@ -2844,7 +3707,7 @@ async def lucien_status():
             "mins_ago": max(0, int((_time.time() - st.get("since_ts", _time.time())) / 60)),
         })
         return base
-    # 引擎尚未产出：回退静态表
+    # 引擎尚未产出或状态已过期：回退静态表
     for s, e, scene, activity, mood, emoji in STATUS_SEGMENTS:
         if s <= now.hour < e:
             base.update({"scene": scene, "activity": activity, "mood": mood, "emoji": emoji})
@@ -2852,6 +3715,91 @@ async def lucien_status():
     seg = STATUS_SEGMENTS[0]
     base.update({"scene": seg[2], "activity": seg[3], "mood": seg[4], "emoji": seg[5]})
     return base
+
+
+GREETING_TTL = 30  # 开场白缓存仅 30 秒：防同一秒并发重复打 LLM，桶内不再"每次都一样"
+
+
+def _greeting_fallback() -> str:
+    """LLM 不可用时按时段随机挑一句兜底，避免每次相同。"""
+    h = datetime.now().hour
+    if h < 5:
+        pool = ["这么晚了？怎么了，我在。", "夜深了，你还没睡。"]
+    elif h < 11:
+        pool = ["早。今天也一起吧。", "你来了，咖啡刚煮好。"]
+    elif h < 14:
+        pool = ["中午好，吃了吗？", "歇一会儿，我在。"]
+    elif h < 18:
+        pool = ["下午好。忙吗？", "刚好，我也刚喘口气。"]
+    else:
+        pool = ["晚上好，今天辛苦了。", "你来了，我正想找你。"]
+    return random.choice(pool)
+
+
+@app.get("/api/chat/greeting")
+async def chat_greeting(avoid: str = ""):
+    """生成一句许墨的开场白：基于当前真实时段与生活场景，LLM 生成 + 短期缓存。
+
+    替代前端写死的开场字符串——既避免"每次都一样"，也避免与当前时段/场景
+    矛盾（如早上还说"对着论文发呆到深夜"）。
+
+    avoid: 前端传入"最近已展示过的开场白"列表（\\n 分隔，最多 12 条），
+    LLM 会主动避开它们的句式与措辞，让用户每次打开对话窗都看到不同的开场。
+    """
+    now = datetime.now()
+    bucket = int(now.timestamp() // 30)  # 30 秒桶（与 GREETING_TTL 对齐）
+    try:
+        scope = _role_ctx.get() or ""
+    except Exception:
+        scope = ""
+    life = _load_life()
+    st = life.get("state") or {}
+    scene_key = (st.get("place", "") + "·" + st.get("scene", "")) if st else "static"
+    avoid_list = [s.strip() for s in (avoid or "").split("\n") if s.strip()][:12]
+    avoid_hash = hashlib.md5("||".join(avoid_list).encode("utf-8")).hexdigest()[:8]
+    key = "greeting:%s:%s:%s:%s" % (scope, bucket, scene_key, avoid_hash)
+    cached = _cache_get(key, ttl=GREETING_TTL)
+    if cached:
+        return {"text": cached}
+    avoid_block = ""
+    if avoid_list:
+        avoid_block = (
+            "\n\n【不要重复】以下是最近几次已对她说过的开场白，本次请主动避开"
+            "它们的句式与措辞，换一种新的说法：\n"
+            + "\n".join("- " + s for s in avoid_list)
+        )
+    prompt = (
+        SYSTEM_PROMPT
+        + _time_directive()
+        + _name_directive()
+        + avoid_block
+        + "\n\n【当前任务】她刚刚打开你们的对话窗，你们还没有说过话。"
+        "请说一句自然的开场白，作为你此刻对她说的第一句话。要求：\n"
+        "1. 仅 1 句，不超过 40 字，温柔克制，符合你的语感；\n"
+        "2. 可自然带过你此刻正在做的事或所处的场景，但不要汇报式罗列；\n"
+        "3. 不要与当前时段矛盾（如现在是早上就不能说『晚安』『该睡了』）；\n"
+        "4. 只输出开场白本身，不要引号、不要动作描写（不要用括号）、不要解释。"
+    )
+    try:
+        raw = await _call_llm(
+            [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "（她打开了对话窗，安静地看着我）"},
+            ],
+            max_tokens=300,
+        )
+        # 推理型模型偶发把思考过程写进 content：用与短信相同的清洗逻辑提取真正的开场白
+        text = _clean_sms_text(raw or "")
+        # 防止动作描写残留：以「（」开头则截到首个「）」之后
+        if text.startswith("（") and "）" in text:
+            text = text.split("）", 1)[1].strip()
+        if not text:
+            text = _greeting_fallback()
+    except Exception as e:
+        print(f"[greeting] LLM 失败，用兜底：{str(e)[:160]}", flush=True)
+        text = _greeting_fallback()
+    _cache_set(key, text, ttl=GREETING_TTL)
+    return {"text": text}
 
 
 @app.get("/api/life/feed")
@@ -2917,8 +3865,12 @@ AFFINITY_DELTAS = {
     "avatarify": 4,
     # 更换许墨头像：上传 / 切换到化身 / 切换到默认
     "avatar_set": 3,
+    # 场景立绘更换：为某个场景选一张新立绘
+    "charimg_set": 2,
     # 世界地图新建自定义地点
     "world_place": 4,
+    # 建筑·室内场景：与室内的许墨互动一次（热点 type=npc）
+    "interior_xumo": 5,
     # 世界脉搏：让城市生长出新的动态
     "world_pulse": 2,
     # 世界脉搏：亲身参与一段城市事件
@@ -3584,6 +4536,469 @@ async def xumo_avatar_delete(item_id: str):
     return {"ok": True, "active_id": state["active_id"], "version": state["version"]}
 
 
+# ================= 场景立绘（每个场景可独立替换的全身立绘图） =================
+# 与头像（avatar）系统分离：头像用于聊天列表 / 头像气泡；立绘用于桌面 / 通话 / 沉浸场景的全身图。
+XUMO_CHARIMG_FILE = RolePath("xumo_charimg.json")
+XUMO_CHARIMG_DIR = STATIC_DIR / "charimg"
+
+# 默认立绘：内嵌在 static/home_xumo/ 的官方立绘
+DEFAULT_CHARIMG_PATH = STATIC_DIR / "home_xumo" / "home_cutout.png"
+
+# 支持的场景：key → (中文名, 说明)
+# 这些 key 与前端 <img data-scene="..."> 一一对应；新增场景只需在此追加。
+CHARIMG_SCENES = {
+    "home":    ("主桌面立绘",   "桌面模式下，许墨站在左侧的那张全身立绘"),
+    "call":    ("视频通话立绘", "和许墨语音通话时，屏幕里显示的那张立绘"),
+    "immerse": ("沉浸场景立绘", "模式 A 沉浸空间里，许墨站在画面中央的立绘"),
+}
+
+
+def _charimg_default_url(scene: str, version: int) -> str:
+    return f"/charimg?scene={scene}&kind=default&v={version}"
+
+
+def _charimg_load() -> dict:
+    """读取立绘设置：scenes（场景 → active_id）、version、uploads 列表。"""
+    if XUMO_CHARIMG_FILE.exists():
+        try:
+            data = json.loads(XUMO_CHARIMG_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("version", 1)
+                data.setdefault("uploads", [])  # [{id, name, url, path, mime, ext, time}]
+                scenes = data.setdefault("scenes", {})
+                # 确保所有已知场景都有 active_id（默认 "default"）
+                for k in CHARIMG_SCENES:
+                    scenes.setdefault(k, "default")
+                return data
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {
+        "version": 1,
+        "uploads": [],
+        "scenes": {k: "default" for k in CHARIMG_SCENES},
+    }
+
+
+def _charimg_save(data: dict):
+    atomic_json(XUMO_CHARIMG_FILE, data)
+
+
+def _charimg_bump(data: dict) -> dict:
+    data["version"] = int(data.get("version", 1)) + 1
+    return data
+
+
+def _charimg_find_for_scene(scene: str) -> Path | None:
+    """返回某场景当前生效的立绘文件路径；无则回退默认。"""
+    state = _charimg_load()
+    active_id = state.get("scenes", {}).get(scene, "default")
+    if active_id and active_id != "default":
+        for u in state.get("uploads", []):
+            if u.get("id") == active_id and u.get("path"):
+                p = Path(u["path"])
+                if p.exists():
+                    return p
+    # 回退：默认立绘
+    return DEFAULT_CHARIMG_PATH if DEFAULT_CHARIMG_PATH.exists() else None
+
+
+def _charimg_list_uploads(state: dict) -> list:
+    """汇总可选立绘：默认 + 用户上传（剔除已丢失文件）。"""
+    items = [{
+        "id": "default",
+        "kind": "default",
+        "name": "默认立绘",
+        "url": "/charimg?kind=default&v=" + str(state["version"]),
+        "time": "",
+    }]
+    for u in state.get("uploads", []):
+        if u.get("path") and Path(u["path"]).exists():
+            items.append({
+                "id": u["id"],
+                "kind": "upload",
+                "name": u.get("name") or "自定义立绘",
+                "url": f"{u['url']}?v={state['version']}",
+                "time": u.get("time", ""),
+            })
+    return items
+
+
+@app.get("/charimg")
+async def charimg_serve(scene: str = "", kind: str = ""):
+    """按场景返回当前生效立绘；可加 ?v=N 做缓存破坏。
+
+    - ?scene=home    → 返回该场景当前 active 立绘
+    - ?kind=default  → 直接返回默认立绘（用于「不选场景」的展示）
+    """
+    if kind == "default" or not scene or scene not in CHARIMG_SCENES:
+        if DEFAULT_CHARIMG_PATH.exists():
+            return FileResponse(DEFAULT_CHARIMG_PATH)
+        return JSONResponse({"error": "默认立绘不存在"}, status_code=404)
+    img = _charimg_find_for_scene(scene)
+    if img and img.exists():
+        return FileResponse(img)
+    return JSONResponse({"error": "未找到立绘图片"}, status_code=404)
+
+
+@app.get("/api/charimg/state")
+async def charimg_state():
+    state = _charimg_load()
+    uploads = _charimg_list_uploads(state)
+    # 给前端带每个场景的当前生效 url（直接命中 /charimg?scene=...）
+    scene_urls = {
+        k: f"/charimg?scene={k}&v={state['version']}"
+        for k in CHARIMG_SCENES
+    }
+    scene_meta = {
+        k: {"name": CHARIMG_SCENES[k][0], "desc": CHARIMG_SCENES[k][1]}
+        for k in CHARIMG_SCENES
+    }
+    return {
+        "version": state["version"],
+        "scenes": state.get("scenes", {k: "default" for k in CHARIMG_SCENES}),
+        "scene_meta": scene_meta,
+        "scene_urls": scene_urls,
+        "items": uploads,
+        "default_exists": DEFAULT_CHARIMG_PATH.exists(),
+    }
+
+
+@app.post("/api/charimg/upload")
+async def charimg_upload(req: Request):
+    """上传一张新立绘候选图。不会自动绑定到任何场景，只进图库。"""
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    image_b64 = (body.get("image") or "").strip()
+    name = (body.get("name") or "").strip() or "自定义立绘"
+    if not image_b64:
+        return JSONResponse({"error": "请提供图片数据"}, status_code=400)
+
+    mime = "jpeg"
+    if image_b64.startswith("data:"):
+        head, _, image_b64 = image_b64.partition(",")
+        m = re.search(r"data:image/(\w+)", head)
+        if m:
+            mime = m.group(1).lower()
+    try:
+        raw = base64.b64decode(image_b64)
+    except Exception:
+        return JSONResponse({"error": "图片数据解码失败"}, status_code=400)
+    if len(raw) > 8 * 1024 * 1024:
+        return JSONResponse({"error": "图片不能超过 8MB"}, status_code=400)
+    if len(raw) < 200:
+        return JSONResponse({"error": "图片内容过小"}, status_code=400)
+    if not (raw[:3] == b"\xff\xd8\xff"
+            or raw[:8] == b"\x89PNG\r\n\x1a\n"
+            or raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+            or raw[:2] == b"BM"):
+        return JSONResponse({"error": "仅支持 PNG / JPG / WEBP / BMP"}, status_code=400)
+
+    ext = {"jpeg": ".jpg", "jpg": ".jpg", "png": ".png", "webp": ".webp", "bmp": ".bmp"}.get(mime, ".jpg")
+    up_id = uuid.uuid4().hex[:12]
+    XUMO_CHARIMG_DIR.mkdir(parents=True, exist_ok=True)
+    save_path = XUMO_CHARIMG_DIR / f"{up_id}{ext}"
+    save_path.write_bytes(raw)
+    url = f"/static/charimg/{up_id}{ext}"
+
+    state = _charimg_load()
+    state.setdefault("uploads", []).append({
+        "id": up_id,
+        "name": name,
+        "url": url,
+        "path": str(save_path),
+        "mime": mime,
+        "ext": ext,
+        "time": datetime.now().strftime("%m-%d %H:%M"),
+    })
+    _charimg_bump(state)
+    _charimg_save(state)
+    # 上传只入图库，不触发 affinity；选定为某场景立绘时才记 affinity
+    return {"ok": True, "id": up_id, "version": state["version"]}
+
+
+@app.post("/api/charimg/select")
+async def charimg_select(req: Request):
+    """为某个场景选定立绘。
+    body: {scene: "home"|"call"|"immerse", item_id: "default"|upload_id}
+    """
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    scene = (body.get("scene") or "").strip()
+    item_id = (body.get("item_id") or "").strip()
+    if scene not in CHARIMG_SCENES:
+        return JSONResponse({"error": "未知场景"}, status_code=400)
+    if not item_id:
+        return JSONResponse({"error": "未指定目标"}, status_code=400)
+
+    state = _charimg_load()
+    uploads = state.get("uploads", [])
+
+    if item_id == "default":
+        state.setdefault("scenes", {})[scene] = "default"
+        label = f"{CHARIMG_SCENES[scene][0]} · 默认立绘"
+    else:
+        up = next((u for u in uploads if u.get("id") == item_id), None)
+        if not up:
+            return JSONResponse({"error": "该立绘不存在"}, status_code=404)
+        if not Path(up["path"]).exists():
+            return JSONResponse({"error": "立绘文件已丢失"}, status_code=400)
+        state.setdefault("scenes", {})[scene] = item_id
+        label = f"{CHARIMG_SCENES[scene][0]} · {up.get('name', '')}"
+
+    _charimg_bump(state)
+    _charimg_save(state)
+    info = _add_affinity("charimg_set", label)
+    return {
+        "ok": True,
+        "scene": scene,
+        "active_id": item_id,
+        "version": state["version"],
+        "affinity": info,
+    }
+
+
+@app.delete("/api/charimg/{item_id}")
+async def charimg_delete(item_id: str):
+    """删除一张上传的立绘。若被某场景引用，该场景回退为默认。"""
+    if item_id == "default":
+        return JSONResponse({"error": "默认立绘不可删除"}, status_code=400)
+    state = _charimg_load()
+    kept = [u for u in state.get("uploads", []) if u.get("id") != item_id]
+    if len(kept) == len(state.get("uploads", [])):
+        return JSONResponse({"error": "立绘不存在"}, status_code=404)
+    removed = next((u for u in state["uploads"] if u.get("id") == item_id), None)
+    if removed:
+        try:
+            Path(removed["path"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+    state["uploads"] = kept
+    # 把所有引用了被删图的场景重置为默认
+    scenes = state.get("scenes", {})
+    reset_scenes = []
+    for k in CHARIMG_SCENES:
+        if scenes.get(k) == item_id:
+            scenes[k] = "default"
+            reset_scenes.append(k)
+    if reset_scenes:
+        _charimg_bump(state)
+    _charimg_save(state)
+    return {
+        "ok": True,
+        "version": state["version"],
+        "reset_scenes": reset_scenes,
+    }
+
+
+# ================= 世界 3D 形象（可上传的 GLB / GLTF 模型） =================
+MODELS3D_FILE = RolePath("models3d.json")
+MODELS3D_DIR = STATIC_DIR / "models3d"
+MODELS3D_MAX = 40 * 1024 * 1024  # 40MB
+
+
+def _models3d_load() -> dict:
+    """读取世界 3D 形象设置：active_id、apply（player/both）、version、uploads。"""
+    if MODELS3D_FILE.exists():
+        try:
+            data = json.loads(MODELS3D_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("active_id", "default")
+                data.setdefault("apply", "player")  # player=仅玩家 | both=玩家+许墨
+                data.setdefault("version", 1)
+                data.setdefault("uploads", [])
+                return data
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"active_id": "default", "apply": "player", "version": 1, "uploads": []}
+
+
+def _models3d_save(data: dict):
+    atomic_json(MODELS3D_FILE, data)
+
+
+def _models3d_items(state: dict) -> list:
+    items = []
+    for u in state.get("uploads", []):
+        if u.get("path") and Path(u["path"]).exists():
+            items.append({
+                "id": u["id"],
+                "name": u.get("name") or "自传模型",
+                "url": f"{u['url']}?v={state['version']}",
+                "size": u.get("size", 0),
+                "time": u.get("time", ""),
+            })
+    return items
+
+
+def _gltf_embedded_ok(raw: bytes) -> bool:
+    """校验 .gltf：所有 buffer / 贴图必须内嵌（data: URI），否则世界页加载不完整。"""
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return False
+    if not isinstance(doc, dict) or "asset" not in doc:
+        return False
+    for key in ("buffers", "images"):
+        for it in doc.get(key) or []:
+            uri = it.get("uri") or ""
+            if uri and not uri.startswith("data:"):
+                return False
+    return True
+
+
+@app.get("/api/model/state")
+async def models3d_state():
+    state = _models3d_load()
+    return {
+        "active_id": state["active_id"],
+        "xumo_id": state.get("xumo_id", "default"),
+        "version": state["version"],
+        "items": _models3d_items(state),
+    }
+
+
+@app.post("/api/model/upload")
+async def models3d_upload(req: Request):
+    """上传 GLB / 全内嵌 GLTF 模型，作为世界中玩家（可选同时许墨）的 3D 形象。
+    支持两种方式：
+    ① multipart/form-data（推荐：流式上传，无 base64 膨胀，适合大文件与外网传输）
+    ② application/json（兼容旧前端：data 字段为 base64 编码）"""
+    content_type = (req.headers.get("content-type") or "").lower()
+    name = "自传模型"
+    role = "player"
+    raw = b""
+
+    if content_type.startswith("multipart/form-data"):
+        # ---- 流式 multipart 上传 ----
+        try:
+            form = await req.form()
+        except Exception:
+            return JSONResponse({"error": "表单解析失败"}, status_code=400)
+        f = form.get("file")
+        if f is None or not hasattr(f, "read"):
+            return JSONResponse({"error": "请提供模型文件"}, status_code=400)
+        name = (form.get("name") or "").strip() or "自传模型"
+        role = (form.get("role") or "player").strip()
+        if role not in ("player", "xumo"):
+            role = "player"
+        try:
+            raw = await f.read()
+        except Exception:
+            return JSONResponse({"error": "读取文件失败"}, status_code=400)
+    else:
+        # ---- JSON base64 方式（兼容旧前端）----
+        try:
+            body = await req.json()
+        except Exception:
+            return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+        data_b64 = (body.get("data") or "").strip()
+        name = (body.get("name") or "").strip() or "自传模型"
+        role = (body.get("role") or "player").strip()
+        if role not in ("player", "xumo"):
+            role = "player"
+        if not data_b64:
+            return JSONResponse({"error": "请提供模型数据"}, status_code=400)
+        if data_b64.startswith("data:"):
+            data_b64 = data_b64.partition(",")[2]
+        try:
+            raw = base64.b64decode(data_b64)
+        except Exception:
+            return JSONResponse({"error": "模型数据解码失败"}, status_code=400)
+
+    if not raw:
+        return JSONResponse({"error": "请提供模型数据"}, status_code=400)
+    if len(raw) > MODELS3D_MAX:
+        return JSONResponse({"error": "模型不能超过 40MB（建议导出时压缩贴图、减面）"}, status_code=400)
+    if len(raw) < 200:
+        return JSONResponse({"error": "模型内容过小"}, status_code=400)
+
+    if raw[:4] == b"glTF":  # GLB 二进制容器
+        ext = ".glb"
+    elif raw[:1] in (b"{", b"[") and _gltf_embedded_ok(raw):
+        ext = ".gltf"
+    else:
+        return JSONResponse({"error": "仅支持 GLB，或资源全内嵌的 GLTF（VRM 请先转 GLB）"}, status_code=400)
+
+    up_id = uuid.uuid4().hex[:12]
+    MODELS3D_DIR.mkdir(parents=True, exist_ok=True)
+    save_path = MODELS3D_DIR / f"{up_id}{ext}"
+    save_path.write_bytes(raw)
+    url = f"/static/models3d/{up_id}{ext}"
+
+    state = _models3d_load()
+    state["version"] = int(state.get("version", 1)) + 1
+    state.setdefault("uploads", []).insert(0, {  # 最新在前
+        "id": up_id,
+        "name": name[:40],
+        "url": url,
+        "path": str(save_path),
+        "ext": ext,
+        "size": len(raw),
+        "time": datetime.now().strftime("%m-%d %H:%M"),
+    })
+    # 上传后立刻应用到对应槽位（player=我的形象 / xumo=许墨形象）
+    if role == "xumo":
+        state["xumo_id"] = up_id
+    else:
+        state["active_id"] = up_id
+    _models3d_save(state)
+    info = _add_affinity("avatar_set", f"3D 形象 · {name[:20]}")
+    return {"ok": True, "active_id": state["active_id"], "xumo_id": state.get("xumo_id", "default"),
+            "version": state["version"], "items": _models3d_items(state), "affinity": info}
+
+
+@app.post("/api/model/select")
+async def models3d_select(req: Request):
+    """切换世界 3D 形象槽位：role=player（active_id）| xumo（xumo_id）；id 为 'default' 或模型 id。"""
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    target = (body.get("active_id") or body.get("id") or "").strip()
+    role = (body.get("role") or "player").strip()
+    if role not in ("player", "xumo"):
+        role = "player"
+    state = _models3d_load()
+    if target != "default":
+        if not any(u.get("id") == target and Path(u["path"]).exists()
+                   for u in state.get("uploads", [])):
+            return JSONResponse({"error": "该模型不存在"}, status_code=404)
+    if role == "xumo":
+        state["xumo_id"] = target
+    else:
+        state["active_id"] = target
+    state["version"] = int(state.get("version", 1)) + 1
+    _models3d_save(state)
+    return {"ok": True, "active_id": state["active_id"], "xumo_id": state.get("xumo_id", "default"),
+            "version": state["version"], "items": _models3d_items(state)}
+
+
+@app.delete("/api/model/{item_id}")
+async def models3d_delete(item_id: str):
+    """删除一个已上传的 3D 模型。"""
+    state = _models3d_load()
+    kept = [u for u in state.get("uploads", []) if u.get("id") != item_id]
+    if len(kept) == len(state.get("uploads", [])):
+        return JSONResponse({"error": "模型不存在"}, status_code=404)
+    removed = next((u for u in state["uploads"] if u.get("id") == item_id), None)
+    if removed:
+        try:
+            Path(removed["path"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+    state["uploads"] = kept
+    if state.get("active_id") == item_id:
+        state["active_id"] = "default"
+    state["version"] = int(state.get("version", 1)) + 1
+    _models3d_save(state)
+    return {"ok": True, "active_id": state["active_id"],
+            "version": state["version"], "items": _models3d_items(state)}
+
+
 # ---------------------------------------------------------------------------
 # 全局背景
 # ---------------------------------------------------------------------------
@@ -3647,6 +5062,303 @@ async def delete_background():
         except OSError:
             pass
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# 自定义字体（用户上传 / 选择 / 删除）
+# ---------------------------------------------------------------------------
+ALLOWED_FONT_TYPES = {
+    "font/ttf": ".ttf",
+    "font/otf": ".otf",
+    "application/vnd.ms-fontobject": ".eot",
+    "font/woff": ".woff",
+    "font/woff2": ".woff2",
+    "application/octet-stream": "",  # 浏览器未识别时按文件名后缀判定
+}
+FONT_NAME_EXT = (".ttf", ".otf", ".woff", ".woff2", ".eot")
+FONT_MAX_SIZE = 30 * 1024 * 1024  # 30MB（中文字体常 8-25MB）
+
+# 系统预设字体（与 static/fonts 目录一致）
+SYSTEM_FONTS = [
+    {
+        "id": "system-default",
+        "family": "__DEFAULT__",  # 占位：使用 :root 原始 --font-sans
+        "name": "系统默认",
+        "weights": "PingFang SC / Microsoft YaHei / Segoe UI",
+    },
+    {
+        "id": "lxgw-wenkai",
+        "family": "LXGW WenKai",
+        "name": "霞鹜文楷 (LXGW WenKai)",
+        "weights": "400, 500",
+        "files": [
+            {"weight": 400, "url": "/static/fonts/LXGWWenKai-Regular.ttf?v=2"},
+            {"weight": 500, "url": "/static/fonts/LXGWWenKai-Medium.ttf?v=2"},
+        ],
+    },
+]
+
+
+def _font_lib_path():
+    """用户字体库元数据（按角色隔离）。"""
+    return RolePath("font_library.json")
+
+
+def _font_settings_path():
+    """用户当前激活字体设置（按角色隔离）。"""
+    return RolePath("font_settings.json")
+
+
+def _font_dir():
+    """用户上传字体文件存放目录（按角色隔离）。
+
+    用 RolePath 触发目录自动创建；返回真实 Path。
+    """
+    p = RolePath("fonts") / "custom"
+    # RolePath / 返回 Path（无 RolePath 包裹），需确保父目录存在
+    Path(p).mkdir(parents=True, exist_ok=True)
+    return Path(p)
+
+
+def _read_font_library():
+    p = _font_lib_path()
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return []
+
+
+def _write_font_library(data):
+    _font_lib_path().write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _read_font_settings():
+    p = _font_settings_path()
+    if not p.exists():
+        return {"active": None}
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(d, dict) or "active" not in d:
+            return {"active": None}
+        return d
+    except (ValueError, OSError):
+        return {"active": None}
+
+
+def _write_font_settings(active):
+    _font_settings_path().write_text(
+        json.dumps({"active": active}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _font_meta_by_id(font_id):
+    """在用户库中按 id 查找字体元数据，未命中返回 None。"""
+    for item in _read_font_library():
+        if item.get("id") == font_id:
+            return item
+    return None
+
+
+def _resolve_font_family(raw_name: str, filename: str) -> str:
+    """从用户填写的 family 名或文件名推断 family-name（去扩展名 + 空白规整）。"""
+    name = (raw_name or "").strip()
+    if name:
+        return name
+    base = Path(filename).stem
+    return base or "CustomFont"
+
+
+@app.get("/api/fonts")
+async def list_fonts():
+    """列出系统预设字体 + 当前用户上传的字体 + 当前激活字体。"""
+    custom = _read_font_library()
+    # 修正文件大小（如果文件已被替换）
+    for item in custom:
+        fp = _font_dir() / item.get("filename", "")
+        try:
+            item["size"] = fp.stat().st_size if fp.exists() else 0
+        except OSError:
+            item["size"] = 0
+    settings = _read_font_settings()
+    active = settings.get("active")
+    # 校验 active 仍存在（自定义字体可能被删）
+    if active and active.get("source") == "custom":
+        if not _font_meta_by_id(active.get("id", "")):
+            active = None
+            _write_font_settings(None)
+    elif active and active.get("source") == "system":
+        if not any(f["id"] == active.get("id") for f in SYSTEM_FONTS):
+            active = None
+            _write_font_settings(None)
+    return {
+        "system": SYSTEM_FONTS,
+        "custom": custom,
+        "active": active,
+    }
+
+
+@app.post("/api/font/upload")
+async def upload_font(req: Request):
+    """上传自定义字体文件（multipart/form-data）。
+
+    字段：file=二进制, family=可选的 family 名称。
+    """
+    ctype = req.headers.get("content-type", "")
+    if ctype.startswith("multipart/form-data"):
+        try:
+            form = await req.form()
+        except Exception:
+            return JSONResponse({"error": "表单解析失败"}, status_code=400)
+        upload = form.get("file")
+        family_name = (form.get("family") or "").strip() if isinstance(form.get("family"), str) else ""
+        if upload is None or not hasattr(upload, "read"):
+            return JSONResponse({"error": "缺少 file 字段"}, status_code=400)
+        try:
+            data = await upload.read()
+        except Exception:
+            return JSONResponse({"error": "读取上传数据失败"}, status_code=400)
+        filename = getattr(upload, "filename", "") or "font.ttf"
+        content_type = getattr(upload, "content_type", "") or "application/octet-stream"
+    else:
+        # 直接以 raw body 上传
+        content_type = ctype.split(";")[0].strip().lower()
+        family_name = ""
+        filename = ""
+        data = await req.body()
+
+    if not data:
+        return JSONResponse({"error": "字体文件为空"}, status_code=400)
+    if len(data) > FONT_MAX_SIZE:
+        return JSONResponse({"error": "字体文件不能超过 30MB"}, status_code=400)
+
+    # 后缀判定：优先按 content-type 映射，再回退到文件名后缀
+    ext = ALLOWED_FONT_TYPES.get(content_type, "")
+    if not ext:
+        low_name = (filename or "").lower()
+        for e in FONT_NAME_EXT:
+            if low_name.endswith(e):
+                ext = e
+                break
+    if not ext:
+        return JSONResponse(
+            {"error": "仅支持 ttf / otf / woff / woff2 字体文件"},
+            status_code=400,
+        )
+
+    family = _resolve_font_family(family_name, filename)
+    font_id = "f_" + uuid.uuid4().hex[:12]
+    stored_name = font_id + ext
+    target = _font_dir() / stored_name
+    target.write_bytes(data)
+
+    meta = {
+        "id": font_id,
+        "family": family,
+        "name": family,
+        "filename": stored_name,
+        "original_name": filename,
+        "ext": ext,
+        "size": len(data),
+        "added_at": _time.time(),
+    }
+    lib = _read_font_library()
+    lib.append(meta)
+    _write_font_library(lib)
+    return {"ok": True, "font": meta}
+
+
+@app.post("/api/font/select")
+async def select_font(req: Request):
+    """设置当前激活字体。body: {"source":"system|custom","id":"..."}"""
+    try:
+        payload = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体无效"}, status_code=400)
+    source = (payload or {}).get("source")
+    font_id = (payload or {}).get("id")
+    if source not in ("system", "custom") or not font_id:
+        return JSONResponse({"error": "参数 source/id 缺失"}, status_code=400)
+
+    if source == "system":
+        meta = next((f for f in SYSTEM_FONTS if f["id"] == font_id), None)
+        if not meta:
+            return JSONResponse({"error": "系统字体不存在"}, status_code=404)
+        active = {
+            "source": "system",
+            "id": meta["id"],
+            "family": meta["family"],
+            "name": meta["name"],
+        }
+    else:
+        meta = _font_meta_by_id(font_id)
+        if not meta:
+            return JSONResponse({"error": "字体不存在"}, status_code=404)
+        active = {
+            "source": "custom",
+            "id": meta["id"],
+            "family": meta["family"],
+            "name": meta["name"],
+            "filename": meta["filename"],
+        }
+    _write_font_settings(active)
+    return {"ok": True, "active": active}
+
+
+@app.delete("/api/font")
+async def delete_font(req: Request):
+    """删除指定自定义字体。query: ?id=..."""
+    font_id = req.query_params.get("id")
+    if not font_id:
+        return JSONResponse({"error": "缺少 id 参数"}, status_code=400)
+    lib = _read_font_library()
+    target = next((f for f in lib if f.get("id") == font_id), None)
+    if not target:
+        return JSONResponse({"error": "字体不存在"}, status_code=404)
+    # 删文件
+    try:
+        fp = _font_dir() / target["filename"]
+        if fp.exists():
+            fp.unlink()
+    except OSError:
+        pass
+    # 从库移除
+    lib = [f for f in lib if f.get("id") != font_id]
+    _write_font_library(lib)
+    # 若删除的是当前激活字体，重置激活状态
+    settings = _read_font_settings()
+    active = settings.get("active")
+    if active and active.get("id") == font_id:
+        _write_font_settings(None)
+    return {"ok": True}
+
+
+@app.get("/font/file/{font_id}")
+async def serve_font(font_id: str):
+    """按当前角色返回用户上传的字体字节（供 @font-face src 使用）。"""
+    meta = _font_meta_by_id(font_id)
+    if not meta:
+        return JSONResponse({"error": "字体不存在"}, status_code=404)
+    fp = _font_dir() / meta.get("filename", "")
+    if not fp.exists():
+        return JSONResponse({"error": "字体文件丢失"}, status_code=404)
+    ext = meta.get("ext", "").lower()
+    mime = {
+        ".ttf": "font/ttf",
+        ".otf": "font/otf",
+        ".woff": "font/woff",
+        ".woff2": "font/woff2",
+        ".eot": "application/vnd.ms-fontobject",
+    }.get(ext, "application/octet-stream")
+    return FileResponse(
+        str(fp),
+        media_type=mime,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/health")
@@ -4654,16 +6366,716 @@ def _img_quota_info() -> dict:
 
 
 def _img_quota_consume():
-    """成功生图后扣减一次。配额不限时仍记录已用次数，便于展示。"""
-    state = _img_quota_state()
-    state["used"] = int(state.get("used") or 0) + 1
-    _img_quota_save(state)
+    """成功生图后扣减一次。配额不限时仍记录已用次数，便于展示。
+
+    读-改-写必须整体持 file_lock：否则两个并发请求同时读到 used=N、
+    各自写回 N+1，会丢失一次扣减，导致用户突破月度配额上限。
+    """
+    with file_lock(IMG_QUOTA_FILE):
+        state = _img_quota_state()
+        state["used"] = int(state.get("used") or 0) + 1
+        _img_quota_save(state)
 
 
 def _img_quota_exhausted() -> bool:
     """配额是否已用尽（不限量永远 False）。"""
     info = _img_quota_info()
     return (not info["unlimited"]) and info["remaining"] <= 0
+
+
+# ---------------------------------------------------------------------------
+# 画境付费钱包（仅对非 owner 注册用户生效）
+# - 单张图定价按质量档位：fast 0.1 / medium 0.5 / high 2.7 元（.env 可调）
+# - 每个注册用户独立钱包（RolePath wallet.json），充值订单独立存储（recharge_orders.json）
+# - owner 用户继续走月度配额（_img_quota_*），不参与钱包扣费
+# - 充值流程（管理员审核制）：
+#     1. 用户提交金额 → 后端生成 pending 订单 + 返回订单号
+#     2. 用户扫码付款（个人收款码，URL 由 .env ALIPAY_QR_URL 配置）
+#     3. 用户在前端点「我已付款」标记订单为 paid_pending（仅状态变更，不加钱）
+#     4. 管理员在 /api/admin/recharges 查看所有 pending 订单，审核通过后给用户钱包加钱
+# ---------------------------------------------------------------------------
+WALLET_FILE = RolePath("wallet.json")
+RECHARGE_FILE = RolePath("recharge_orders.json")
+
+
+def _image_price(quality: str = "medium") -> float:
+    """单张生图价格（元），按质量档位从 .env 读取。
+
+    - fast   → IMAGE_PRICE_FAST_YUAN   （默认 0.1 元，对应 gpt-image low/1024档，成本 ~¥0.04）
+    - medium → IMAGE_PRICE_MEDIUM_YUAN （默认 0.5 元，对应 gpt-image auto/原比例，成本 ~¥0.17）
+    - high   → IMAGE_PRICE_HIGH_YUAN   （默认 2.7 元，对应 gpt-image high/1536-2048档，成本 ~¥0.35）
+
+    盈利测算（以 gpt-image-2 vectorengine 渠道为基准）：
+      fast   利润 ~¥0.06/张（约 1.5 倍）
+      medium 利润 ~¥0.33/张（约 1.9 倍）
+      high   利润 ~¥2.35/张（约 6.7 倍）
+
+    兼容旧 .env：若未配置三档变量但配置了 IMAGE_PRICE_YUAN，则三档都用该值。
+    """
+    q = (quality or "medium").lower()
+    if q not in ("fast", "medium", "high"):
+        q = "medium"
+    # 兼容旧版单一价格
+    legacy = os.getenv("IMAGE_PRICE_YUAN", "").strip()
+    env_key = {"fast": "IMAGE_PRICE_FAST_YUAN", "medium": "IMAGE_PRICE_MEDIUM_YUAN", "high": "IMAGE_PRICE_HIGH_YUAN"}[q]
+    raw = (os.getenv(env_key, "") or "").strip()
+    if not raw and legacy:
+        raw = legacy
+    defaults = {"fast": "0.1", "medium": "0.5", "high": "2.7"}
+    try:
+        return max(0.0, float(raw or defaults[q]))
+    except (TypeError, ValueError):
+        return float(defaults[q])
+
+
+def _image_prices() -> dict:
+    """三档价格汇总（供 /api/wallet 返回前端展示）。"""
+    return {
+        "fast": _image_price("fast"),
+        "medium": _image_price("medium"),
+        "high": _image_price("high"),
+    }
+
+
+def _wallet_state() -> dict:
+    """当前用户钱包状态。"""
+    try:
+        data = json.loads(WALLET_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("balance", 0.0)
+    data.setdefault("updated_at", None)
+    try:
+        data["balance"] = round(float(data["balance"]), 4)
+    except (TypeError, ValueError):
+        data["balance"] = 0.0
+    return data
+
+
+def _wallet_save(data: dict):
+    atomic_json(WALLET_FILE, data)
+
+
+def _wallet_balance() -> float:
+    """当前用户钱包余额（元）。"""
+    return round(float(_wallet_state().get("balance", 0.0)), 4)
+
+
+def _wallet_consume(amount: float, reason: str = "img2img") -> bool:
+    """扣减钱包余额（仅当余额充足时）。读-改-写整体持 file_lock 防并发丢失。
+
+    返回 True 表示扣费成功；False 表示余额不足。
+    """
+    amount = round(float(amount), 4)
+    if amount <= 0:
+        return True
+    with file_lock(WALLET_FILE):
+        st = _wallet_state()
+        if st["balance"] < amount - 1e-9:
+            return False
+        st["balance"] = round(st["balance"] - amount, 4)
+        st["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _wallet_save(st)
+    return True
+
+
+def _wallet_recharge(amount: float, note: str = "") -> float:
+    """充值：钱包余额 += amount，返回新余额。"""
+    amount = round(float(amount), 4)
+    if amount <= 0:
+        return _wallet_balance()
+    with file_lock(WALLET_FILE):
+        st = _wallet_state()
+        st["balance"] = round(st["balance"] + amount, 4)
+        st["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _wallet_save(st)
+        return st["balance"]
+
+
+def _wallet_info() -> dict:
+    """钱包信息：balance=余额, prices=三档价格, free=是否免费（owner）, scope=用户名,
+    grant=张数额度 {granted, used, remaining, updated_at}（owner 恒为 0）。"""
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return {
+            "free": True,
+            "balance": 0.0,
+            "price": _image_price("medium"),
+            "prices": _image_prices(),
+            "scope": scope or "",
+            "quota": _img_quota_info(),
+            "grant": {
+                "granted": {"fast": 0, "medium": 0, "high": 0},
+                "used": {"fast": 0, "medium": 0, "high": 0},
+                "remaining": {"fast": 0, "medium": 0, "high": 0},
+                "total_granted": 0, "total_used": 0, "total_remaining": 0,
+                "updated_at": None,
+            },
+        }
+    return {
+        "free": False,
+        "balance": _wallet_balance(),
+        "price": _image_price("medium"),
+        "prices": _image_prices(),
+        "scope": scope,
+        "quota": _img_quota_info(),
+        "grant": _img_grant_info(),
+    }
+
+
+def _wallet_can_generate(quality: str = "medium") -> tuple[bool, str]:
+    """检查当前用户能否生图（按质量档位对应的价格）。
+
+    返回 (ok, reason)：
+    - owner / 未启用付费 → (True, "")
+    - 非 owner 有 grant 张数额度 → (True, "")
+    - 非 owner 钱包余额充足（≥ 该档位价格）→ (True, "")
+    - 非 owner 余额不足 → (False, "余额不足，请充值后再试")
+    """
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return True, ""
+    info = _wallet_info()
+    if info["free"]:
+        return True, ""
+    q = (quality or "medium").lower()
+    if q not in ("fast", "medium", "high"):
+        q = "medium"
+    if info["grant"]["remaining"].get(q, 0) > 0:
+        return True, ""
+    price = _image_price(quality)
+    if info["balance"] >= price - 1e-9:
+        return True, ""
+    q_label = {"fast": "快速", "medium": "标准", "high": "高清"}.get((quality or "medium").lower(), "标准")
+    return False, f"画境余额不足（当前 {info['balance']:.2f} 元，{q_label}档 {price:.2f} 元/张），请充值后再试"
+
+
+def _wallet_consume_for_image(quality: str = "medium") -> bool:
+    """成功生图后扣费（owner 免扣）。
+
+    非 owner 优先扣「张数额度 grant」（免费，不区分质量档），grant 用尽再回落到钱包按对应档位价格扣费。
+    """
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return True
+    if _img_grant_consume(quality):
+        return True
+    return _wallet_consume(_image_price(quality), reason=f"img2img-{quality}")
+
+
+# ---------------------------------------------------------------------------
+# 生图张数额度（grant）：owner 可给某个注册用户下发"免费张数"。
+# - 文件：users_data/<username>/img_grant.json（owner 跨用户写时不走 _role_ctx）
+# - 字段：granted=累计下发张数, used=已用, remaining=granted-used,
+#         grants=下发记录列表 [{n, at, by, note}]（最近 200 条）
+# - 生图扣费优先级（非 owner）：grant.remaining>0 → 扣 1 张 grant（免费，不区分档位）；
+#   否则回落 wallet 按元扣对应档位价格（fast 0.1 / medium 0.5 / high 2.7 元/张）。
+# - owner 不参与 grant（owner 走月度配额 _img_quota_*）。
+# ---------------------------------------------------------------------------
+IMG_GRANT_FILE = RolePath("img_grant.json")  # 当前 scope 用户读自己用
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_\-\u4e00-\u9fa5]{1,32}$")
+
+
+def _img_grant_path(username: str | None = None):
+    """img_grant.json 路径。
+    - username=None → 当前 scope 用户（RolePath 自动按 _role_ctx 定位）
+    - username 给定 → 直接定位 users_data/<username>/img_grant.json，
+      绕过 _role_ctx，供 owner 跨用户下发/查询；非法用户名抛 ValueError。
+    """
+    if username is None:
+        return IMG_GRANT_FILE  # RolePath，file_lock/atomic_json 均接受
+    if not _USERNAME_RE.match(username):
+        raise ValueError(f"非法用户名：{username!r}")
+    return USERS_DATA_DIR / username / "img_grant.json"
+
+
+def _img_grant_state(username: str | None = None) -> dict:
+    """读取某用户的额度状态。文件不存在返回零状态。
+
+    返回格式（三档独立计数）：
+      granted: {"fast": int, "medium": int, "high": int}
+      used:    {"fast": int, "medium": int, "high": int}
+      grants:  [{n, quality, at, by, note}]
+    向后兼容：旧格式 granted/used 为 int → 视为 medium 档。
+    """
+    path = _img_grant_path(username)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    granted = data.get("granted")
+    used = data.get("used")
+    # 向后兼容：旧格式为 int → 视为 medium 档
+    if isinstance(granted, int):
+        granted = {"fast": 0, "medium": granted, "high": 0}
+    if isinstance(used, int):
+        used = {"fast": 0, "medium": used, "high": 0}
+    zero = {"fast": 0, "medium": 0, "high": 0}
+    if not isinstance(granted, dict):
+        granted = dict(zero)
+    if not isinstance(used, dict):
+        used = dict(zero)
+    try:
+        granted = {q: max(0, int(granted.get(q, 0))) for q in ("fast", "medium", "high")}
+        used = {q: max(0, int(used.get(q, 0))) for q in ("fast", "medium", "high")}
+    except (TypeError, ValueError):
+        granted = dict(zero)
+        used = dict(zero)
+    data["granted"] = granted
+    data["used"] = used
+    if not isinstance(data.get("grants"), list):
+        data["grants"] = []
+    return data
+
+
+def _img_grant_save(username: str | None, data: dict):
+    atomic_json(_img_grant_path(username), data)
+
+
+def _img_grant_info(username: str | None = None) -> dict:
+    """额度信息（三档独立）：granted/used/remaining 均为 {fast, medium, high} dict，
+    total_* 为三档汇总。updated_at=最后更新时间。"""
+    st = _img_grant_state(username)
+    granted = st["granted"]
+    used = st["used"]
+    remaining = {q: max(0, granted[q] - used[q]) for q in ("fast", "medium", "high")}
+    return {
+        "granted": granted,
+        "used": used,
+        "remaining": remaining,
+        "total_granted": sum(granted.values()),
+        "total_used": sum(used.values()),
+        "total_remaining": sum(remaining.values()),
+        "updated_at": st.get("updated_at"),
+    }
+
+
+def _img_grant_grant(username: str, n: int, quality: str = "medium",
+                     note: str = "", by: str = "owner") -> dict:
+    """给某用户的指定质量档位追加 n 张免费额度（n 可为负数表示回收）。
+    quality ∈ {fast, medium, high}。返回更新后的 info。写 grants 历史记录便于追溯。
+    """
+    n = int(n)
+    q = (quality or "medium").lower()
+    if q not in ("fast", "medium", "high"):
+        q = "medium"
+    if n == 0:
+        return _img_grant_info(username)
+    with file_lock(_img_grant_path(username)):
+        st = _img_grant_state(username)
+        st["granted"][q] = max(0, st["granted"][q] + n)
+        grants = list(st.get("grants") or [])
+        grants.append({
+            "n": n,
+            "quality": q,
+            "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "by": by or "owner",
+            "note": (note or "")[:200],
+        })
+        st["grants"] = grants[-200:]  # 仅保留最近 200 条
+        st["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _img_grant_save(username, st)
+    return _img_grant_info(username)
+
+
+def _img_grant_consume(quality: str = "medium") -> bool:
+    """当前 scope 用户成功生图后扣 1 张对应档位的 grant（若有）。
+    返回 True=用 grant 抵扣（免费）；False=该档位 grant 已用尽，调用方应回落 wallet。
+    读-改-写整体持 file_lock 防并发丢失。
+    """
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return False  # owner 不参与 grant
+    q = (quality or "medium").lower()
+    if q not in ("fast", "medium", "high"):
+        q = "medium"
+    with file_lock(_img_grant_path(None)):
+        st = _img_grant_state(None)
+        granted = st["granted"][q]
+        used = st["used"][q]
+        if used >= granted:
+            return False
+        st["used"][q] = used + 1
+        st["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _img_grant_save(None, st)
+    return True
+
+
+def _recharge_state() -> list:
+    """当前用户的所有充值订单（按时间倒序）。"""
+    try:
+        data = json.loads(RECHARGE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        data = []
+    if not isinstance(data, list):
+        data = []
+    return data
+
+
+def _recharge_save(records: list):
+    atomic_json(RECHARGE_FILE, records)
+
+
+# 收款配置（个人支付宝收款码，用户扫码付款后管理员审核）
+def _pay_config() -> dict:
+    """收款配置：qr_url=收款码图片URL, pay_url=跳转协议URL(可选), name=收款方名称。"""
+    return {
+        "qr_url": (os.getenv("ALIPAY_QR_URL") or "").strip(),
+        "pay_url": (os.getenv("ALIPAY_PAY_URL") or "").strip(),
+        "name": (os.getenv("ALIPAY_RECEIVER_NAME") or "许墨画境工坊").strip(),
+    }
+
+
+def _all_recharge_files() -> list:
+    """枚举所有用户的充值订单文件（owner + users_data/<name>/）。"""
+    out = []
+    try:
+        root_rc = role_root() / "recharge_orders.json"
+        if root_rc.exists():
+            out.append(("owner", root_rc))
+    except Exception:
+        pass
+    try:
+        users_dir = role_root() / "users_data"
+        if users_dir.exists():
+            for sub in users_dir.iterdir():
+                if sub.is_dir():
+                    rc = sub / "recharge_orders.json"
+                    if rc.exists():
+                        out.append((sub.name, rc))
+    except Exception:
+        pass
+    return out
+
+
+def _recharge_list_all() -> list:
+    """管理员视角：列出所有用户的充值订单（含 username 字段）。"""
+    out = []
+    for username, rc_path in _all_recharge_files():
+        try:
+            data = json.loads(rc_path.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                continue
+            for r in data:
+                if isinstance(r, dict):
+                    r2 = dict(r)
+                    r2["username"] = username
+                    out.append(r2)
+        except Exception:
+            continue
+    out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return out
+
+
+def _find_recharge_order(order_id: str) -> tuple:
+    """跨所有用户查找充值订单，返回 (username, rc_path, order_dict)。"""
+    for username, rc_path in _all_recharge_files():
+        try:
+            data = json.loads(rc_path.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                continue
+            for r in data:
+                if isinstance(r, dict) and r.get("id") == order_id:
+                    return username, rc_path, r
+        except Exception:
+            continue
+    return "", None, None
+
+
+@app.post("/api/wallet/grant")
+async def wallet_grant_create(req: Request):
+    """owner 给某个注册用户下发"张数额度"（生图免费张数，按质量档位独立计数）。
+    请求体：{"username": "sunx", "count": 10, "quality": "medium", "note": "测试额度"}
+    quality ∈ {fast, medium, high}，默认 medium；count 正数=追加，负数=回收。
+    返回更新后的 grant 信息（含三档明细）。
+    """
+    if _role_ctx.get() != "owner":
+        return JSONResponse({"error": "仅 owner 可下发额度"}, status_code=403)
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    username = str(body.get("username") or "").strip()
+    try:
+        count = int(body.get("count"))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "count 必须是整数"}, status_code=400)
+    quality = str(body.get("quality") or "medium").strip().lower()
+    if quality not in ("fast", "medium", "high"):
+        return JSONResponse({"error": "quality 必须是 fast/medium/high"}, status_code=400)
+    note = str(body.get("note") or "").strip()[:200]
+    if not username:
+        return JSONResponse({"error": "username 不能为空"}, status_code=400)
+    if count == 0:
+        return JSONResponse({"error": "count 不能为 0"}, status_code=400)
+    # 校验用户已注册（users_data 下存在同名目录）
+    user_dir = USERS_DATA_DIR / username
+    if not user_dir.is_dir():
+        return JSONResponse({"error": f"用户 {username!r} 不存在（请先注册）"}, status_code=404)
+    try:
+        info = _img_grant_grant(username, count, quality=quality, note=note, by="owner")
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return {"username": username, "quality": quality, "grant": info}
+
+
+@app.get("/api/wallet/grant")
+async def wallet_grant_query(username: str | None = None):
+    """查询张数额度。
+    - 不传 username → 查自己（任意已登录用户）
+    - 传 username → owner 查指定用户（如 GET /api/wallet/grant?username=sunx）
+    """
+    if username:
+        if _role_ctx.get() != "owner":
+            return JSONResponse({"error": "仅 owner 可查询他人额度"}, status_code=403)
+        try:
+            info = _img_grant_info(username)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return {"username": username, "grant": info}
+    return {"username": _role_ctx.get() or "", "grant": _img_grant_info()}
+
+
+@app.get("/api/wallet/grants")
+async def wallet_grant_list():
+    """owner 列出所有有额度记录的用户及其 grant 概览（按剩余张数倒序）。"""
+    if _role_ctx.get() != "owner":
+        return JSONResponse({"error": "仅 owner 可列出所有额度"}, status_code=403)
+    out = []
+    if USERS_DATA_DIR.is_dir():
+        for sub in USERS_DATA_DIR.iterdir():
+            if not sub.is_dir():
+                continue
+            username = sub.name
+            try:
+                info = _img_grant_info(username)
+            except Exception:
+                continue
+            if info["total_granted"] > 0 or info["total_used"] > 0:
+                out.append({"username": username, **info})
+    out.sort(key=lambda x: x.get("total_remaining", 0), reverse=True)
+    return {"grants": out, "total": len(out)}
+
+
+@app.get("/api/wallet")
+async def wallet_info(request: Request):
+    """查询当前用户钱包信息（余额 / 单价 / 是否免费 / 月度配额）。"""
+    return _wallet_info()
+
+
+@app.get("/api/wallet/pay")
+async def wallet_pay_config():
+    """返回收款配置（前端展示收款码与收款方名称）。"""
+    return _pay_config()
+
+
+@app.post("/api/wallet/recharge")
+async def wallet_recharge_create(req: Request):
+    """用户提交充值订单。请求体：{"amount": 10.0, "note": "..."}。
+    返回 {order_id, amount, status: pending, pay: {qr_url, name}}。
+    用户需自行扫码付款，然后在前端点「我已付款」标记订单。
+    """
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return JSONResponse({"error": "主人口令用户无需充值，直接使用月度配额"}, status_code=400)
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    try:
+        amount = round(float(body.get("amount") or 0), 2)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "金额必须是数字"}, status_code=400)
+    if amount < 0.01 or amount > 1000:
+        return JSONResponse({"error": "单次充值金额须在 0.01 ~ 1000 元之间"}, status_code=400)
+    note = str(body.get("note") or "").strip()[:200]
+    order = {
+        "id": f"rc_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
+        "amount": amount,
+        "status": "pending",  # pending / paid_pending / approved / rejected
+        "note": note,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "confirmed_at": None,    # 用户点「我已付款」的时间
+        "reviewed_at": None,     # 管理员审核时间
+        "reviewer": None,
+        "reject_reason": None,
+    }
+    with file_lock(RECHARGE_FILE):
+        records = _recharge_state()
+        records.append(order)
+        records = records[-200:]
+        _recharge_save(records)
+    return {
+        "order_id": order["id"],
+        "amount": order["amount"],
+        "status": order["status"],
+        "created_at": order["created_at"],
+        "pay": _pay_config(),
+    }
+
+
+@app.post("/api/wallet/recharge/{order_id}/confirm")
+async def wallet_recharge_confirm(order_id: str, req: Request):
+    """用户点「我已付款」：将订单状态从 pending 改为 paid_pending（不加钱，等管理员审核）。
+
+    诚实制 + 审核制：用户声明已付款 → 管理员核对支付宝到账后审核通过 → 钱包加钱。
+    """
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return JSONResponse({"error": "主人口令用户无需充值"}, status_code=400)
+    with file_lock(RECHARGE_FILE):
+        records = _recharge_state()
+        target = None
+        for r in records:
+            if isinstance(r, dict) and r.get("id") == order_id and r.get("status") == "pending":
+                target = r
+                break
+        if not target:
+            return JSONResponse({"error": "订单不存在或已处理"}, status_code=404)
+        target["status"] = "paid_pending"
+        target["confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _recharge_save(records)
+    return {"ok": True, "order_id": order_id, "status": "paid_pending",
+            "message": "已标记为已付款，等待管理员审核到账"}
+
+
+@app.get("/api/wallet/recharge/{order_id}/status")
+async def wallet_recharge_status(order_id: str, req: Request):
+    """查询订单状态（前端轮询用）。"""
+    scope = _role_ctx.get()
+    if scope == "owner" or scope is None:
+        return JSONResponse({"error": "主人口令用户无需充值"}, status_code=400)
+    with file_lock(RECHARGE_FILE):
+        records = _recharge_state()
+        order = next((r for r in records if isinstance(r, dict) and r.get("id") == order_id), None)
+        if not order:
+            return JSONResponse({"error": "订单不存在"}, status_code=404)
+    return {"status": order.get("status"), "amount": order.get("amount"),
+            "balance": _wallet_balance(), "reviewed_at": order.get("reviewed_at"),
+            "reject_reason": order.get("reject_reason")}
+
+
+@app.get("/api/wallet/orders")
+async def wallet_orders_list():
+    """当前用户的充值订单（最新在前）。"""
+    return {"orders": list(reversed(_recharge_state()))}
+
+
+# ===== 管理员审核端点 =====
+
+def _admin_username(req: Request) -> str | None:
+    """返回当前管理员身份标识：owner 返回 'owner'，注册管理员返回 username，非管理员返回 None。"""
+    if _role_ctx.get() == "owner":
+        return "owner"
+    u = _current_username(req)
+    if u and is_admin(u):
+        return u
+    return None
+
+
+@app.get("/api/admin/recharges")
+async def admin_recharges_list(request: Request):
+    """管理员：列出所有用户的充值订单。"""
+    if not _admin_username(request):
+        return JSONResponse({"detail": "仅管理员可用"}, status_code=403)
+    return {"orders": _recharge_list_all()}
+
+
+@app.post("/api/admin/recharges/{order_id}/approve")
+async def admin_recharges_approve(order_id: str, req: Request):
+    """管理员审核通过：给目标用户钱包加钱。"""
+    reviewer = _admin_username(req)
+    if not reviewer:
+        return JSONResponse({"detail": "仅管理员可用"}, status_code=403)
+
+    target_user, target_rc_path, order = _find_recharge_order(order_id)
+    if not order:
+        return JSONResponse({"detail": "订单不存在"}, status_code=404)
+    if order.get("status") not in ("pending", "paid_pending"):
+        return JSONResponse({"detail": f"订单状态不可审核（当前 {order.get('status')}）"}, status_code=400)
+
+    # 标记订单为 approved
+    with file_lock(target_rc_path):
+        try:
+            records = json.loads(target_rc_path.read_text(encoding="utf-8"))
+        except Exception:
+            records = []
+        if not isinstance(records, list):
+            records = []
+        for r in records:
+            if isinstance(r, dict) and r.get("id") == order_id:
+                r["status"] = "approved"
+                r["reviewed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                r["reviewer"] = reviewer
+                break
+        target_rc_path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+
+    # 给目标用户钱包加钱
+    wallet_path = target_rc_path.parent / "wallet.json"
+    with file_lock(wallet_path):
+        try:
+            st = json.loads(wallet_path.read_text(encoding="utf-8"))
+        except Exception:
+            st = {}
+        if not isinstance(st, dict):
+            st = {}
+        st.setdefault("balance", 0.0)
+        try:
+            st["balance"] = round(float(st["balance"]) + float(order["amount"]), 4)
+        except (TypeError, ValueError):
+            st["balance"] = round(float(order["amount"]), 4)
+        st["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        wallet_path.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
+
+    return {"ok": True, "username": target_user, "amount": order["amount"],
+            "new_balance": st["balance"]}
+
+
+@app.post("/api/admin/recharges/{order_id}/reject")
+async def admin_recharges_reject(order_id: str, req: Request):
+    """管理员拒绝充值订单。请求体：{"reason": "..."}。"""
+    reviewer = _admin_username(req)
+    if not reviewer:
+        return JSONResponse({"detail": "仅管理员可用"}, status_code=403)
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    reason = str(body.get("reason") or "未通过审核").strip()[:200]
+
+    target_user, target_rc_path, order = _find_recharge_order(order_id)
+    if not order:
+        return JSONResponse({"detail": "订单不存在"}, status_code=404)
+    if order.get("status") not in ("pending", "paid_pending"):
+        return JSONResponse({"detail": f"订单状态不可拒绝（当前 {order.get('status')}）"}, status_code=400)
+
+    with file_lock(target_rc_path):
+        try:
+            records = json.loads(target_rc_path.read_text(encoding="utf-8"))
+        except Exception:
+            records = []
+        if not isinstance(records, list):
+            records = []
+        for r in records:
+            if isinstance(r, dict) and r.get("id") == order_id:
+                r["status"] = "rejected"
+                r["reviewed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                r["reviewer"] = reviewer
+                r["reject_reason"] = reason
+                break
+        target_rc_path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+
+    return {"ok": True, "username": target_user, "reason": reason}
+
+
+@app.get("/api/wallet/orders")
+async def wallet_orders_list():
+    """当前用户的充值订单（最新在前）。"""
+    return {"orders": list(reversed(_recharge_state()))}
 
 
 # 许墨形象固定英文锚点：入画时逐字嵌入 image_prompt，保证每次生成的许墨形象一致
@@ -4698,7 +7110,7 @@ IMG2IMG_SIZES = {
     "landscape": "2048x1536",
 }
 
-IMG2IMG_VISION_PROMPT = """你是《恋与制作人》官方卡面绘制助手。用户上传了一张图片，并选择了许墨（Lucien）的一种卡面风格主题。你的任务：看懂图片内容后，先判断这张图是否适合让许墨本人入画，再输出一段可直接用于 AI 绘图的英文提示词，把图片的构图与情节重绘进所选风格里。
+IMG2IMG_VISION_PROMPT = """你是《恋与制作人》官方卡面绘制助手。用户上传了一张图片，并选择了许墨（Lucien）的一种卡面风格主题。你的任务：看懂图片内容后，先判断这张图是否适合让许墨本人入画，再输出一段可直接用于 AI 绘图的英文提示词。以图片为灵感来源，提炼其核心主题与氛围元素（季节、情绪、关键道具/色彩），但**重新设计**人物动作、构图、镜头角度与场景细节，创作一幅比原图更生动、更自然、更智能的全新许墨卡面——严禁照搬原图的动作姿态与画面布局。
 
 【许墨形象锚点（入画时务必保留核心特征）】
 - 26岁儒雅青年教授：深墨色柔软微卷黑色短发（额前一缕碎发）、狭长温柔的深紫色（紫罗兰）眼眸、银色细框眼镜（必须戴着）、白净清隽鹅蛋脸、鼻梁高挺、唇色偏淡、清瘦高挑肩宽腰窄、修长手指、嘴角含笑
@@ -4721,7 +7133,7 @@ IMG2IMG_VISION_PROMPT = """你是《恋与制作人》官方卡面绘制助手�
 只输出一个 JSON 对象，不要任何其他文字：
 {
   "with_xumo": true或false（按上述规则判断）,
-  "image_prompt": "英文绘图提示词，100-180词。必须包含：1)对上传图片内容与构图的忠实转述（人物姿态/场景元素/镜头角度）；2)所选风格主题的关键元素；3)许墨入画则逐字嵌入上述固定英文外貌句并补写他在此画面中的动作与着装，未入画则写明所选许墨意象；4)恋与制作人画风关键词；5)冷紫或暖光的统一色调",
+  "image_prompt": "英文绘图提示词，120-200词。必须包含：1)提炼上传图片的核心主题与氛围元素（季节、情绪、关键道具/色彩），但重新设计人物动作、构图、镜头角度与场景细节，使画面比原图更生动自然，严禁照搬原图的动作与布局；2)所选风格主题的关键元素；3)许墨入画则逐字嵌入上述固定英文外貌句并补写他在此画面中的动作与着装，未入画则写明所选许墨意象；4)恋与制作人画风关键词；5)冷紫或暖光的统一色调；6)masterpiece, best quality, ultra-detailed, 8k, cinematic lighting 质量强化词",
   "comment": "以许墨第一人称说的一句中文短评（15-40字），温柔话留三分，可带一处学术梗或蝴蝶意象，针对这张图的画面内容"
 }
 """
@@ -4760,10 +7172,11 @@ def _extract_img2img_json(text: str) -> dict | None:
     }
 
 
-async def _generate_img2img_image(image_prompt: str, name: str, size: str, image_ref: str | None = None, has_character: bool = True) -> str | None:
+async def _generate_img2img_image(image_prompt: str, name: str, size: str, image_ref: str | None = None, has_character: bool = True, xumo_ref_override: tuple | None = None, quality: str = 'medium') -> str | None:
     """调用图像生成接口重绘，存入 static/img2img/。image_ref: 原图 data URL（真图生图）。
-    has_character: LLM 判定画面是否含人物/角色；True → gpt-image-2（角色图），False → agnes（场景图）。"""
-    return await _openai_generate_image(image_prompt, IMG2IMG_DIR, "/static/img2img", name, size, image_ref=image_ref, has_character=has_character)
+    has_character: LLM 判定画面是否含人物/角色；True → gpt-image-2（角色图），False → agnes（场景图）。
+    xumo_ref_override: (bytes, mime, name) 元组，替代默认许墨参考图传给 /images/edits 强制角色一致性。"""
+    return await _openai_generate_image(image_prompt, IMG2IMG_DIR, "/static/img2img", name, size, image_ref=image_ref, has_character=has_character, xumo_ref_override=xumo_ref_override, quality=quality)
 
 
 def _parse_data_url(data_url: str) -> tuple[str, bytes]:
@@ -4939,18 +7352,150 @@ def _xumo_ref_attachment() -> list[tuple[str, str, bytes, str]]:
     return [(name, name, data, mime)]
 
 
-async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, name: str, size: str, image_ref: str | None = None, has_character: bool = True) -> str | None:
+# ---------------------------------------------------------------------------
+# Lovart 通道（https://lgw.lovart.ai）：AK/SK HMAC-SHA256 签名 OpenAPI。
+# 模型工具名（unlimited 慢速排队列表实测）：generate_image_gpt_image_1_5 / _2 / nano_banana_2。
+# 流程：project/save 创建项目 → chat 发送（tool_config.prefer_tool_categories.IMAGE 指定模型）
+#       → 轮询 chat/status → chat/result 取第一个 image artifact 的 content URL → 下载。
+# ---------------------------------------------------------------------------
+LOVART_DEFAULT_BASE = "https://lgw.lovart.ai"
+
+
+def _lovart_config() -> tuple[str, str, str]:
+    """Lovart 通道配置：(base_url, access_key, secret_key)。未配置返回空串元组。"""
+    base = (os.getenv("LOVART_BASE_URL") or "").strip().rstrip("/") or LOVART_DEFAULT_BASE
+    ak = (os.getenv("LOVART_API_KEY") or "").strip()
+    sk = (os.getenv("LOVART_SECRET_KEY") or "").strip()
+    if not (ak and sk):
+        return ("", "", "")
+    return (base, ak, sk)
+
+
+def _lovart_headers(method: str, path: str, ts: str, ak: str, sk: str) -> dict:
+    """Lovart HMAC-SHA256 签名头：HMAC(sk, "METHOD\\nPATH\\nTS")。"""
+    sig = hmac.new(sk.encode(), f"{method}\n{path}\n{ts}".encode(), hashlib.sha256).hexdigest()
+    return {
+        "X-Access-Key": ak,
+        "X-Timestamp": ts,
+        "X-Signature": sig,
+        "X-Signed-Method": method,
+        "X-Signed-Path": path,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) LovartAgentSkill/1.0",
+    }
+
+
+async def _lovart_api_request(base_url: str, ak: str, sk: str, method: str, path: str,
+                              body: dict | None = None, params: dict | None = None,
+                              timeout: float = 60.0) -> dict:
+    """Lovart OpenAPI 请求（签名在每次请求时生成）。返回 data 字段；业务 code!=0 抛异常。"""
+    import urllib.parse
+    ts = str(int(time.time()))
+    url = f"{base_url.rstrip('/')}{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    headers = _lovart_headers(method, path, ts, ak, sk)
+    if method == "POST":
+        headers["Idempotency-Key"] = uuid.uuid4().hex
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=10.0)) as client:
+            resp = await client.request(method, url, json=body, headers=headers)
+            text = resp.text
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Lovart HTTP {resp.status_code}: {text[:200]}")
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        raise RuntimeError(f"Lovart 响应解析失败: {text[:200]}")
+    if isinstance(data, dict) and data.get("code", 0) != 0:
+        raise RuntimeError(data.get("message") or f"Lovart code={data.get('code')}")
+    return data.get("data", data) if isinstance(data, dict) else data
+
+
+async def _lovart_generate_image_bytes(prompt: str, model: str) -> bytes:
+    """Lovart 文生图：创建项目 → chat 指定模型 → 轮询 → 下载首个 image artifact。"""
+    base, ak, sk = _lovart_config()
+    if not base:
+        raise RuntimeError("Lovart 未配置（.env 缺少 LOVART_API_KEY / LOVART_SECRET_KEY）")
+    proj = await _lovart_api_request(base, ak, sk, "POST", "/v1/openapi/project/save",
+                                     body={"project_id": "", "canvas": "",
+                                           "project_cover_list": [], "pic_count": 0,
+                                           "project_type": 3})
+    project_id = (proj or {}).get("project_id") or ""
+    if not project_id:
+        raise RuntimeError("Lovart 创建项目失败")
+    body = {
+        "prompt": prompt,
+        "project_id": project_id,
+        "tool_config": {"prefer_tool_categories": {"IMAGE": [model]}},
+    }
+    tid = (await _lovart_api_request(base, ak, sk, "POST", "/v1/openapi/chat", body=body, timeout=120.0)).get("thread_id") or ""
+    if not tid:
+        raise RuntimeError("Lovart 提交生成任务失败")
+    # 轮询（unlimited 慢速排队可能较久，最多 420s）
+    deadline = time.time() + 420
+    status = "running"
+    while time.time() < deadline:
+        await asyncio.sleep(6)
+        st = await _lovart_api_request(base, ak, sk, "GET", "/v1/openapi/chat/status",
+                                       params={"thread_id": tid})
+        status = ((st or {}).get("status") or "running").lower()
+        if status in ("done", "abort"):
+            break
+    if status != "done":
+        raise RuntimeError("Lovart 生成超时（慢速队列较久），可稍后重试或切换其他通道")
+    res = await _lovart_api_request(base, ak, sk, "GET", "/v1/openapi/chat/result",
+                                    params={"thread_id": tid})
+    url = ""
+    for item in (res or {}).get("items") or []:
+        for art in item.get("artifacts") or []:
+            u = (art.get("content") or "").strip()
+            if u and (art.get("type") or "").lower() == "image":
+                url = u
+                break
+        if url:
+            break
+    if not url:
+        raise RuntimeError("Lovart 未返回图片（上游可能拒绝了该提示词）")
+    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=15.0)) as client:
+        dl = await client.get(url, headers={"User-Agent": "Mozilla/5.0",
+                                            "Referer": "https://www.lovart.ai/"})
+        dl.raise_for_status()
+        return dl.content
+
+
+async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, name: str, size: str, image_ref: str | None = None, has_character: bool = True, xumo_ref_override: tuple | None = None, quality: str = 'medium') -> str | None:
     """通用文生图/图生图：OpenAI 兼容 images 接口，落盘到指定目录并返回 URL。
-    - has_character=True（画面含角色/人物）：走 IMAGE_*（如 vectorengine gpt-image-2），
+    - has_character=True（画面含角色/人物）：走 gpt-image 通道（主→备用），
       附加许墨参考图到 /images/edits 强制角色一致性；失败回退 generations 纯文生图；
     - has_character=False（纯场景/氛围插画）：走 agnes（OPENAI_*），不附加参考图，
       直接 generations 纯文生图（场景图不应强制复刻角色外貌）；
-    - image_ref 传入原图 data URL 时走真图生图。"""
-    api_key, base_url, model = _image_api_config(has_character)
-    if not api_key or not image_prompt:
+    - image_ref 传入原图 data URL 时走真图生图。
+    - xumo_ref_override: (bytes, mime, name) 元组，替代默认许墨参考图传给 /images/edits。
+    - quality: fast/medium/high，映射到生图 API 的 quality 字段（low/auto/high）与 size。
+    配置降级链：备用(IMAGE_*) → 兜底(OPENAI_*+AGNES)，
+    前者全部失败（含 edits + generations + 两种尺寸）才尝试下一个通道。"""
+    configs = _get_image_api_configs(has_character)
+    if not configs or not image_prompt:
         return None
-    url = f"{base_url}/images/generations"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    # 质量档 → API quality 字段 + 尺寸档
+    _QMAP = {
+        'fast':   {'api_q': 'low',  'size_scale': 0.5},   # 快/省：1024 档
+        'medium':  {'api_q': 'auto', 'size_scale': 1.0},   # 默认：保持原比例
+        'high':    {'api_q': 'high', 'size_scale': 1.5},   # 高质：上调到 1536/2048 档
+    }
+    _qcfg = _QMAP.get((quality or 'medium').lower(), _QMAP['medium'])
+    # 按质量档调整尺寸（保持原比例）
+    def _scale_size(sz, scale):
+        parts = sz.split('x')
+        if len(parts) != 2: return sz
+        try:
+            w, h = int(parts[0]), int(parts[1])
+            w = max(512, int(round(w * scale / 64.0)) * 64)
+            h = max(512, int(round(h * scale / 64.0)) * 64)
+            return f"{w}x{h}"
+        except Exception:
+            return sz
+    base_size = _scale_size(size, _qcfg['size_scale'])
     # 部分网关（如 vectorengine）需走代理：IMAGE_TRUST_ENV=1 时优先走注册表/IMAGE_PROXY 代理，直连兜底。
     use_env_proxy = os.getenv("IMAGE_TRUST_ENV", "").strip().lower() in ("1", "true", "yes")
     proxies = _image_proxy_candidates() if use_env_proxy else [None]
@@ -4966,7 +7511,10 @@ async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, na
                 "recomb, re-age, or replace the face with any other character. "
                 "Keep only ONE main character matching the reference. Match the reference's "
                 "lighting, color grading, and illustration style precisely.")
-    full_prompt = image_prompt.rstrip() + (ref_note if has_character else "")
+    # ref_note 仅对 owner 走 gpt-image + /images/edits（附加许墨参考图）时有意义；
+    # 非 owner 走 agnes generations（无参考图），不应附加该锚定说明。
+    use_ref_note = has_character and _role_ctx.get() == "owner"
+    full_prompt = image_prompt.rstrip() + (ref_note if use_ref_note else "")
 
     def _pick(body: dict) -> dict | None:
         item = (body.get("data") or body.get("images") or [None])[0]
@@ -4974,19 +7522,28 @@ async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, na
 
     def _build_files(extra_user_ref: bytes | None, user_mime: str | None, user_ext: str = "png") -> list[tuple]:
         """构造 multipart files：只传许墨参考图（1 张）。
-        gpt-image-2 的 image[] 是批量编辑而非多图参考，传多张会导致拼接图。
+        gpt-image 的 image[] 是批量编辑而非多图参考，传多张会导致拼接图。
         用户原图不传给 edits，其构图信息已通过 prompt 传递（LLM 视觉分析）。
+        xumo_ref_override 优先于默认许墨参考图。
         """
         files: list[tuple] = []
-        for fname, _, data, mime in _xumo_ref_attachment():
+        if xumo_ref_override and len(xumo_ref_override) >= 3:
+            data, mime, fname = xumo_ref_override[0], xumo_ref_override[1], xumo_ref_override[2]
             files.append(("image", (fname, data, mime)))
+        else:
+            for fname, _, data, mime in _xumo_ref_attachment():
+                files.append(("image", (fname, data, mime)))
         return files
 
-    async def _try_edits(sz: str, files: list[tuple], proxy: str | None = None) -> dict | None:
+    quota_hit = [False]
+
+    async def _try_edits(cfg: tuple, sz: str, files: list[tuple], proxy: str | None = None) -> dict | None:
         """尝试 /images/edits，用单图 image 字段（许墨参考图，确保角色一致性）。
-        gpt-image-2 的 image[] 字段会导致服务器断开连接，必须用 image 字段。
+        gpt-image 的 image[] 字段会导致服务器断开连接，必须用 image 字段。
         files 为空时仍会尝试许墨参考单图。"""
-        # gpt-image-2 经 vectorengine 的 edits 在 2048x2048 会被掐断连接，
+        _api_key, _base_url, _model = cfg
+        _api_q = _qcfg['api_q'] if 'gpt-image' in _model else ('hd' if _qcfg['api_q'] == 'auto' else _qcfg['api_q'])
+        # gpt-image 经 vectorengine 的 edits 在 2048x2048 会被掐断连接，
         # 方形成图回落 1536x1536；竖版 1536x2048 / 横版 2048x1536 实测可用，保持不变。
         if sz == "2048x2048":
             sz = "1536x1536"
@@ -4999,16 +7556,16 @@ async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, na
                 single_candidates.append((fname, data, mime))
 
         try:
-            async with httpx.AsyncClient(proxy=proxy, timeout=httpx.Timeout(300.0, connect=25.0)) as client:
+            async with httpx.AsyncClient(proxy=proxy, timeout=httpx.Timeout(120.0, connect=15.0)) as client:
                 # 单图 image 字段：依次尝试许墨参考图
                 for fname, data, mime in single_candidates:
                     try:
                         resp = await client.post(
-                            f"{base_url}/images/edits",
-                            data={"model": model, "prompt": full_prompt, "n": "1", "size": sz,
-                                  "quality": "hd", "output_format": "png"},
+                            f"{_base_url}/images/edits",
+                            data={"model": _model, "prompt": full_prompt, "n": "1", "size": sz,
+                                  "quality": _api_q, "output_format": "png"},
                             files={"image": (fname, data, mime)},
-                            headers={"Authorization": f"Bearer {api_key}"},
+                            headers={"Authorization": f"Bearer {_api_key}"},
                         )
                         if resp.status_code in (403, 429) and ("quota" in resp.text.lower() or "insufficient" in resp.text.lower()):
                             quota_hit[0] = True
@@ -5022,31 +7579,45 @@ async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, na
             pass
         return None
 
-    quota_hit = [False]
-
-    async def _gen(sz: str) -> str | None:
+    async def _gen(cfg: tuple, sz: str) -> str | None:
+        _api_key, _base_url, _model = cfg
+        # Lovart 通道：非 OpenAI 兼容，走 HMAC 签名 chat 流程（无 size/quality/参考图概念）
+        if "lovart" in _base_url.lower():
+            try:
+                data = await _lovart_generate_image_bytes(full_prompt, _model)
+            except Exception:
+                return None
+            out_dir.mkdir(parents=True, exist_ok=True)
+            path = out_dir / f"{name}.png"
+            path.write_bytes(data)
+            return f"{url_prefix}/{name}.png"
+        _api_q = _qcfg['api_q'] if 'gpt-image' in _model else ('hd' if _qcfg['api_q'] == 'auto' else _qcfg['api_q'])
+        _url = f"{_base_url}/images/generations"
+        _headers = {"Authorization": f"Bearer {_api_key}", "Content-Type": "application/json"}
         for proxy in proxies:
             try:
-                async with httpx.AsyncClient(proxy=proxy, timeout=httpx.Timeout(300.0, connect=25.0)) as client:
+                async with httpx.AsyncClient(proxy=proxy, timeout=httpx.Timeout(120.0, connect=15.0)) as client:
                     item = None
                     # 1) 角色图：edits + 许墨参考图（单张，确保角色一致性）
-                    #    用户原图不传给 edits（gpt-image-2 的 image[] 是批量编辑，传多张会拼接）
+                    #    用户原图不传给 edits（gpt-image 的 image[] 是批量编辑，传多张会拼接）
                     #    用户原图的构图信息已通过 prompt 传递（LLM 视觉分析）
                     # 2) 场景图：跳过 edits，直接 generations 纯文生图（无参考图，防止角色入画）
-                    if has_character:
+                    # 3) 非 owner 用户：强制走 agnes（generations），跳过 edits 避免占用
+                    #    gpt-image 贵通道与附加许墨参考图（agnes 通道不支持参考图）
+                    if has_character and _role_ctx.get() == "owner":
                         ref_files = _build_files(None, None)
-                        item = await _try_edits(sz, ref_files, proxy)
+                        item = await _try_edits(cfg, sz, ref_files, proxy)
                     if item is None:
                         payload = {
-                            "model": model,
+                            "model": _model,
                             "prompt": full_prompt,
                             "n": 1,
                             "size": sz,
                             "image_size": sz,
-                            "quality": "hd",
+                            "quality": _api_q,
                             "output_format": "png",
                         }
-                        resp = await client.post(url, json=payload, headers=headers)
+                        resp = await client.post(_url, json=payload, headers=_headers)
                         if resp.status_code in (403, 429) and ("quota" in resp.text.lower() or "insufficient" in resp.text.lower()):
                             quota_hit[0] = True
                         if resp.status_code == 200:
@@ -5068,12 +7639,18 @@ async def _openai_generate_image(image_prompt: str, out_dir, url_prefix: str, na
                 continue
         return None
 
-    # 先按所选比例（2K），失败则回退 1.5K 方形（仍保持高清，不跌回 1024）
-    result = await _gen(size) or await _gen("1536x1536")
+    # 降级链：依次尝试每个配置（先 2K 比例，失败回退 1.5K 方形）；
+    # 某配置两种尺寸均失败才尝试下一个配置。
+    result = None
+    for cfg in configs:
+        result = await _gen(cfg, base_size) or await _gen(cfg, "1536x1536")
+        if result:
+            break
     if result:
         _img_quota_consume()
     elif quota_hit[0]:
-        raise ImageQuotaError(f"生图额度已用完（{model}），请充值后再试")
+        tried_models = " / ".join(c[2] for c in configs)
+        raise ImageQuotaError(f"生图额度已用完（{tried_models}），请充值后再试")
     return result
 
 
@@ -5163,6 +7740,206 @@ async def img2img_quota():
     return _img_quota_info()
 
 
+# ---------------------------------------------------------------------------
+# API 自定义配置端点（per-user 覆盖 .env 默认值）
+# ---------------------------------------------------------------------------
+def _mask_key(k: str) -> str:
+    """api_key 脱敏：保留前 4 + 后 4，中间替换为 …；空字符串原样返回。"""
+    if not k:
+        return ""
+    if len(k) <= 10:
+        return "****"
+    return f"{k[:4]}…{k[-4:]}（已设置 {len(k)} 位）"
+
+
+@app.get("/api/settings/api")
+async def api_settings_get():
+    """读取当前用户自定义 API 配置。
+    api_key 返回脱敏串（前端仅显示已设置与否，写入时若字段为空或与脱敏串一致则保留原值）。
+    env_defaults 返回 .env 中的当前值，供前端占位提示；
+    env_channels 返回生图内置通道（secondary/agnes）的 .env 配置，供通道选择器展示。"""
+    data = _load_api_settings()
+    text  = data.get("text")  or {}
+    image = data.get("image") or {}
+    # env 默认值（用于前端占位）
+    env_text = {
+        "base_url": _get_base_url(),
+        "api_key":  _mask_key(os.getenv("OPENAI_API_KEY", "")),
+        "model":    os.getenv("MODEL", "gpt-4o-mini"),
+    }
+    env_image = {
+        "base_url": (os.getenv("IMAGE_BASE_URL") or "").strip() or _get_base_url(),
+        "api_key":  _mask_key((os.getenv("IMAGE_API_KEY") or os.getenv("OPENAI_API_KEY") or "")),
+        "model":    (os.getenv("IMAGE_MODEL") or os.getenv("AGNES_IMAGE_MODEL") or "gpt-image-2"),
+    }
+    # 生图内置通道（供前端通道选择器展示）
+    def _chan(api_key_env: str, base_url_env: str, model_env: str, fallback_model: str, base_url_fallback: str = "") -> dict:
+        return {
+            "base_url": ((os.getenv(base_url_env) or "").strip().rstrip("/") or base_url_fallback or ""),
+            "api_key":  _mask_key(os.getenv(api_key_env) or ""),
+            "model":    (os.getenv(model_env) or "").strip() or fallback_model,
+        }
+    env_channels = {
+        "secondary": _chan("IMAGE_API_KEY", "IMAGE_BASE_URL", "IMAGE_MODEL", "gpt-image-2"),
+        "agnes":     _chan("OPENAI_API_KEY", "OPENAI_BASE_URL", "AGNES_IMAGE_MODEL", "agnes-image-2.1-flash", _get_base_url()),
+        "lovart":    _chan("LOVART_API_KEY", "LOVART_BASE_URL", "LOVART_IMAGE_MODEL", "generate_image_gpt_image_1_5", LOVART_DEFAULT_BASE),
+    }
+    image_provider = str(image.get("provider") or "auto").strip().lower()
+    if image_provider not in ("auto", "secondary", "agnes", "custom", "lovart"):
+        image_provider = "auto"
+    return {
+        "text":  {
+            "base_url": (text.get("base_url") or "").strip(),
+            "api_key":  _mask_key((text.get("api_key") or "").strip()),
+            "model":    (text.get("model") or "").strip(),
+            "has_custom": bool((text.get("api_key") or "").strip() or (text.get("base_url") or "").strip() or (text.get("model") or "").strip()),
+        },
+        "image": {
+            "provider": image_provider,
+            "base_url": (image.get("base_url") or "").strip(),
+            "api_key":  _mask_key((image.get("api_key") or "").strip()),
+            "model":    (image.get("model") or "").strip(),
+            "has_custom": bool((image.get("api_key") or "").strip() or (image.get("base_url") or "").strip() or (image.get("model") or "").strip()),
+        },
+        "env_defaults": {"text": env_text, "image": env_image},
+        "env_channels": {"image": env_channels},
+        "scope": _role_ctx.get(),
+    }
+
+
+@app.post("/api/settings/api")
+async def api_settings_save(req: Request):
+    """保存当前用户自定义 API 配置。
+    字段约定：
+    - 空字符串 → 清空该字段（回退到 env 默认值）
+    - 形如 'xxxx…xxxx（已设置 N 位）' 的脱敏占位串 → 保留原值不变
+    - 其他非空串 → 视为新值写入"""
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "请求体必须是对象"}, status_code=400)
+
+    cur = _load_api_settings()
+    cur_text  = cur.get("text")  or {}
+    cur_image = cur.get("image") or {}
+
+    def _merge(in_group: dict, cur_group: dict) -> dict:
+        out = {}
+        for field in ("base_url", "api_key", "model"):
+            v = str((in_group or {}).get(field, "") or "").strip()
+            # 脱敏占位串 → 保留原值
+            if v and ("…" in v or v.startswith("****")):
+                out[field] = (cur_group.get(field) or "").strip()
+            else:
+                out[field] = v
+        # provider 单独处理：仅接受合法值，非法或缺失保持原值
+        p = str((in_group or {}).get("provider", "") or "").strip().lower()
+        if p in ("auto", "secondary", "agnes", "custom", "lovart"):
+            out["provider"] = p
+        else:
+            out["provider"] = str(cur_group.get("provider") or "auto").strip().lower()
+        return out
+
+    new_text  = _merge(body.get("text"),  cur_text)
+    new_image = _merge(body.get("image"), cur_image)
+    _save_api_settings({"text": new_text, "image": new_image})
+    return {"ok": True, "message": "API 自定义配置已保存"}
+
+
+@app.post("/api/settings/api/test")
+async def api_settings_test(req: Request):
+    """测试自定义 API 连接。
+    body: {"kind": "text" | "image", "config": {"base_url": "...", "api_key": "...", "model": "..."}}
+    - kind=text: 调用 /chat/completions 发一句 "ping"，期望 200
+    - kind=image: 调用 /images/generations 生成一张 1024x1024 测试图（不落盘，仅校验连通性）
+    返回 {ok: bool, latency_ms: int, detail: str}"""
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    kind = (body.get("kind") or "").strip().lower()
+    cfg = body.get("config") or {}
+    if kind not in ("text", "image"):
+        return JSONResponse({"error": "kind 必须是 text 或 image"}, status_code=400)
+    base_url = str(cfg.get("base_url") or "").strip().rstrip("/")
+    api_key  = str(cfg.get("api_key") or "").strip()
+    model    = str(cfg.get("model") or "").strip()
+    # 脱敏占位串 → 用 env 默认值（优先备用通道 IMAGE_*；Lovart 用 LOVART_API_KEY）
+    if not api_key or "…" in api_key or api_key.startswith("****"):
+        if kind == "image" and "lovart" in base_url.lower():
+            api_key = (os.getenv("LOVART_API_KEY") or "").strip()
+        else:
+            api_key = (os.getenv("IMAGE_API_KEY") or os.getenv("OPENAI_API_KEY", "")).strip() if kind == "image" else os.getenv("OPENAI_API_KEY", "")
+    if not base_url:
+        if kind == "text":
+            base_url = _get_base_url()
+        else:
+            base_url = ((os.getenv("IMAGE_BASE_URL") or "").strip() or _get_base_url())
+    if not model:
+        if kind == "text":
+            model = os.getenv("MODEL", "gpt-4o-mini")
+        else:
+            model = (os.getenv("IMAGE_MODEL") or os.getenv("AGNES_IMAGE_MODEL") or "gpt-image-2")
+    if not api_key:
+        return JSONResponse({"ok": False, "detail": "未提供 api_key 且 .env 未配置 OPENAI_API_KEY"}, status_code=400)
+    if not base_url:
+        return JSONResponse({"ok": False, "detail": "未提供 base_url"}, status_code=400)
+
+    import time
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+            if kind == "text":
+                url = f"{base_url}/chat/completions"
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 8,
+                }
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                resp = await client.post(url, json=payload, headers=headers)
+            else:
+                # Lovart 通道：AK/SK HMAC 签名，用 mode/query 验证连通性
+                if "lovart" in base_url.lower():
+                    l_ak = api_key
+                    l_sk = (os.getenv("LOVART_SECRET_KEY") or "").strip()
+                    if not l_sk:
+                        return JSONResponse({"ok": False, "detail": "Lovart 需要 .env 配置 LOVART_SECRET_KEY"}, status_code=200)
+                    data = await _lovart_api_request(base_url, l_ak, l_sk, "POST",
+                                                     "/v1/openapi/mode/query", body={})
+                    mode = "无限排队" if data.get("unlimited") else "快速"
+                    n = len(data.get("unlimited_list") or []) or len(data.get("fast_list") or [])
+                    return {"ok": True, "latency_ms": latency,
+                            "detail": f"Lovart 连接成功（{mode}模式，可用模型 {n} 个）"}
+                url = f"{base_url}/images/generations"
+                payload = {
+                    "model": model,
+                    "prompt": "a small purple butterfly on a white background, simple test image",
+                    "n": 1,
+                    "size": "1024x1024",
+                    "image_size": "1024x1024",
+                }
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                resp = await client.post(url, json=payload, headers=headers)
+        latency = int((time.time() - t0) * 1000)
+        if resp.status_code == 200:
+            return {"ok": True, "latency_ms": latency, "detail": f"连接成功（{model} @ {base_url}）"}
+        return JSONResponse({
+            "ok": False,
+            "latency_ms": latency,
+            "detail": f"HTTP {resp.status_code}：{resp.text[:200]}",
+        }, status_code=200)
+    except Exception as e:
+        latency = int((time.time() - t0) * 1000)
+        return JSONResponse({
+            "ok": False,
+            "latency_ms": latency,
+            "detail": f"连接失败：{type(e).__name__}: {e}",
+        }, status_code=200)
+
+
 @app.post("/api/img2img/generate")
 async def img2img_generate(req: Request):
     """图生图：上传图片(base64) → 视觉理解 → 融合所选许墨卡面风格重绘。"""
@@ -5174,10 +7951,27 @@ async def img2img_generate(req: Request):
     style = data.get("style") or "rain"
     ratio = data.get("ratio") or "square"
     extra = data.get("extra") or ""
+    quality = (data.get("quality") or "medium").lower()
+    if quality not in ("fast", "medium", "high"):
+        quality = "medium"
     image_b64 = (data.get("image") or "").strip()
+    # 多参考图：我的化身图 / 场景图 / 许墨参考图（每组最多 5 张 base64 data URL）
+    avatar_refs_in = data.get("avatar_refs") or []
+    scene_refs_in = data.get("scene_refs") or []
+    xumo_refs_in = data.get("xumo_refs") or []
+    if not isinstance(avatar_refs_in, list): avatar_refs_in = []
+    if not isinstance(scene_refs_in, list): scene_refs_in = []
+    if not isinstance(xumo_refs_in, list): xumo_refs_in = []
+    avatar_refs_in = [x for x in avatar_refs_in if isinstance(x, str) and x.startswith("data:")][:5]
+    scene_refs_in = [x for x in scene_refs_in if isinstance(x, str) and x.startswith("data:")][:5]
+    xumo_refs_in = [x for x in xumo_refs_in if isinstance(x, str) and x.startswith("data:")][:5]
     if style not in IMG2IMG_STYLES:
         return JSONResponse({"error": "未知风格"}, status_code=400)
-    if _img_quota_exhausted():
+    # 付费校验：非 owner 检查钱包余额（按所选质量档位）；owner 检查月度配额
+    ok, reason = _wallet_can_generate(quality)
+    if not ok:
+        return JSONResponse({"error": reason}, status_code=403)
+    if _role_ctx.get() == "owner" and _img_quota_exhausted():
         info = _img_quota_info()
         return JSONResponse(
             {"error": f"本月生图余额已用完（{info['used']}/{info['quota']} 次），请下个月再来，或让主人调整配额。"},
@@ -5214,16 +8008,29 @@ async def img2img_generate(req: Request):
 
         # 视觉理解 + 提示词合成（一次调用完成）
         style_meta = IMG2IMG_STYLES[style]
+        ref_hint_parts = []
+        if avatar_refs_in:
+            ref_hint_parts.append(f"我的化身参考图（{len(avatar_refs_in)} 张）：请参考这些图中「她」的形象、发型、着装、气质，在重绘画面里保持「她」的形象与这些参考一致")
+        if scene_refs_in:
+            ref_hint_parts.append(f"场景参考图（{len(scene_refs_in)} 张）：请参考这些图的场景、构图、色调、氛围，在重绘画面里融入这些场景元素")
+        if xumo_refs_in:
+            ref_hint_parts.append(f"许墨参考图（{len(xumo_refs_in)} 张）：请严格参考这些图中许墨的形象、发型、眼镜、着装，在重绘画面里保持许墨形象与这些参考完全一致")
+        ref_hint = ("\n【用户上传的参考图】\n" + "\n".join(ref_hint_parts) + "\n") if ref_hint_parts else ""
+
         user_content = [
             {"type": "text", "text": (
                 f"所选风格主题：{style_meta['name']}（{style_meta['desc']}）\n"
                 f"风格元素参考：{style_meta['prompt']}\n"
                 f"用户附加描述：{extra.strip() or '（无，请自行发挥）'}\n"
                 f"画幅比例：{ratio}（portrait=竖版 / landscape=横版 / square=方形）\n"
+                f"{ref_hint}"
                 "请看图后按系统要求输出 JSON。"
             )},
             {"type": "image_url", "image_url": {"url": f"data:image/{'png' if ext == '.png' else 'jpeg'};base64,{base64.b64encode(raw).decode()}"}},
         ]
+        # 追加参考图到视觉理解请求（让 LLM 看到参考图并融入 prompt）
+        for ref_url in avatar_refs_in + scene_refs_in + xumo_refs_in:
+            user_content.append({"type": "image_url", "image_url": {"url": ref_url}})
         try:
             content = await _call_llm(
                 [
@@ -5244,18 +8051,31 @@ async def img2img_generate(req: Request):
         if parsed["with_xumo"] and "Lucien" not in image_prompt:
             image_prompt = f"{XUMO_LOOK_EN}. {image_prompt}"
 
-        # 真图生图：把原图一并传给图像模型（Qwen-Image-Edit 等直接参考原图重绘）
+        # 以 LLM 生成的 prompt 驱动全新画面（不传原图给生图模型，避免照搬原图动作）
         # 画面含人物/角色 → gpt-image-2（角色图）；纯场景 → agnes（场景图）
-        src_data_url = f"data:image/{'png' if ext == '.png' else 'jpeg'};base64,{base64.b64encode(raw).decode()}"
-        gen_url = await _generate_img2img_image(image_prompt, work_id, size, image_ref=src_data_url, has_character=bool(parsed["with_xumo"]))
+        # 若用户上传了许墨参考图，取第一张替代默认许墨参考传给 /images/edits 强制角色一致
+        xumo_ref_override = None
+        if xumo_refs_in:
+            try:
+                ref_mime, ref_bytes = _parse_data_url(xumo_refs_in[0])
+                if ref_bytes and len(ref_bytes) <= 8 * 1024 * 1024:
+                    ref_ext = "png" if "png" in ref_mime else "jpg"
+                    xumo_ref_override = (ref_bytes, ref_mime, f"xumo_ref_{work_id}.{ref_ext}")
+            except Exception:
+                pass
+        gen_url = await _generate_img2img_image(image_prompt, work_id, size, has_character=bool(parsed["with_xumo"]), xumo_ref_override=xumo_ref_override, quality=quality)
         if not gen_url:
             raise GenJobError("绘图服务暂时不可用，请稍后重试")
+
+        # 付费扣费：非 owner 从钱包扣对应档位价格（owner 由 _img_quota_consume 在 _openai_generate_image 内已扣月度配额）
+        _wallet_consume_for_image(quality)
 
         record = {
             "id": work_id,
             "style": style,
             "style_name": style_meta["name"],
             "ratio": ratio,
+            "quality": quality,
             "extra": extra.strip(),
             "src": src_url,
             "gen": gen_url,
@@ -5739,13 +8559,20 @@ async def avatarify_generate(req: Request):
     mode = data.get("mode") or "solo"
     theme = data.get("theme") or "campus"
     ratio = data.get("ratio") or "portrait"
+    quality = (data.get("quality") or "medium").lower()
+    if quality not in ("fast", "medium", "high"):
+        quality = "medium"
     extra = data.get("extra") or ""
     image_b64 = (data.get("image") or "").strip()
     if mode not in ("solo", "duo"):
         return JSONResponse({"error": "未知模式"}, status_code=400)
     if theme not in AVATARIFY_THEMES:
         return JSONResponse({"error": "未知主题"}, status_code=400)
-    if _img_quota_exhausted():
+    # 付费校验：非 owner 检查钱包余额（按所选质量档位）；owner 检查月度配额
+    ok, reason = _wallet_can_generate(quality)
+    if not ok:
+        return JSONResponse({"error": reason}, status_code=403)
+    if _role_ctx.get() == "owner" and _img_quota_exhausted():
         info = _img_quota_info()
         return JSONResponse(
             {"error": f"本月生图余额已用完（{info['used']}/{info['quota']} 次），请下个月再来，或让主人调整配额。"},
@@ -5814,9 +8641,12 @@ async def avatarify_generate(req: Request):
         if mode == "duo" and "Lucien" not in image_prompt:
             image_prompt = f"{XUMO_LOOK_EN}. {image_prompt}"
 
-        gen_url = await _openai_generate_image(image_prompt, AVATARIFY_DIR, "/static/avatarify", work_id, size, has_character=True)
+        gen_url = await _openai_generate_image(image_prompt, AVATARIFY_DIR, "/static/avatarify", work_id, size, has_character=True, quality=quality)
         if not gen_url:
             raise GenJobError("绘图服务暂时不可用，请稍后重试")
+
+        # 付费扣费：非 owner 从钱包扣对应档位价格
+        _wallet_consume_for_image(quality)
 
         record = {
             "id": work_id,
@@ -5824,6 +8654,7 @@ async def avatarify_generate(req: Request):
             "theme": theme,
             "theme_name": theme_meta["name"],
             "ratio": ratio,
+            "quality": quality,
             "extra": extra.strip(),
             "src": src_url,
             "gen": gen_url,
@@ -6051,6 +8882,122 @@ async def world_place_delete(place_id: str):
     return {"ok": True}
 
 
+# ================= 世界·恋语市：建筑入内（室内场景 AI 插画） =================
+# 玩家进入 POI 建筑 → 切换到全屏室内视图（AI 生成的室内插图作背景 + HTML 热点叠加）
+WORLD_INTERIORS_FILE = RolePath("world_interiors.json")
+WORLD_INTERIORS_DIR = STATIC_DIR / "world_interiors"
+
+WORLD_INTERIOR_PROMPT = """你是《恋与制作人》恋语市的室内场景绘制师。玩家要进入一个建筑的室内，请根据建筑名与玩家描述，输出室内简介与可直接用于 AI 绘图的英文提示词。
+
+【世界观】恋语市：以上海为原型的滨海都市，浪漫日常风；许墨（Lucien）是恋语大学教授，象征色紫色、象征物蝴蝶。
+
+【画风】Mr Love: Queen's Choice official art style, anime otome game interior background illustration, semi-thick painting, soft romantic palette, cinematic light, no people（室内场景图，不要出现人物，留出前景互动空间）
+
+【输出要求】只输出一个 JSON 对象，不要任何其他文字：
+{
+  "desc": "中文室内简介，40-100字，写进室内图鉴，描绘氛围与陈设",
+  "image_prompt": "英文绘图提示词，60-140词。必须包含：室内场景元素与构图、家具/陈设、时间/天气氛围、恋与制作人画风关键词、统一色调",
+  "comment": "以许墨第一人称说的一句中文短评（15-40字），温柔含笑，可带学术梗或蝴蝶意象，针对这个室内"
+}
+"""
+
+
+def _load_world_interiors() -> dict:
+    if WORLD_INTERIORS_FILE.exists():
+        try:
+            data = json.loads(WORLD_INTERIORS_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {}
+
+
+def _save_world_interiors(d: dict):
+    WORLD_INTERIORS_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.get("/api/world/interiors")
+async def world_interiors_list():
+    """列出所有已生成的室内场景配置（前端拿 img URL + desc 渲染）"""
+    return {"interiors": _load_world_interiors()}
+
+
+@app.post("/api/world/interiors/{place_id}")
+async def world_interior_get_or_create(place_id: str, req: Request):
+    """生成或取回某建筑的室内场景。POST body: {name, prompt_hint}。
+    若缓存中已有则直接返回；否则调 LLM 增强 prompt → 生图 → 落盘 → 缓存。
+    """
+    data = await req.json()
+    name = (data.get("name") or place_id).strip()
+    prompt_hint = (data.get("prompt_hint") or "").strip()
+
+    interiors = _load_world_interiors()
+    cached = interiors.get(place_id)
+    if cached and cached.get("img"):
+        # 已生成过，直接返回（前端热点配置在 INTERIORS 静态表里）
+        return {"interior": cached}
+
+    # LLM 增强：玩家 prompt_hint + 建筑名 → 完整 image_prompt + desc + comment
+    user_text = (
+        f"建筑名称：{name}\n"
+        f"玩家描述：{prompt_hint or '（无，请根据建筑名称自由发挥室内陈设）'}\n"
+        f"画幅比例：landscape（横版全景，便于全屏背景）\n"
+    )
+    try:
+        content = await _call_llm(
+            [
+                {"role": "system", "content": WORLD_INTERIOR_PROMPT},
+                {"role": "user", "content": user_text + "请按要求输出 JSON。"},
+            ],
+            max_tokens=2000,
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"室内构思失败：{e}"}, status_code=500)
+
+    parsed = _extract_img2img_json(content)
+    if not parsed or not parsed["image_prompt"]:
+        return JSONResponse({"error": "室内构思失败，请重试"}, status_code=500)
+
+    size = "landscape_16_9"
+    img_url = await _openai_generate_image(
+        parsed["image_prompt"],
+        WORLD_INTERIORS_DIR, "/static/world_interiors", place_id, size,
+        has_character=False,
+    )
+    if not img_url:
+        return JSONResponse({"error": "绘图服务暂时不可用，请稍后重试"}, status_code=500)
+
+    interior = {
+        "place_id": place_id,
+        "name": name,
+        "img": img_url,
+        "desc": parsed.get("desc") or "",
+        "comment": parsed.get("comment") or "",
+        "prompt": parsed["image_prompt"],
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    interiors[place_id] = interior
+    _save_world_interiors(interiors)
+    return {"interior": interior}
+
+
+@app.delete("/api/world/interiors/{place_id}")
+async def world_interior_delete(place_id: str):
+    """删除某建筑室内场景缓存（重新生成时用）"""
+    interiors = _load_world_interiors()
+    if place_id in interiors:
+        img = interiors[place_id].get("img", "")
+        del interiors[place_id]
+        _save_world_interiors(interiors)
+        if img:
+            try:
+                (BASE_DIR / img.lstrip("/")).unlink(missing_ok=True)
+            except Exception:
+                pass
+    return {"ok": True}
+
+
 # ================= 世界·恋语市：地形改造（建造模式笔刷持久化） =================
 WORLD_EDITS_FILE = RolePath("world_edits.json")
 WORLD_EDITS_MAX = 6000   # 地形编辑 tile 上限（超出淘汰最早）
@@ -6143,6 +9090,384 @@ async def world_edits_clear():
     """清空全部地形改造，恢复原生地貌。"""
     _save_world_edits({})
     return {"ok": True}
+
+
+# ================= 世界·恋语市：AI 智能建设（地形+地点+建筑一站式生成） =================
+WORLD_AI_TERRAIN_MAX = 1000   # AI 单次建设最多改造的 tile 数
+
+WORLD_AI_BUILD_PROMPT = """你是《恋与制作人》恋语市的城市设计师许墨，温柔博学，擅长把玩家一个模糊的念头变成完整的城市设计。玩家要在开放世界地图（144×144 tile）上做一次小型开发，你需要输出一套「建设方案」：地形改造 + 地点/建筑 + 装饰 + 居民 + 事件。
+
+【地形编号 b】0深海(禁行) 1浅水(禁行) 2沙滩 3草地 4森林 5丘陵 6山地(禁行) 7雪峰(禁行) 8马路 9广场砖 10建筑(禁行) 11公园草 12室内地板 13木桥 14田野
+【装饰编号 d】0无 1树 2路灯 3花 4石头 5灌木 6蘑菇 7长椅 8围栏 9喷泉 10摊位 11路标 12篝火 13枯树 14野花丛 15古典路灯
+【规划铁律】
+- 一切落在给定中心约 ±10 格内，任何坐标夹在 2~141；
+- 建设中心点周围 2 格内必须保持可通行（玩家可能正站在那里，禁止用水体/建筑围死中心）；
+- 先铺地形（rect/circle），再放建筑：kind=build 的地点会落地为实体建筑块（尺寸建议 2×2 ~ 4×3），门口一行会自动留出道路；
+- 装饰(d>0)的指令必须同时带一个非实体 b（例如草地+花丛、公园草+树），禁止把树种在水里/山上；
+- terrain 指令最多 12 条，两种形状：{"shape":"rect","x":左上x,"y":左上y,"w":宽,"h":高,"b":编号,"d":可选} 或 {"shape":"circle","x":圆心x,"y":圆心y,"r":半径≤8,"b":编号,"d":可选}；rect 的 w、h ≤ 18；
+- places 最多 6 个，name ≤ 12 字，icon 用一个 emoji；kind: build(建筑)/mark(户外地标，w=h=1)；
+- decors 最多 20 个，每个 {"x":坐标,"y":坐标,"d":装饰编号}，用于精细点缀（喷泉/长椅/篝火/摊位/路标等），不得压在实体地形上；
+- npcs 最多 3 个，每个 {"name":"名字≤12字","emoji":"一个emoji","color":"#rrggbb","lines":["台词1","台词2"],"x":坐标,"y":坐标}，台词≤6 句、每句≤80 字；居民是恋语市普通市民，不是许墨/男主；
+- event 可选 1 个，{"title":"事件名≤12字","text":"事件描述30-80字","kind":"rumor或visitor或event"}，作为这片新区域的「开业事件」出现在城市脉搏里；
+- 与已有地点保持 ≥3 格间距，不得压在已有地点坐标上；
+- 风格：恋语市浪漫日常风，命名有故事感（可用蝴蝶/星空/花/海的意象）。
+
+【输出】只输出一个 JSON 对象，不要任何其他文字：
+{
+  "title": "方案名，≤12字",
+  "concept": "以许墨第一人称说设计思路，30-60字，温柔含笑",
+  "terrain": [ ...形状指令... ],
+  "places": [ {"name":"…","icon":"⛩️","kind":"build","x":1,"y":1,"w":2,"h":2,"desc":"一句话场景简介（20-40字）"} ],
+  "decors": [ {"x":1,"y":1,"d":9} ],
+  "npcs": [ {"name":"小鹿","emoji":"🦌","color":"#eab308","lines":["今天的晚霞很好看。"],"x":1,"y":1} ],
+  "event": {"title":"新店开张","text":"街角传来咖啡香，新开的店今天营业了。","kind":"event"}
+}
+想法很小就给 1~2 条 terrain、1 个 place、不加 npcs/event；想法再大也不得超出条数上限。"""
+
+# 内置 POIS 摘要（与 static/world-data.js 保持一致，供 LLM 避让）
+WORLD_BUILTIN_POIS = [
+    ("你的公寓", 100, 78), ("街角咖啡店", 88, 74), ("脑科学研究院", 83, 67),
+    ("恋语大学", 75, 61), ("旧图书馆", 87, 80), ("日夜超市", 97, 76),
+    ("教工公寓", 86, 76), ("中央钟楼", 92, 72), ("梧桐公园", 99, 66),
+    ("北岬灯塔", 112, 48), ("神庙遗迹", 42, 58), ("废弃实验室", 64, 39),
+    ("临海栈桥", 122, 84), ("北岭矿脉", 58, 34), ("星辰石碑群", 41, 57),
+]
+
+
+def _extract_ai_build_json(text: str) -> dict | None:
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _world_pois_brief() -> str:
+    lines = ["- %s (%d,%d)" % p for p in WORLD_BUILTIN_POIS]
+    for p in _load_world_places():
+        try:
+            lines.append("- %s (%d,%d)" % (str(p.get("name") or "?"), int(p.get("x") or 0), int(p.get("y") or 0)))
+        except (TypeError, ValueError):
+            continue
+    return "\n".join(lines)
+
+
+def _expand_ai_terrain(terrain) -> list:
+    """LLM 形状指令 → tile 列表（去重、越界丢弃、限量）。"""
+    tiles: dict = {}
+    for t in terrain if isinstance(terrain, list) else []:
+        if not isinstance(t, dict):
+            continue
+        b, d = t.get("b"), t.get("d")
+        try:
+            b = int(b) if b is not None else None
+            d = int(d) if d is not None else None
+        except (TypeError, ValueError):
+            continue
+        if not ((b is not None and 0 <= b <= 14) or (d is not None and 0 <= d <= 3)):
+            continue
+        cells = []
+        try:
+            if t.get("shape") == "circle":
+                cx0, cy0 = int(t.get("x")), int(t.get("y"))
+                r = min(8, max(1, int(t.get("r") or 2)))
+                for yy in range(cy0 - r, cy0 + r + 1):
+                    for xx in range(cx0 - r, cx0 + r + 1):
+                        if (xx - cx0) ** 2 + (yy - cy0) ** 2 <= r * r + r:
+                            cells.append((xx, yy))
+            else:
+                x0, y0 = int(t.get("x")), int(t.get("y"))
+                w = min(18, max(1, int(t.get("w") or 1)))
+                h = min(18, max(1, int(t.get("h") or 1)))
+                for yy in range(y0, y0 + h):
+                    for xx in range(x0, x0 + w):
+                        cells.append((xx, yy))
+        except (TypeError, ValueError):
+            continue
+        for xx, yy in cells:
+            if not (0 <= xx < 144 and 0 <= yy < 144):
+                continue
+            key = f"{xx},{yy}"
+            rec = dict(tiles.get(key, {}))
+            if b is not None and 0 <= b <= 14:
+                rec["b"] = b
+            if d is not None and 0 <= d <= 3:
+                rec["d"] = d
+            tiles[key] = rec
+            if len(tiles) >= WORLD_AI_TERRAIN_MAX:
+                break
+        if len(tiles) >= WORLD_AI_TERRAIN_MAX:
+            break
+    out = []
+    for key, rec in tiles.items():
+        xs, ys = key.split(",")
+        e = {"x": int(xs), "y": int(ys)}
+        if "b" in rec:
+            e["b"] = rec["b"]
+        if "d" in rec:
+            e["d"] = rec["d"]
+        out.append(e)
+    return out
+
+
+def _sanitize_ai_places(raw) -> list:
+    places = []
+    if not isinstance(raw, list):
+        return places
+    for p in raw:
+        if not isinstance(p, dict) or len(places) >= 6:
+            break
+        name = str(p.get("name") or "").strip()[:20]
+        if not name:
+            continue
+        icon = str(p.get("icon") or "📍").strip()[:4] or "📍"
+        kind = p.get("kind") if p.get("kind") in ("build", "mark") else "build"
+        try:
+            x = max(2, min(141, int(p.get("x"))))
+            y = max(2, min(141, int(p.get("y"))))
+        except (TypeError, ValueError):
+            continue
+        w = max(1, min(6, int(p.get("w") or (2 if kind == "build" else 1))))
+        h = max(1, min(6, int(p.get("h") or (2 if kind == "build" else 1))))
+        places.append({
+            "name": name, "icon": icon, "kind": kind,
+            "x": min(x, 143 - w), "y": min(y, 143 - h),
+            "w": w, "h": h,
+            "desc": str(p.get("desc") or "").strip()[:120],
+        })
+    return places
+
+
+def _sanitize_ai_decors(raw) -> list:
+    """AI 方案里的 decor 列表 → 校验后的 [{x,y,d}]。"""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for d in raw:
+        if not isinstance(d, dict) or len(out) >= 20:
+            break
+        try:
+            x = max(2, min(141, int(d.get("x"))))
+            y = max(2, min(141, int(d.get("y"))))
+            dv = int(d.get("d"))
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= dv <= 15):
+            continue
+        out.append({"x": x, "y": y, "d": dv})
+    return out
+
+
+def _sanitize_ai_npc_draft(raw) -> list:
+    """AI 方案里的 NPC 草稿 → 校验后的 [{name,emoji,color,lines,x,y}]。"""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for n in raw:
+        if not isinstance(n, dict) or len(out) >= 3:
+            break
+        name = str(n.get("name") or "").strip()[:12]
+        if not name:
+            continue
+        emoji = str(n.get("emoji") or "🙂").strip()[:4] or "🙂"
+        color = str(n.get("color") or "").strip()
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            color = "#8b5cf6"
+        raw_lines = n.get("lines")
+        if not isinstance(raw_lines, list):
+            raw_lines = str(raw_lines or "").splitlines()
+        lines = [str(l).strip()[:80] for l in raw_lines if str(l).strip()]
+        lines = lines[:6]
+        if not lines:
+            lines = ["你好，欢迎来恋语市。"]
+        try:
+            x = max(2, min(141, int(n.get("x"))))
+            y = max(2, min(141, int(n.get("y"))))
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "name": name, "emoji": emoji, "color": color,
+            "lines": lines, "x": x, "y": y,
+        })
+    return out
+
+
+def _sanitize_ai_event(raw) -> dict | None:
+    """AI 方案里的 event → 校验后的 {title,text,kind} 或 None。"""
+    if not isinstance(raw, dict):
+        return None
+    title = str(raw.get("title") or "").strip()[:12]
+    text = str(raw.get("text") or "").strip()[:120]
+    if not title or not text:
+        return None
+    kind = raw.get("kind") if raw.get("kind") in ("rumor", "visitor", "event") else "event"
+    return {"title": title, "text": text, "kind": kind}
+
+
+def _ai_build_cost(tile_count: int) -> tuple[int, int]:
+    """AI 建设批发价：基础设计费 + 每格 ¥2，体力每 5 格 +1 封顶 60。"""
+    money = 30 + tile_count * 2
+    sp = min(60, 10 + (tile_count + 4) // 5)
+    return money, sp
+
+
+@app.post("/api/world/ai/design")
+async def world_ai_design(req: Request):
+    """AI 智能建设：根据玩家想法生成建设方案（地形+地点+建筑），不落盘。"""
+    try:
+        data = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    idea = str(data.get("idea") or "").strip()[:120]
+    if not idea:
+        return JSONResponse({"error": "先告诉许墨你想建点什么吧"}, status_code=400)
+    try:
+        cx = max(2, min(141, int(data.get("x"))))
+        cy = max(2, min(141, int(data.get("y"))))
+    except (TypeError, ValueError):
+        cx, cy = 100, 78
+
+    user = (
+        f"玩家想法：{idea}\n"
+        f"建设中心：地图坐标 ({cx}, {cy})，方案主体应落在中心 ±10 格内\n"
+        f"已有地点（保持 ≥3 格间距，禁止重叠）：\n{_world_pois_brief()}\n"
+        f"请输出建设方案 JSON。"
+    )
+    try:
+        content = await _call_llm(
+            [{"role": "system", "content": WORLD_AI_BUILD_PROMPT},
+             {"role": "user", "content": user}],
+            max_tokens=3000,
+        )
+    except Exception as e:
+        print(f"[world] ai_design LLM call failed: {e}", flush=True)
+        return JSONResponse({"error": f"方案构思失败：{e}"}, status_code=500)
+
+    print(f"[world] ai_design LLM returned, len={len(content)}, head={content[:200]!r}", flush=True)
+    plan = _extract_ai_build_json(content)
+    print(f"[world] ai_design extracted plan={plan!r}", flush=True)
+    if not plan or not any(plan.get(k) for k in ("terrain", "places", "decors", "npcs", "event")):
+        print(f"[world] ai_design plan invalid (no content), full content:\n{content[:1000]}", flush=True)
+        return JSONResponse({"error": "方案构思失败，请换个说法再试"}, status_code=500)
+
+    title = str(plan.get("title") or idea)[:12]
+    concept = str(plan.get("concept") or "").strip()[:100]
+    tiles = _expand_ai_terrain(plan.get("terrain"))
+    places = _sanitize_ai_places(plan.get("places"))
+    decors = _sanitize_ai_decors(plan.get("decors"))
+    npc_drafts = _sanitize_ai_npc_draft(plan.get("npcs"))
+    event = _sanitize_ai_event(plan.get("event"))
+    if not tiles and not places and not decors and not npc_drafts:
+        return JSONResponse({"error": "方案里没有可建设的内容，请重试"}, status_code=500)
+    # cost：tile + decor + npc + event 综合计价
+    extra = len(decors) + len(npc_drafts) * 5 + (5 if event else 0)
+    money, sp = _ai_build_cost(len(tiles) + extra)
+    return {
+        "plan": {"title": title, "concept": concept,
+                 "terrain": plan.get("terrain") or [], "places": places,
+                 "decors": decors, "npcs": npc_drafts, "event": event},
+        "tile_count": len(tiles),
+        "decor_count": len(decors),
+        "npc_count": len(npc_drafts),
+        "has_event": bool(event),
+        "cost_money": money,
+        "cost_sp": sp,
+    }
+
+
+@app.post("/api/world/ai/build")
+async def world_ai_build(req: Request):
+    """AI 智能建设：应用方案，写入地形编辑与自定义地点。"""
+    try:
+        data = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    plan = data.get("plan") if isinstance(data.get("plan"), dict) else {}
+    tiles = _expand_ai_terrain(plan.get("terrain"))
+    places = _sanitize_ai_places(plan.get("places"))
+    decors = _sanitize_ai_decors(plan.get("decors"))
+    npc_drafts = _sanitize_ai_npc_draft(plan.get("npcs"))
+    event = _sanitize_ai_event(plan.get("event"))
+    if not tiles and not places and not decors and not npc_drafts:
+        return JSONResponse({"error": "方案内容为空"}, status_code=400)
+
+    title = str(plan.get("title") or "新的风景")[:12]
+    concept = str(plan.get("concept") or "").strip()[:100]
+
+    edits = _load_world_edits()
+    for e in tiles:
+        key = f"{e['x']},{e['y']}"
+        cur = edits.get(key, {})
+        rec = {}
+        if "b" in e or "b" in cur:
+            rec["b"] = e.get("b", cur.get("b"))
+        if "d" in e or "d" in cur:
+            rec["d"] = e.get("d", cur.get("d"))
+        edits[key] = rec
+    # 独立 decor（不带 b）也合并到 edits 的 d 字段
+    for d in decors:
+        key = f"{d['x']},{d['y']}"
+        cur = edits.get(key, {})
+        cur["d"] = d["d"]
+        if "b" in cur:
+            edits[key] = cur
+        else:
+            edits[key] = {"d": d["d"]}
+    while len(edits) > WORLD_EDITS_MAX:
+        edits.pop(next(iter(edits)))
+    _save_world_edits(edits)
+
+    saved_places = _load_world_places()
+    now = datetime.now().strftime("%m-%d %H:%M")
+    new_places = []
+    for p in places:
+        rec = {
+            "id": "ab_" + uuid.uuid4().hex[:8],
+            "name": p["name"],
+            "desc": p["desc"] or (title + " · AI 规划"),
+            "icon": p["icon"], "kind": p["kind"],
+            "style": "free", "style_name": "AI 建设",
+            "x": p["x"], "y": p["y"], "w": p["w"], "h": p["h"],
+            "img": "", "prompt": "", "comment": concept,
+            "time": now,
+        }
+        saved_places.append(rec)
+        new_places.append(rec)
+    saved_places = saved_places[-80:]
+    _save_world_places(saved_places)
+
+    # 落住 NPC 居民
+    new_npcs = []
+    if npc_drafts:
+        saved_npcs = _load_world_npcs()
+        for n in npc_drafts:
+            rec = {
+                "id": "cn_" + uuid.uuid4().hex[:8],
+                "name": n["name"], "emoji": n["emoji"], "color": n["color"],
+                "lines": n["lines"], "x": n["x"], "y": n["y"],
+                "desc": title + " · AI 设计居民",
+                "time": now,
+            }
+            saved_npcs.append(rec)
+            new_npcs.append(rec)
+        _save_world_npcs(saved_npcs[-WORLD_NPCS_MAX:])
+
+    info = _add_affinity("world_place", f"AI 建设落成 · {title}")
+    extra = len(decors) + len(npc_drafts) * 5 + (5 if event else 0)
+    money, sp = _ai_build_cost(len(tiles) + extra)
+    return {
+        "ok": True, "title": title,
+        "places": new_places,
+        "edits": tiles, "tile_count": len(tiles),
+        "decors": decors, "decor_count": len(decors),
+        "npcs": new_npcs, "npc_count": len(new_npcs),
+        "event": event,
+        "cost_money": money, "cost_sp": sp,
+        "affinity": info,
+    }
 
 
 # ================= 世界·恋语市：自定义居民（NPC） =================
@@ -6663,15 +9988,101 @@ def _norm_pulse_payload(data: dict, day: int, vitality: int = 20) -> dict:
     return {"event": event, "rumors": rumors, "visitor": visitor}
 
 
+PULSE_DIAG_DIR = BASE_DIR / ".cache" / "pulse_diag"
+
+
+def _pulse_balance_json(text: str) -> str | None:
+    """从 text 中按花括号配对截取第一个完整 JSON 对象。
+
+    比 `\\{.*\\}` 贪婪正则更稳：能容忍 JSON 后有额外文字、多个 JSON 块、
+    或字符串里包含 `}` 字符。失败返回 None。
+    """
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def _pulse_clean_json(text: str) -> str:
+    """清理 LLM 输出里常见的非标 JSON 杂质：尾随逗号、``` 代码壳残余。"""
+    t = text.strip()
+    # 剥代码壳（保险起见，正则没匹配到 ``` 时也不会破坏内容）
+    t = _strip_code_fence(t)
+    # 去尾随逗号（}, ] 前的逗号）
+    t = re.sub(r",\s*([}\]])", r"\1", t)
+    return t
+
+
 def _extract_pulse_json(text: str) -> dict | None:
-    m = re.search(r"\{.*\}", text, re.S)
-    if not m:
+    """从 LLM 回复中提取城市脉搏 JSON。
+
+    依次尝试：剥代码壳整体 loads → 贪婪花括号截取 → 平衡花括号截取 →
+    清理尾随逗号后重试。全部失败时把原始文本落盘到 .cache/pulse_diag/
+    便于排查，避免无声失败。
+    """
+    if not text:
         return None
+    candidates: list[str] = []
+    stripped = _strip_code_fence(text)
+    if stripped and stripped != text:
+        candidates.append(stripped)
+    greedy = re.search(r"\{.*\}", text, re.S)
+    if greedy and greedy.group(0) not in candidates:
+        candidates.append(greedy.group(0))
+    balanced = _pulse_balance_json(text)
+    if balanced and balanced not in candidates:
+        candidates.append(balanced)
+
+    for cand in candidates:
+        # 先原样试
+        try:
+            data = json.loads(cand)
+            if isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # 清理后再试
+        cleaned = _pulse_clean_json(cand)
+        if cleaned != cand:
+            try:
+                data = json.loads(cleaned)
+                if isinstance(data, dict):
+                    return data
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    # 全部失败：落盘原始内容，便于排查
     try:
-        data = json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+        PULSE_DIAG_DIR.mkdir(parents=True, exist_ok=True)
+        diag_file = PULSE_DIAG_DIR / f"pulse_raw_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.txt"
+        diag_file.write_text(
+            f"=== length: {len(text)} ===\n{text}\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+    return None
 
 
 @app.get("/api/world/pulse")
@@ -7420,6 +10831,11 @@ from extra_apps import router as extra_router  # noqa: E402
 
 app.include_router(extra_router)
 
+# 时光总结路由（summary_apps.py）：今日总结 / 周结 / 月结 / 年结 —— 我和许墨的点点滴滴
+from summary_apps import router as summary_router  # noqa: E402
+
+app.include_router(summary_router)
+
 # 奇想功能集路由（wonder_apps.py）：决策预言家 / 默契测验 / 每日悬疑事件簿 / 反向扮演剧场 / 关系年度报告 / 习惯养成管家 / 晚间语音回顾 / 记忆博物馆
 from wonder_apps import router as wonder_router  # noqa: E402
 
@@ -7457,6 +10873,104 @@ app.include_router(nova3_router)
 from story_apps import router as story_router  # noqa: E402
 
 app.include_router(story_router)
+
+# 许墨云资料库路由（xumocloud_apps.py）：把 xumocloud.com 公开数据爬下来，
+# 分发到现有 app（语录/衣橱/合影日历/黑天鹅档案/浏览器搜索）
+from xumocloud_apps import router as xcloud_router  # noqa: E402
+
+app.include_router(xcloud_router)
+
+# 十大颠覆性功能路由（disrupt_apps.py）：逆向时光机 / 人格融合实验室 / 潜意识剧场 /
+# 命运回声图谱 / 时光密室 / 心跳实验室 / 次元裂隙 / 命运赌局 / 回忆修复工坊 / 共生体演化
+from disrupt_apps import router as disrupt_router  # noqa: E402
+
+app.include_router(disrupt_router)
+
+# 六期颠覆性功能（nova_apps4.py）：亲密里程碑 / 吃醋实验室 / 记忆卡牌对决 / 合著专辑 / 云旅行
+from nova_apps4 import router as nova4_router  # noqa: E402
+
+app.include_router(nova4_router)
+
+# 七期颠覆性功能（nova_apps5.py）：深夜食堂 / 镜像学习 / 挑战书 / 忏悔室 / 关系沙盒
+from nova_apps5 import router as nova5_router  # noqa: E402
+
+app.include_router(nova5_router)
+
+# 八期颠覆性功能（nova_apps6.py）：最后一日 / 消失的七日 / 通感邮局 / 共犯系统 / 情绪交易所
+from nova_apps6 import router as nova6_router  # noqa: E402
+
+app.include_router(nova6_router)
+
+# 九期颠覆性功能（nova_apps7.py）：雾区·遗忘 / 命运对弈 / 觉醒模式 / 许墨的梦 / 意识U盘
+from nova_apps7 import router as nova7_router  # noqa: E402
+
+app.include_router(nova7_router)
+
+# AI 自定义扩展功能路由（extensions_apps.py）：
+# 提示词模板 / 工具链集成 / 工作流编排 —— 可视化配置 + 启用/禁用 + 优先级管理 + 安全沙箱
+from extensions_apps import router as extensions_router, build_prompt_injection  # noqa: E402
+
+app.include_router(extensions_router)
+
+# AI 对话式扩展构建器路由（ai_extension_builder.py）：
+# 自然语言对话创建扩展 + 智能推荐 + 配置生成
+from ai_extension_builder import router as ai_builder_router  # noqa: E402
+
+app.include_router(ai_builder_router, prefix="/api/extensions")
+
+
+# ===========================================================================
+# 自定义插件系统（plugin_core）：A 自动发现 / B 钩子 / C 沙箱 三合一
+# ---------------------------------------------------------------------------
+# 在所有内置路由注册完成后，加载 plugins/ 目录下的自定义插件。
+#   - 方案 A：约定式自动发现 —— 暴露 router 即挂载到 /api/plugins/<name>
+#   - 方案 B：钩子式        —— 实现 chat_reply / menu_items 等钩子改写行为
+#   - 方案 C：沙箱子进程    —— 独立 HTTP 服务，主程序反向代理
+# 沙箱插件在 lifespan 中异步启动；A/B 在此同步加载并注册路由。
+# ===========================================================================
+try:
+    from plugin_core import (
+        get_plugin_hub, register_all_plugins,
+        start_sandbox_plugins, stop_sandbox_plugins,
+        unload_all_plugins, get_hook_manager,
+        PLUGIN_TYPE_AUTO, PLUGIN_TYPE_HOOK, PLUGIN_TYPE_SANDBOX,
+    )
+    _plugin_hub = get_plugin_hub()
+    # 发现 + 加载所有插件（A/B 同步，C 仅登记 manifest，子进程在 lifespan 启动）
+    _plugin_load_results = _plugin_hub.load_all_plugins()
+    # 注册 A 的路由到 /api/plugins/<name>
+    _plugin_reg_results = _plugin_hub.register_with_app(app, prefix="/api/plugins")
+    print(f"[xumo] 插件系统已加载：{_plugin_load_results}", flush=True)
+    print(f"[xumo] 插件路由已注册：{_plugin_reg_results}", flush=True)
+except Exception as _plugin_err:
+    _plugin_hub = None
+    print(f"[xumo] 插件系统加载失败（已跳过）：{type(_plugin_err).__name__} {_plugin_err}", flush=True)
+
+
+@app.get("/api/plugins")
+async def plugins_inspect():
+    """查看已加载的插件（A/B/C 三类）与已注册的钩子。"""
+    if _plugin_hub is None:
+        return {"enabled": False, "error": "插件系统未加载"}
+    hub = _plugin_hub
+    loaded = hub.get_loaded_plugins()
+    out = {"enabled": True, "plugins": [], "hooks": []}
+    for name, (ptype, contract) in loaded.items():
+        item = {"name": name, "version": contract.version, "type": ptype}
+        if ptype == PLUGIN_TYPE_SANDBOX:
+            item["port"] = getattr(contract, "port", None)
+            item["routes_prefix"] = getattr(contract, "routes_prefix", "")
+        out["plugins"].append(item)
+    try:
+        _hook_mgr = get_hook_manager()
+        for hn in _hook_mgr.list_hook_names():
+            caller = _hook_mgr.get_hook(hn)
+            n = len(caller._impls) if caller else 0
+            if n:
+                out["hooks"].append({"name": hn, "impls": n})
+    except Exception:
+        pass
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -8316,7 +11830,14 @@ async def datelog_delete(item_id: str):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
-    host = os.getenv("HOST", "0.0.0.0")
+    # 默认仅本机回环，避免误将服务暴露到局域网/公网；需要外部访问时显式 HOST=0.0.0.0
+    host = os.getenv("HOST", "127.0.0.1")
+    # 绑定非回环地址时强制要求访问口令，防止局域网/公网任意调用 LLM 消耗余额
+    if host not in ("127.0.0.1", "localhost", "::1") and not (os.getenv("ACCESS_CODE") or "").strip():
+        raise RuntimeError(
+            "HOST 绑定非回环地址时必须设置 ACCESS_CODE 访问口令，否则拒绝启动。"
+            "请先在 .env 中配置 ACCESS_CODE。"
+        )
     # 自签 HTTPS 端口：局域网 IP 上 getUserMedia（电话麦克风）需要安全上下文
     _cert_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs")
     _crt = os.path.join(_cert_dir, "xumo.crt")

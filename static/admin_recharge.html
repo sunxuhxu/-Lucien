@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>画境充值审核 | 许墨智能体</title>
+  <style>
+    :root{
+      --bg:#0f0c17;
+      --card:#1a1625;
+      --border:#2e2640;
+      --text:#f3f0fa;
+      --dim:#9f9ab3;
+      --primary:#c084fc;
+      --primary-dim:#7c3aed;
+      --ok:#10b981;
+      --no:#ef4444;
+      --warn:#f59e0b;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    .wrap{max-width:720px;margin:0 auto;padding:24px 16px 60px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+    h1{margin:0;font-size:20px;font-weight:600}
+    .sub{color:var(--dim);font-size:13px;margin-top:4px}
+    .login-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
+    .login-box input{padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0d0a14;color:var(--text);width:220px;margin-right:8px}
+    .login-box button{padding:10px 18px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--primary),var(--primary-dim));color:#fff;cursor:pointer;font-weight:600}
+    .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+    .toolbar button{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;font-size:13px}
+    .toolbar button.primary{background:linear-gradient(135deg,var(--primary),var(--primary-dim));border:none;color:#fff}
+    .stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+    .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;min-width:100px}
+    .stat b{display:block;font-size:18px;margin-bottom:2px}
+    .stat span{font-size:12px;color:var(--dim)}
+    .empty{text-align:center;color:var(--dim);padding:40px 0}
+    .order{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+    .order-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+    .user{font-weight:700;font-size:15px}
+    .amount{font-size:18px;font-weight:800;color:var(--primary);margin-left:auto}
+    .badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:#333;color:#fff}
+    .badge.pending{background:#555}
+    .badge.paid_pending{background:var(--warn);color:#000}
+    .badge.approved{background:var(--ok)}
+    .badge.rejected{background:var(--no)}
+    .meta{font-size:12px;color:var(--dim);line-height:1.6}
+    .meta b{color:var(--text)}
+    .note{font-size:12px;color:#b8b3cc;margin-top:6px;padding:8px;background:#0d0a14;border-radius:8px}
+    .actions{display:flex;gap:8px;margin-top:12px}
+    .actions button{padding:8px 16px;border-radius:8px;border:none;color:#fff;font-size:13px;cursor:pointer;font-weight:600}
+    .btn-ok{background:var(--ok)}
+    .btn-no{background:var(--no)}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1a1625;border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:10px;font-size:13px;display:none;z-index:100}
+    .link-row{margin-top:8px;font-size:12px;color:var(--dim)}
+    .link-row a{color:var(--primary);text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>💰 画境充值审核面板</h1>
+        <div class="sub">管理员扫码支付宝到账后，在此确认加款</div>
+      </div>
+    </header>
+
+    <div class="login-box" id="loginBox">
+      <div style="margin-bottom:8px;font-size:13px;color:var(--dim)">请先输入主人口令登录</div>
+      <input type="password" id="codeInput" placeholder="主人口令" />
+      <button onclick="doLogin()">登录</button>
+    </div>
+
+    <div id="appArea" style="display:none">
+      <div class="toolbar">
+        <button class="primary" onclick="loadOrders()">🔄 刷新</button>
+        <button onclick="onlyPending=!onlyPending;loadOrders()">⏳ 只看待审</button>
+        <button onclick="doLogout()">退出</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div id="list"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    var onlyPending = false;
+    var API = '';
+
+    function $(id){ return document.getElementById(id); }
+    function showToast(msg){
+      var t = $('toast'); t.textContent = msg; t.style.display = 'block';
+      setTimeout(function(){ t.style.display = 'none'; }, 2600);
+    }
+    async function api(path, opts){
+      var r = await fetch(API + path, Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}}, opts||{}));
+      if(r.status === 401){
+        $('loginBox').style.display = 'block';
+        $('appArea').style.display = 'none';
+        throw new Error('未登录');
+      }
+      return r.json();
+    }
+
+    async function doLogin(){
+      var code = $('codeInput').value.trim();
+      if(!code){ showToast('请输入口令'); return; }
+      var r = await fetch(API + '/api/verify', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({code:code})
+      });
+      var d = await r.json();
+      if(d.ok){
+        $('loginBox').style.display = 'none';
+        $('appArea').style.display = 'block';
+        loadOrders();
+      } else {
+        showToast(d.detail || '口令错误');
+      }
+    }
+    function doLogout(){
+      fetch(API + '/api/auth/logout', {method:'POST',credentials:'include'}).finally(function(){
+        $('loginBox').style.display = 'block';
+        $('appArea').style.display = 'none';
+      });
+    }
+
+    async function loadOrders(){
+      $('list').innerHTML = '<div class="empty">加载中…</div>';
+      try{
+        var d = await api('/api/admin/recharges');
+        var orders = d.orders || [];
+        if(onlyPending) orders = orders.filter(function(o){ return o.status === 'pending' || o.status === 'paid_pending'; });
+        renderStats(orders);
+        if(orders.length === 0){ $('list').innerHTML = '<div class="empty">暂无订单</div>'; return; }
+        $('list').innerHTML = orders.map(function(o){
+          var statusMap = {pending:'待付款', paid_pending:'待审核', approved:'已到账', rejected:'已拒绝'};
+          var canAct = (o.status === 'pending' || o.status === 'paid_pending');
+          var detailUrl = location.origin + '/static/admin_recharge.html?order=' + encodeURIComponent(o.id);
+          return '<div class="order">'
+            + '<div class="order-head">'
+            + '<span class="user">' + esc(o.username) + '</span>'
+            + '<span class="badge ' + o.status + '">' + (statusMap[o.status] || o.status) + '</span>'
+            + '<span class="amount">¥' + Number(o.amount).toFixed(2) + '</span>'
+            + '</div>'
+            + '<div class="meta">'
+            + '订单 <b>' + esc(o.id) + '</b><br/>'
+            + '创建：' + esc(o.created_at) + (o.confirmed_at ? ' · 付款：' + esc(o.confirmed_at) : '') + '<br/>'
+            + (o.reviewed_at ? ('审核：' + esc(o.reviewed_at) + ' · 操作人：' + esc(o.reviewer)) : '')
+            + '</div>'
+            + (o.note ? '<div class="note">备注：' + esc(o.note) + '</div>' : '')
+            + (o.reject_reason ? '<div class="note" style="color:#ef4444">拒绝原因：' + esc(o.reject_reason) + '</div>' : '')
+            + '<div class="link-row">审核链接：<a href="' + detailUrl + '" target="_blank">' + detailUrl + '</a></div>'
+            + (canAct ? '<div class="actions">'
+              + '<button class="btn-ok" onclick="approve(\'' + o.id + '\')">✅ 通过并加款</button>'
+              + '<button class="btn-no" onclick="reject(\'' + o.id + '\')">❌ 拒绝</button>'
+              + '</div>' : '')
+            + '</div>';
+        }).join('');
+      }catch(e){ showToast(e.message); }
+    }
+    function renderStats(orders){
+      var pending = orders.filter(function(o){ return o.status === 'paid_pending'; }).length;
+      var total = orders.reduce(function(s,o){ return s + (o.status === 'approved' ? o.amount : 0); }, 0);
+      $('stats').innerHTML =
+        '<div class="stat"><b>' + orders.length + '</b><span>总订单</span></div>'
+      + '<div class="stat"><b>' + pending + '</b><span>待审核</span></div>'
+      + '<div class="stat"><b>¥' + total.toFixed(2) + '</b><span>累计通过金额</span></div>';
+    }
+    async function approve(id){
+      if(!confirm('确认给该用户加款？')) return;
+      var d = await api('/api/admin/recharges/' + id + '/approve', {method:'POST'});
+      if(d.ok){ showToast('已通过，余额 +' + d.amount); loadOrders(); }
+      else showToast(d.detail || '失败');
+    }
+    async function reject(id){
+      var reason = prompt('拒绝原因（可选）：', '未收到款项');
+      if(reason === null) return;
+      var d = await api('/api/admin/recharges/' + id + '/reject', {method:'POST', body:JSON.stringify({reason:reason})});
+      if(d.ok){ showToast('已拒绝'); loadOrders(); }
+      else showToast(d.detail || '失败');
+    }
+    function esc(s){ return String(s || '').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+    // 若 cookie 中已有 owner 会话，自动进入
+    fetch(API + '/api/verify', {credentials:'include'}).then(function(r){ return r.json(); }).then(function(d){
+      if(d.ok){ $('loginBox').style.display='none'; $('appArea').style.display='block'; loadOrders(); }
+    }).catch(function(){});
+  </script>
+</body>
+</html>

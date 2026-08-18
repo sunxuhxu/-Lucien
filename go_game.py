@@ -44,6 +44,11 @@ BLACK, WHITE, EMPTY = 1, 2, 0
 # 数子法贴子（黑贴 3.25 子，9/13 路通用）
 KOMI = 3.25
 
+# KataGo 探测缓存：避免每次 ai_choose_move 都探测（探测约 2-3s）
+# 失败后间隔 5 分钟再试，避免不可用时拖慢响应
+_KATAGO_OK = None        # None=未探测 / True=可用 / False=不可用
+_KATAGO_RETRY_AT = 0.0   # 下次允许探测的时间戳（time.time()）
+
 
 # ---------------------------------------------------------------------------
 # 公共工具（延迟导入避免与 app.py 循环依赖）
@@ -478,6 +483,49 @@ def _best_reply_gain(engine: GoEngine, my_idx, color):
     return worst
 
 
+def _katago_genmove(engine: GoEngine, color: int):
+    """调用 KataGo 生成一手。返回 idx 或 None（不可用/pass/resign/非法手）。
+
+    使用模块级 _KATAGO_OK 缓存：探测一次可用后直接调；探测失败后冷却 5 分钟再试。
+    """
+    global _KATAGO_OK, _KATAGO_RETRY_AT
+    import time as _t
+    now = _t.time()
+
+    # 失效缓存：若上次探测失败，等冷却
+    if _KATAGO_OK is False and now < _KATAGO_RETRY_AT:
+        return None
+    if _KATAGO_OK is None:
+        try:
+            from katago_engine import katago_available
+            _KATAGO_OK = katago_available()
+        except Exception as e:
+            print(f"[go] katago_engine import/probe failed: {type(e).__name__} {str(e)[:120]}", flush=True)
+            _KATAGO_OK = False
+        if not _KATAGO_OK:
+            _KATAGO_RETRY_AT = now + 300  # 5 分钟后再试
+            print("[go] KataGo 不可用，pro 难度回退到启发式", flush=True)
+            return None
+
+    # 调 KataGo 生成
+    try:
+        from katago_engine import katago_choose_move
+        moves = engine.to_state().get("moves", [])
+        idx = katago_choose_move(moves, engine.size, color, komi=KOMI, timeout=30)
+    except Exception as e:
+        print(f"[go] katago_choose_move exception: {type(e).__name__} {str(e)[:150]}", flush=True)
+        return None
+    if idx is None:
+        # KataGo 返回 pass/resign 或不可用 → 让启发式接管
+        return None
+    # 合法性校验：KataGo 偶尔会因为 ko 规则差异返回我方规则下非法的手
+    legal = engine.legal_moves(color)
+    if idx not in legal:
+        print(f"[go] KataGo returned illegal idx={idx} (color={color}); 启发式接管", flush=True)
+        return None
+    return idx
+
+
 def ai_choose_move(engine: GoEngine, color: int, difficulty: str):
     """许墨选点。返回 idx 或 None（虚着）。
 
@@ -490,9 +538,19 @@ def ai_choose_move(engine: GoEngine, color: int, difficulty: str):
       penalty  : 送吃惩罚系数（lookahead 时生效）
       blunder  : 主动走随手棋（随机合法手）的概率
       pass_thr : 最优手低于此分且盘面无争 → 虚着
+
+    pro 难度优先调用 KataGo（GTP），不可用时回退到启发式 pro 参数。
     """
     if difficulty not in _DIFF_PARAMS:
         difficulty = "normal"
+
+    # ---- KataGo 接管 pro 难度 ----
+    if difficulty == "pro":
+        katago_idx = _katago_genmove(engine, color)
+        if katago_idx is not None:
+            return katago_idx
+        # KataGo 不可用 → 走启发式 pro（_DIFF_PARAMS["pro"]，下方统一逻辑）
+
     p = _DIFF_PARAMS[difficulty]
 
     moves = engine.legal_moves(color)

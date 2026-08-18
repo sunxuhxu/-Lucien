@@ -649,7 +649,417 @@ window.WORLD_DATA = {
   NPCS: NPCS, NODE_TYPES: NODE_TYPES, PUZZLES: PUZZLES,
   CHEST_LOOT: CHEST_LOOT, MAIN_STAGES: MAIN_STAGES, SIDE_QUESTS: SIDE_QUESTS,
   CITY_LORE: CITY_LORE, ENDINGS: ENDINGS, PROLOGUE: PROLOGUE,
-  judgeEnding: judgeEnding, affLevel: affLevel
+  judgeEnding: judgeEnding, affLevel: affLevel,
+  /* 建模扩展·v2 */
+  DECOR_TYPES: DECOR_TYPES, DECOR_DIST: DECOR_DIST,
+  SEASONS: SEASONS, SEASON_DAYS: SEASON_DAYS, seasonByDay: seasonByDay,
+  WILDLIFE_TYPES: WILDLIFE_TYPES, WILDLIFE_CAP: WILDLIFE_CAP,
+  NEW_ITEMS: NEW_ITEMS, NEW_EQUIPS: NEW_EQUIPS, NEW_NODE_TYPES: NEW_NODE_TYPES,
+  ENEMIES: ENEMIES, ELEMENT_CHART: ELEMENT_CHART, PLAYER_ELEMENTS: PLAYER_ELEMENTS,
+  VEHICLES: VEHICLES, BUS_STOPS: BUS_STOPS, FERRY_PORTS: FERRY_PORTS,
+  NPC_NEEDS: NPC_NEEDS, BUILD_TEMPLATES: BUILD_TEMPLATES,
+  PASSERBY_TEMPLATES: PASSERBY_TEMPLATES, TRANSPORT_SCHEDULE: TRANSPORT_SCHEDULE
 };
+
+
+/* ====== 【建模扩展·v2】新增数据 ====== */
+/* 装饰类型（4→16）：0 无 / 1 树 / 2 路灯 / 3 花
+ * 4 石头 / 5 灌木 / 6 蘑菇 / 7 长椅 / 8 围栏 / 9 喷泉 /
+ * 10 摊位 / 11 路标 / 12 篝火 / 13 枯树 / 14 野花丛 / 15 路灯(古典) */
+var DECOR_TYPES = {
+  0:  { name: '空',     icon: '',     solid: 0, h: 0 },
+  1:  { name: '树',     icon: '🌳',  solid: 1, h: 22 },
+  2:  { name: '路灯',   icon: '💡',  solid: 0, h: 14, light: 1 },
+  3:  { name: '花',     icon: '🌸',  solid: 0, h: 6 },
+  4:  { name: '石头',   icon: '🪨',  solid: 1, h: 8 },
+  5:  { name: '灌木',   icon: '🌿',  solid: 0, h: 8 },
+  6:  { name: '蘑菇',   icon: '🍄',  solid: 0, h: 5 },
+  7:  { name: '长椅',   icon: '🪑',  solid: 0, h: 7, sit: 1 },
+  8:  { name: '围栏',   icon: '🚧',  solid: 1, h: 9 },
+  9:  { name: '喷泉',   icon: '⛲',  solid: 1, h: 14 },
+  10: { name: '摊位',   icon: '🏪',  solid: 1, h: 16, shop: 1 },
+  11: { name: '路标',   icon: '🪧',  solid: 0, h: 12 },
+  12: { name: '篝火',   icon: '🔥',  solid: 0, h: 10, light: 2, warm: 1 },
+  13: { name: '枯树',   icon: '🥀',  solid: 1, h: 18 },
+  14: { name: '野花丛', icon: '🌺',  solid: 0, h: 5 },
+  15: { name: '古典路灯', icon: '🏮', solid: 0, h: 14, light: 1 }
+};
+/* 装饰概率表：按 biome 索引（key 是 biome，value 是 {decor: weight}） */
+var DECOR_DIST = {
+  0: {}, 1: {},                       // 深海/浅水
+  2: { 4: 0.08, 14: 0.05 },           // 沙滩：石头/野花
+  3: { 1: 0.10, 5: 0.06, 14: 0.08, 6: 0.02, 7: 0.02 },  // 草地
+  4: { 1: 0.40, 5: 0.12, 6: 0.05, 13: 0.02 },            // 森林
+  5: { 4: 0.10, 5: 0.08, 13: 0.03 },                     // 丘陵
+  6: { 4: 0.18 },                                          // 山地
+  7: { 4: 0.06 },                                          // 雪峰
+  8: { 2: 0.04, 11: 0.02, 15: 0.01 },                     // 马路
+  9: { 2: 0.05, 11: 0.03, 7: 0.04, 15: 0.02 },            // 广场
+  10: {},                                                  // 建筑
+  11: { 1: 0.18, 14: 0.12, 9: 0.02, 7: 0.06 },            // 公园
+  12: {},                                                  // 室内
+  13: {},                                                  // 木桥
+  14: { 14: 0.10, 7: 0.03, 5: 0.04 }                      // 田野
+};
+
+/* 季节系统：每 7 个游戏日 = 1 季，循环 春→夏→秋→冬 */
+var SEASONS = {
+  spring: { name: '春', icon: '🌱', next: 'summer', tint: '#a8d8b9', grassBoost: 1.3, flowerChance: 1.4, snow: 0, rainBias: 5 },
+  summer: { name: '夏', icon: '☀️', next: 'autumn', tint: '#f5e08c', grassBoost: 1.0, flowerChance: 1.0, snow: 0, rainBias: 8 },
+  autumn: { name: '秋', icon: '🍂', next: 'winter', tint: '#e0a868', grassBoost: 0.7, flowerChance: 0.6, snow: 0, rainBias: 12 },
+  winter: { name: '冬', icon: '❄️', next: 'spring', tint: '#e8eef5', grassBoost: 0.3, flowerChance: 0.1, snow: 1, rainBias: -10, frozenLake: 1 }
+};
+var SEASON_DAYS = 7;   // 每季天数
+function seasonByDay(day) {
+  var idx = Math.floor((day - 1) / SEASON_DAYS) % 4;
+  return ['spring', 'summer', 'autumn', 'winter'][idx];
+}
+
+/* 流动生物：纯视觉生态层，无碰撞 */
+var WILDLIFE_TYPES = {
+  bird:      { name: '飞鸟',   icon: '🐦', speed: 3.5, hours: [6,7,8,9,10,16,17,18], seasonMul: { spring: 1.4, summer: 1.2, autumn: 0.8, winter: 0.3 } },
+  butterfly: { name: '蝴蝶',   icon: '🦋', speed: 1.2, hours: [9,10,11,12,13,14,15,16], seasonMul: { spring: 1.6, summer: 1.5, autumn: 0.5, winter: 0 } },
+  firefly:   { name: '萤火虫', icon: '✨', speed: 0.5, hours: [20,21,22,23,0], seasonMul: { spring: 0.6, summer: 1.8, autumn: 1.0, winter: 0 } },
+  fish:      { name: '游鱼',   icon: '🐟', speed: 0.8, hours: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23], seasonMul: { spring: 1.0, summer: 1.0, autumn: 0.9, winter: 0.4 }, waterOnly: 1 },
+  cat:       { name: '野猫',   icon: '🐈', speed: 1.0, hours: [5,6,7,8,17,18,19,20,21], seasonMul: { spring: 1.0, summer: 0.8, autumn: 1.1, winter: 0.5 } }
+};
+/* 每种生物在视野内最大同时存在数 */
+var WILDLIFE_CAP = { bird: 5, butterfly: 6, firefly: 12, fish: 4, cat: 1 };
+
+/* ===== 资源节点扩展（4→15） =====
+ * biome 字段：兼容数值（旧）或数组（新）。nearWater/nearMine/nearForest 为附加条件。
+ * tool：所需采集工具（无则徒手）。respawnDays：-1=一次性，0=雨后/特殊，>0=天数。
+ */
+/* 新增材料（追加到 ITEMS，幂等——若已存在则跳过） */
+var NEW_ITEMS = {
+  copper:    { name: '铜矿石',   icon: '🟤', kind: 'mat',  desc: '红棕色的铜矿，导电性极佳。' },
+  silver:    { name: '银矿石',   icon: '⚪', kind: 'mat',  desc: '山中 rare 矿脉，月光下泛冷光。' },
+  coal:      { name: '煤炭',     icon: '⚫', kind: 'mat',  desc: '北岭煤层，可烧制木炭与冶金。' },
+  crystal2:  { name: '紫水晶',   icon: '🔮', kind: 'mat',  desc: '山洞深处的晶簇，能量稳定。' },
+  shell:     { name: '贝壳',     icon: '🐚', kind: 'mat',  desc: '栈桥下捡到的彩色贝壳。' },
+  mushroom:  { name: '野蘑菇',   icon: '🍄', kind: 'mat',  desc: '森林里的白蘑菇，谨慎食用。' },
+  berry:     { name: '浆果',     icon: '🫐', kind: 'mat',  desc: '酸甜的野生浆果。' },
+  cotton:    { name: '棉花',     icon: '☁️', kind: 'mat',  desc: '田野里的白绒团。' },
+  spice:     { name: '香草',     icon: '🌿', kind: 'mat',  desc: '香气浓郁的料理香草。' },
+  silk:      { name: '蚕丝',     icon: '🧵', kind: 'mat',  desc: '野蚕吐的丝，可织布。' },
+  honey:     { name: '蜂蜜',     icon: '🍯', kind: 'food', sp: 20, hp: 8,  desc: '林间蜂巢割下的蜜。' },
+  roe:       { name: '鱼籽',     icon: '🟠', kind: 'mat',  desc: '河鱼腹中的鱼籽，鲜美。' },
+  pearl:     { name: '珍珠',     icon: '⚪', kind: 'mat',  desc: '极罕见的贝中之珠。', key: true },
+  herb_mint: { name: '胡椒薄荷', icon: '🌿', kind: 'mat',  desc: '清凉的薄荷变种。' },
+  herb_lav:  { name: '薰衣草',   icon: '💜', kind: 'mat',  desc: '紫色花穗，安神助眠。' }
+};
+/* 采集工具（追加到 EQUIPS） */
+var NEW_EQUIPS = {
+  tool_pick:   { slot: 'tool', name: '矿工镐',   icon: '⛏️', q: 1, desc: '采集铜/铁/银/煤的必备工具。', gather: ['copper','iron','silver','coal','crystal2'] },
+  tool_rod:    { slot: 'tool', name: '竹钓竿',   icon: '🎣', q: 1, desc: '河边钓鱼效率 +50%。', gather: ['fish','roe'] },
+  tool_sickle: { slot: 'tool', name: '镰刀',     icon: '🔪', q: 1, desc: '收割棉花/香草/薄荷/薰衣草。', gather: ['cotton','spice','herb_mint','herb_lav','herb'] },
+  tool_net:    { slot: 'tool', name: '捕虫网',   icon: '🪲', q: 1, desc: '可在白天捕捉蝴蝶/萤火虫（装饰用）。', gather: ['butterfly','firefly'] },
+  tool_axe:    { slot: 'tool', name: '手斧',     icon: '🪓', q: 1, desc: '砍伐枯树获得木料。', gather: ['wood'] },
+  tool_bucket: { slot: 'tool', name: '水桶',     icon: '🪣', q: 1, desc: '海边捡贝壳、捞鱼籽。', gather: ['shell','roe','pearl'] }
+};
+/* 新装备槽：tool（采集工具，不影响战斗属性） */
+/* 注：玩家 equip 对象增加 tool 字段即可，不影响已有 weapon/shoes/charm 三槽 */
+
+/* 扩展 NODE_TYPES（原 4 个保留，新增 11 个） */
+var NEW_NODE_TYPES = {
+  copper:  { item: 'copper',   icon: '🟤', biomes: [5, 6], respawnDays: 3, sp: 10, exp: 14, label: '铜矿露头', tool: 'tool_pick' },
+  silver:  { item: 'silver',   icon: '⚪', biomes: [6, 7], respawnDays: 5, sp: 16, exp: 26, label: '银矿脉',   tool: 'tool_pick', rare: 1 },
+  coal:    { item: 'coal',     icon: '⚫', biomes: [5, 6], respawnDays: 3, sp: 8,  exp: 10, label: '煤层',     tool: 'tool_pick' },
+  crystal2:{ item: 'crystal2', icon: '🔮', biomes: [6, 7], respawnDays: 6, sp: 18, exp: 30, label: '水晶洞',   tool: 'tool_pick', rare: 1, nightOnly: 1 },
+  shell:   { item: 'shell',    icon: '🐚', biomes: [2, 1],  respawnDays: 2, sp: 4, exp: 6,  label: '贝壳滩',   tool: 'tool_bucket', nearWater: 1 },
+  mushroom:{ item: 'mushroom', icon: '🍄', biomes: [4, 11],respawnDays: 2, sp: 4, exp: 8,  label: '蘑菇圈',   tool: 'tool_sickle', forestDepth: 1 },
+  berry:   { item: 'berry',    icon: '🫐', biomes: [3, 4, 11], respawnDays: 2, sp: 4, exp: 8, label: '浆果丛' },
+  cotton:  { item: 'cotton',   icon: '☁️', biomes: [14],   respawnDays: 3, sp: 6, exp: 10, label: '棉田',     tool: 'tool_sickle' },
+  spice:   { item: 'spice',    icon: '🌿', biomes: [3, 14],respawnDays: 2, sp: 5, exp: 9,  label: '香草丛',   tool: 'tool_sickle' },
+  pearl:   { item: 'pearl',    icon: '⚪', biomes: [1],    respawnDays: 0, sp: 8, exp: 40, label: '珠贝',     tool: 'tool_bucket', nearWater: 1, rare: 2, rainOnly: 0 },
+  herb_mint:{ item: 'herb_mint',icon: '🌿', biomes: [3, 11],respawnDays: 2, sp: 4, exp: 8,  label: '胡椒薄荷', tool: 'tool_sickle' },
+  herb_lav: { item: 'herb_lav', icon: '💜', biomes: [11, 4],respawnDays: 3, sp: 6, exp: 12, label: '薰衣草',  tool: 'tool_sickle', eveningOnly: 1 },
+  silk:    { item: 'silk',     icon: '🧵', biomes: [4],     respawnDays: 4, sp: 8, exp: 18, label: '野蚕茧',  tool: 'tool_sickle', forestDepth: 1, rare: 1 },
+  honey:   { item: 'honey',    icon: '🍯', biomes: [4],    respawnDays: 4, sp: 6, exp: 16, label: '蜂巢',    tool: 'tool_bucket', forestDepth: 1, rare: 1 }
+};
+
+/* ===== 异常残影敌人（5 种）=====
+ * kind: shadow(追击)/ranged(远程)/splitter(分裂)/boss(首领)/lurker(潜伏)
+ * 元素克制：normal < fire < ice < lightning < normal（相克循环）
+ */
+var ENEMIES = {
+  shadow:   { name: '游荡残影', icon: '🌫️', hp: 26, atk: 4,  def: 0,  exp: 22, drop: 'crystal', dropN: 1, kind: 'shadow',   el: 'normal', spd: 1.7, sight: 30, color: '#5a4a8a' },
+  ranged:   { name: '远程残影', icon: '🏹', hp: 18, atk: 6,  def: 0,  exp: 26, drop: 'crystal', dropN: 1, kind: 'ranged',   el: 'lightning', spd: 1.2, sight: 22, color: '#3a6a8a', range: 8 },
+  splitter: { name: '分裂残影', icon: '🫧', hp: 22, atk: 3,  def: 1,  exp: 30, drop: 'crystal', dropN: 2, kind: 'splitter', el: 'ice', spd: 1.4, sight: 24, color: '#6a8a9a', splitAt: 0.4, splitInto: 2 },
+  lurker:   { name: '潜伏残影', icon: '👁️', hp: 16, atk: 8,  def: 0,  exp: 28, drop: 'crystal', dropN: 1, kind: 'lurker',   el: 'fire', spd: 0.0, sight: 6, color: '#8a3a3a', stealth: 1, ambush: 1 },
+  boss:     { name: '回声巨影', icon: '💠', hp: 120,atk: 12, def: 4,  exp: 200,drop: 'core',     dropN: 1, kind: 'boss',     el: 'normal', spd: 1.0, sight: 40, color: '#7a3aaa', phase2At: 0.5 }
+};
+/* 元素克制：el[key] 对 [target, mul] */
+var ELEMENT_CHART = {
+  normal:    { fire: 1.5, ice: 0.8, lightning: 1.0, normal: 1.0 },
+  fire:      { ice: 1.5, lightning: 0.8, normal: 1.0, fire: 1.0 },
+  ice:       { lightning: 1.5, normal: 0.8, fire: 1.0, ice: 1.0 },
+  lightning: { normal: 1.5, fire: 0.8, ice: 1.0, lightning: 1.0 }
+};
+/* 玩家可解锁的元素（通过装备/技能） */
+var PLAYER_ELEMENTS = {
+  normal:    { name: '普通', icon: '⚔️' },
+  fire:      { name: '火',   icon: '🔥', unlock: 'weapon_supp', desc: 'Evol抑制器附魔后普攻带火' },
+  ice:       { name: '冰',   icon: '❄️', unlock: 'skill_min5',  desc: '觉醒技能解锁冰系' },
+  lightning: { name: '雷',   icon: '⚡', unlock: 'charm_echo',  desc: '回声核心·戒附雷系' }
+};
+
+/* ===== 交通工具 ===== */
+var VEHICLES = {
+  bike:   { name: '自行车', icon: '🚲', cost: 200,  spdMul: 1.6, spDrain: 0.6, desc: '公寓楼下取用，1.6 倍速，体力消耗 -40%。' },
+  bus:    { name: '公交',   icon: '🚌', cost: 5,    spdMul: 4.0, spDrain: 0.0, desc: '点对点传送：钟楼 ↔ 大学 ↔ 灯塔 ↔ 栈桥。' },
+  ferry:  { name: '渡轮',   icon: '⛴️', cost: 15,  spdMul: 3.0, spDrain: 0.0, desc: '海岸 ↔ 海岛（东北角神秘岛），解锁新区域。' }
+};
+/* 公交站点（POI id） */
+var BUS_STOPS = ['clocktower', 'univ', 'lighthouse', 'pier'];
+/* 渡轮码头 */
+var FERRY_PORTS = [
+  { id: 'main', x: 124, y: 88, name: '栈桥码头' },
+  { id: 'isle', x: 134, y: 22, name: '雾岛码头' }
+];
+
+/* ===== NPC 需求系统 =====
+ * 每个 NPC 每天可触发 1 个需求（凌晨 5 点重置）：
+ *   want: 想要的物品 id（满足后给奖励）
+ *   reward: { money, aff, item, exp }
+ *   dialog_hint: 玩家走近时 NPC 主动提需求的对白
+ *   dialog_done: 交付后的对白
+ */
+var NPC_NEEDS = {
+  xumo: [
+    { want: 'coffee',  reward: { aff: 6, exp: 10 }, dialog_hint: '「……今天的实验还要熬到很晚，能帮我带杯咖啡吗？」', dialog_done: '「……温度刚好。谢了。」' },
+    { want: 'herb_lav',reward: { aff: 8, exp: 14 }, dialog_hint: '「薰衣草——能让人在数据流里短暂停下来。如果有……」', dialog_done: '他接过花穗，放在鼻尖轻嗅。' },
+    { want: 'archive', reward: { aff: 10, exp: 0 }, dialog_hint: '（旧档案相关）', dialog_done: '「……你找到了。」他声音很轻。' }
+  ],
+  xiaoman: [
+    { want: 'berry',   reward: { aff: 4, money: 15 }, dialog_hint: '「想做新的浆果慕斯～如果能采到浆果就好啦！」', dialog_done: '「哇！我马上做一份给你尝！」' },
+    { want: 'fish',    reward: { aff: 4, money: 20 }, dialog_hint: '「店里的猫粮快没了……能帮我钓条鱼吗？」', dialog_done: '「墨鱼有口福啦～」' }
+  ],
+  bai: [
+    { want: 'page',    reward: { aff: 6, exp: 14 }, dialog_hint: '「又被风吹散了几页讲义……能帮我捡回来吗？」', dialog_done: '「谢谢。这一页正是关键的批注。」' },
+    { want: 'herb_mint',reward: { aff: 4, exp: 8 }, dialog_hint: '「最近老花眼厉害，听说胡椒薄荷能提神……」', dialog_done: '「这就泡一杯。」' }
+  ]
+};
+
+/* ===== AI 建筑模板（玩家可一键放置的预设建筑） ===== */
+var BUILD_TEMPLATES = {
+  cafe_mini:    { name: '迷你咖啡亭', icon: '☕', w: 2, h: 2, b: 10, decors: [{ d: 2, dx: 0, dy: 2 }], cost: 80,  sp: 20 },
+  shrine_mini:  { name: '迷你神龛',   icon: '⛩️', w: 2, h: 2, b: 10, decors: [{ d: 11, dx: 1, dy: 2 }], cost: 120, sp: 25 },
+  fountain_sq:  { name: '广场喷泉',   icon: '⛲', w: 3, h: 3, b: 9,  decors: [{ d: 9, dx: 1, dy: 1 }, { d: 7, dx: 0, dy: 0 }, { d: 7, dx: 2, dy: 0 }, { d: 7, dx: 0, dy: 2 }, { d: 7, dx: 2, dy: 2 }], cost: 200, sp: 35 },
+  garden_plot:  { name: '花圃',       icon: '🌺', w: 3, h: 3, b: 11, decors: [{ d: 3, dx: 0, dy: 0 }, { d: 3, dx: 1, dy: 0 }, { d: 3, dx: 2, dy: 0 }, { d: 14, dx: 0, dy: 1 }, { d: 14, dx: 1, dy: 1 }, { d: 14, dx: 2, dy: 1 }, { d: 5, dx: 0, dy: 2 }, { d: 5, dx: 2, dy: 2 }], cost: 60, sp: 15 },
+  campfire:     { name: '营地篝火',   icon: '🔥', w: 1, h: 1, b: 3,  decors: [{ d: 12, dx: 0, dy: 0 }], cost: 30, sp: 10 },
+  lamp_post:    { name: '街道路灯',   icon: '💡', w: 1, h: 1, b: 8,  decors: [{ d: 2, dx: 0, dy: 0 }], cost: 15, sp: 5 },
+  bench_park:   { name: '公园长椅',   icon: '🪑', w: 1, h: 1, b: 11, decors: [{ d: 7, dx: 0, dy: 0 }], cost: 20, sp: 6 },
+  fence_plot:   { name: '围栏圈地',   icon: '🚧', w: 3, h: 3, b: 14, decors: [{ d: 8, dx: 0, dy: 0 }, { d: 8, dx: 1, dy: 0 }, { d: 8, dx: 2, dy: 0 }, { d: 8, dx: 0, dy: 2 }, { d: 8, dx: 1, dy: 2 }, { d: 8, dx: 2, dy: 2 }, { d: 8, dx: 0, dy: 1 }, { d: 8, dx: 2, dy: 1 }], cost: 40, sp: 12 }
+};
+
+/* ===== 流动居民模板（路上随机出现的城市居民，纯视觉+简短对话） ===== */
+var PASSERBY_TEMPLATES = [
+  { id: 'p_student',  emoji: '🎓', color: '#4f8f7a', dialog: ['「赶早八赶早八……」', '「今天图书馆占得到座吗？」', '「食堂的咖喱饭yyds。」'] },
+  { id: 'p_office',   emoji: '💼', color: '#5f6fb0', dialog: ['「又要加班了。」', '「地铁好挤。」', '「周末去哪吃？」'] },
+  { id: 'p_elder',    emoji: '🧓', color: '#9a7c54', dialog: ['「现在的年轻人啊……」', '「天气真好。」', '「我家孙子会走路了。」'] },
+  { id: 'p_kid',      emoji: '🧒', color: '#eab308', dialog: ['「姐姐姐姐！」', '「看我的纸飞机！」', '「明天去公园！」'] },
+  { id: 'p_jogger',   emoji: '🏃', color: '#c05a6a', dialog: ['「呼……呼……」', '「今天十公里。」', '「早跑舒服多了。」'] },
+  { id: 'p_cyclist',  emoji: '🚲', color: '#7a3aaa', dialog: ['「叮铃～让一让。」', '「环城路风景不错。」'] },
+  { id: 'p_vendor',   emoji: '🏪', color: '#b0703c', dialog: ['「新鲜草莓～」', '「烤红薯嘞～」', '「便宜的围巾～」'] }
+];
+
+/* ===== 公交/渡轮时刻（每小时一班） ===== */
+var TRANSPORT_SCHEDULE = {
+  bus:  { interval_h: 1, first_h: 6, last_h: 22, wait_min: 5 },  /* 等待 5 分钟游戏时间 */
+  ferry:{ interval_h: 3, first_h: 8, last_h: 18, wait_min: 10 }
+};
+
+/* 合并新对象到原对象（幂等）——移到末尾，NEW_* 已定义 */
+Object.keys(NEW_ITEMS).forEach(function (k) { if (!ITEMS[k]) ITEMS[k] = NEW_ITEMS[k]; });
+Object.keys(NEW_EQUIPS).forEach(function (k) { if (!EQUIPS[k]) EQUIPS[k] = NEW_EQUIPS[k]; });
+Object.keys(NEW_NODE_TYPES).forEach(function (k) { if (!NODE_TYPES[k]) NODE_TYPES[k] = NEW_NODE_TYPES[k]; });
+
+/* 修复：v2 数据在 window.WORLD_DATA 初次赋值之后才定义，末尾补挂 */
+Object.assign(window.WORLD_DATA, {
+  DECOR_TYPES: DECOR_TYPES, DECOR_DIST: DECOR_DIST,
+  SEASONS: SEASONS, SEASON_DAYS: SEASON_DAYS, seasonByDay: seasonByDay,
+  WILDLIFE_TYPES: WILDLIFE_TYPES, WILDLIFE_CAP: WILDLIFE_CAP,
+  NEW_ITEMS: NEW_ITEMS, NEW_EQUIPS: NEW_EQUIPS, NEW_NODE_TYPES: NEW_NODE_TYPES,
+  ENEMIES: ENEMIES, ELEMENT_CHART: ELEMENT_CHART, PLAYER_ELEMENTS: PLAYER_ELEMENTS,
+  VEHICLES: VEHICLES, BUS_STOPS: BUS_STOPS, FERRY_PORTS: FERRY_PORTS,
+  NPC_NEEDS: NPC_NEEDS, BUILD_TEMPLATES: BUILD_TEMPLATES,
+  PASSERBY_TEMPLATES: PASSERBY_TEMPLATES, TRANSPORT_SCHEDULE: TRANSPORT_SCHEDULE
+});
+
+/* =========================================================================
+ * 建筑入内·室内场景配置（INTERIORS）
+ * 每个建筑的室内热点布局（坐标为百分比 0-100，基于 16:9 横版背景图）
+ * 热点类型：rest 休息 / work 工作·学习 / npc 与许墨互动 / view 观景·氛围
+ * img/desc/comment 由服务端 /api/world/interiors/{place_id} AI 生成后缓存
+ * ========================================================================= */
+var INTERIORS = {
+  home: {
+    name: '你的公寓', icon: '🏠',
+    prompt_hint: '温馨单身公寓室内，木质地板，纱帘阳光，沙发床铺书桌厨房阳台，紫色调装饰，许墨常来做客',
+    hotspots: [
+      { id: 'bed',      type: 'rest',  label: '小憩',   icon: '🛏️', x: 18, y: 68 },
+      { id: 'desk',     type: 'work',  label: '书桌',   icon: '📚', x: 62, y: 52 },
+      { id: 'kitchen',  type: 'work',  label: '厨房',   icon: '🍳', x: 82, y: 72 },
+      { id: 'xumo',     type: 'npc',   label: '许墨',   icon: '💜', x: 45, y: 45 }
+    ]
+  },
+  cafe: {
+    name: '街角咖啡店', icon: '☕',
+    prompt_hint: '暖色调咖啡店内，吧台咖啡机，窗边卡座，黑板手写菜单，木质桌椅，盆栽绿植，午后斜阳',
+    hotspots: [
+      { id: 'bar',      type: 'work',  label: '点单',   icon: '☕', x: 25, y: 55 },
+      { id: 'window',   type: 'view',  label: '窗边座', icon: '🪟', x: 70, y: 50 },
+      { id: 'book',     type: 'work',  label: '书架',   icon: '📖', x: 50, y: 70 },
+      { id: 'xumo',     type: 'npc',   label: '许墨',   icon: '💜', x: 72, y: 52 }
+    ]
+  },
+  lab: {
+    name: '脑科学研究院', icon: '🧪',
+    prompt_hint: '脑科学研究院实验室内，精密仪器，显微镜，脑波扫描仪，书架档案柜，白大褂挂架，冷白灯光配紫色夜光',
+    hotspots: [
+      { id: 'bench',    type: 'work',  label: '实验台', icon: '🧪', x: 28, y: 55 },
+      { id: 'scope',    type: 'work',  label: '显微镜', icon: '🔬', x: 55, y: 60 },
+      { id: 'archive',  type: 'view',  label: '档案',   icon: '🗄️', x: 78, y: 50 },
+      { id: 'xumo',     type: 'npc',   label: '许墨工位', icon: '💜', x: 45, y: 50 }
+    ]
+  },
+  univ: {
+    name: '恋语大学', icon: '🎓',
+    prompt_hint: '恋语大学教室走廊内，阶梯教室门，走廊长椅，公告板，窗外樱花校园，午后阳光',
+    hotspots: [
+      { id: 'classroom',type: 'work',  label: '教室',   icon: '🏫', x: 30, y: 50 },
+      { id: 'library', type: 'work',  label: '自习角', icon: '📚', x: 60, y: 55 },
+      { id: 'lawn',    type: 'rest',  label: '草坪',   icon: '🌳', x: 80, y: 70 },
+      { id: 'office',  type: 'npc',   label: '许墨办公室', icon: '💜', x: 48, y: 50 }
+    ]
+  },
+  library: {
+    name: '旧图书馆', icon: '📚',
+    prompt_hint: '旧图书馆阅览室内，高耸书架，绿色台灯，木质长桌，拱形彩窗，尘埃光柱，古典氛围',
+    hotspots: [
+      { id: 'read',     type: 'work',  label: '阅览座', icon: '📖', x: 35, y: 60 },
+      { id: 'rare',    type: 'view',  label: '古籍区', icon: '📜', x: 70, y: 50 },
+      { id: 'window',  type: 'view',  label: '彩窗',   icon: '🪟', x: 85, y: 30 },
+      { id: 'xumo',    type: 'npc',   label: '许墨常坐', icon: '💜', x: 40, y: 62 }
+    ]
+  },
+  market: {
+    name: '日夜超市', icon: '🛒',
+    prompt_hint: '日夜超市内，货架陈列，收银台，鲜食冷柜，灯光通明，城市深夜便利店氛围',
+    hotspots: [
+      { id: 'shelf',   type: 'work',  label: '货架',   icon: '🥫', x: 30, y: 55 },
+      { id: 'fresh',   type: 'work',  label: '鲜食',   icon: '🍙', x: 55, y: 60 },
+      { id: 'counter', type: 'shop',  label: '收银',   icon: '💳', x: 78, y: 55 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 58 }
+    ]
+  },
+  xflat: {
+    name: '教工公寓', icon: '🏢',
+    prompt_hint: '教工公寓楼内走廊客厅，米色墙面，木质门牌，绿植盆栽，午后斜阳透过楼道窗',
+    hotspots: [
+      { id: 'living',   type: 'rest',  label: '客厅',   icon: '🛋️', x: 30, y: 60 },
+      { id: 'kitchen', type: 'work',  label: '厨房',   icon: '🍳', x: 60, y: 65 },
+      { id: 'study',   type: 'work',  label: '书房',   icon: '📚', x: 78, y: 50 },
+      { id: 'door',    type: 'npc',   label: '许墨门口', icon: '💜', x: 45, y: 55 }
+    ]
+  },
+  clocktower: {
+    name: '中央钟楼', icon: '🕰️',
+    prompt_hint: '钟楼钟摆室内，巨大铜钟齿轮，机械钟摆，圆形观景台俯瞰恋语市，黄昏金光',
+    hotspots: [
+      { id: 'pendulum',type: 'view',  label: '钟摆',   icon: '⚙️', x: 30, y: 50 },
+      { id: 'gears',   type: 'view',  label: '齿轮',   icon: '🔧', x: 55, y: 60 },
+      { id: 'view',    type: 'view',  label: '观景台', icon: '🌆', x: 78, y: 40 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 55 }
+    ]
+  },
+  lighthouse: {
+    name: '北岬灯塔', icon: '🗼',
+    prompt_hint: '灯塔灯室内，巨大透镜，螺旋铁梯，海景观景台，海风夜星，孤寂浪漫氛围',
+    hotspots: [
+      { id: 'lamp',    type: 'view',  label: '灯室',   icon: '💡', x: 30, y: 45 },
+      { id: 'stair',   type: 'view',  label: '螺旋梯', icon: '🌀', x: 55, y: 60 },
+      { id: 'sea',     type: 'view',  label: '观海台', icon: '🌊', x: 78, y: 50 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 55 }
+    ]
+  },
+  darklab: {
+    name: '废弃实验室', icon: '🚪',
+    prompt_hint: '废弃实验室尘封内景，破旧仪器，倒下的桌椅，散落档案，昏暗应急灯，神秘悬疑氛围',
+    hotspots: [
+      { id: 'instr',   type: 'view',  label: '仪器',   icon: '🔬', x: 28, y: 55 },
+      { id: 'cabinet', type: 'work',  label: '档案柜', icon: '🗄️', x: 55, y: 60 },
+      { id: 'door',    type: 'view',  label: '暗门',   icon: '🚪', x: 80, y: 50 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 45, y: 55 }
+    ]
+  },
+  park: {
+    name: '梧桐公园', icon: '🌳',
+    prompt_hint: '梧桐公园户外场景，茂密梧桐树，长椅喷泉，花坛小径，斑驳阳光午后',
+    hotspots: [
+      { id: 'bench',   type: 'rest',  label: '长椅',   icon: '🪑', x: 30, y: 65 },
+      { id: 'fountain',type: 'view',  label: '喷泉',   icon: '⛲', x: 55, y: 50 },
+      { id: 'flowers', type: 'view',  label: '花坛',   icon: '🌸', x: 78, y: 65 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 58 }
+    ]
+  },
+  temple: {
+    name: '神庙遗迹', icon: '⛩️',
+    prompt_hint: '神庙遗迹户外场景，古老石柱，苔藓祭坛，藤蔓缠绕，斑驳阳光穿过断壁',
+    hotspots: [
+      { id: 'pillar',  type: 'view',  label: '石柱',   icon: '🏛️', x: 30, y: 50 },
+      { id: 'altar',   type: 'view',  label: '祭坛',   icon: '🗿', x: 55, y: 60 },
+      { id: 'moss',    type: 'view',  label: '苔地',   icon: '🍃', x: 78, y: 65 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 55 }
+    ]
+  },
+  mine: {
+    name: '北岭矿脉', icon: '⛏️',
+    prompt_hint: '北岭矿脉矿洞口场景，矿石堆，废弃矿车，木质支撑，提灯昏黄，探险氛围',
+    hotspots: [
+      { id: 'ore',     type: 'work',  label: '矿堆',   icon: '💎', x: 30, y: 60 },
+      { id: 'cart',    type: 'view',  label: '矿车',   icon: '🛒', x: 55, y: 65 },
+      { id: 'tunnel',  type: 'view',  label: '矿洞',   icon: '🕳️', x: 78, y: 55 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 60 }
+    ]
+  },
+  shrine: {
+    name: '星辰石碑群', icon: '🗿',
+    prompt_hint: '星辰石碑群户外场景，环形石碑阵列，主碑中央，星象图刻痕，月光铺地神秘氛围',
+    hotspots: [
+      { id: 'main',    type: 'view',  label: '主碑',   icon: '🗿', x: 50, y: 50 },
+      { id: 'ring',    type: 'view',  label: '环列',   icon: '⭕', x: 28, y: 60 },
+      { id: 'star',    type: 'view',  label: '星图',   icon: '🌟', x: 78, y: 45 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 65 }
+    ]
+  },
+  pier: {
+    name: '临海栈桥', icon: '🌉',
+    prompt_hint: '临海栈桥木质桥面场景，延伸至海中，栏杆海风，灯塔远景，黄昏橙红',
+    hotspots: [
+      { id: 'fish',    type: 'rest',  label: '桥头',   icon: '🎣', x: 25, y: 60 },
+      { id: 'mid',     type: 'view',  label: '中段',   icon: '🌊', x: 50, y: 55 },
+      { id: 'end',     type: 'view',  label: '尽头',   icon: '🌅', x: 78, y: 50 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 50, y: 58 }
+    ]
+  },
+  garden: {
+    name: '屋顶花园', icon: '🌸',
+    prompt_hint: '屋顶花园露台场景，藤蔓花架，藤椅圆桌，城市夜景天际线，星空柔和',
+    hotspots: [
+      { id: 'bed',     type: 'view',  label: '花圃',   icon: '🌷', x: 28, y: 60 },
+      { id: 'chair',   type: 'rest',  label: '藤椅',   icon: '🪑', x: 55, y: 65 },
+      { id: 'sky',     type: 'view',  label: '星空',   icon: '✨', x: 80, y: 30 },
+      { id: 'xumo',    type: 'npc',   label: '许墨',   icon: '💜', x: 55, y: 60 }
+    ]
+  }
+};
+
+/* 暴露 INTERIORS 到 window.WORLD_DATA，前端 world-ui.js 通过 D.INTERIORS 访问 */
+Object.assign(window.WORLD_DATA, { INTERIORS: INTERIORS });
+
+/* 暴露到 G（world-engine 通过 window.WORLD_DATA 访问） */
+/* （数据本身已是顶层 var，挂在 IIFE 内 → 通过 window.WORLD_DATA 暴露） */
 
 })();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>深度互动 · 许墨的十个秘密功�?/title>
+<title>深度互动 · 许墨的十个秘密功�?/title>
 <style>
 :root{
   --bg:#f3eefb;--elev:#ffffff;--card:#faf7fe;
@@ -190,18 +190,28 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
 </style>
 </head>
 <body>
+<style>
+/* 非主人（未通过 xumo2026 口令）隐藏所有语音功能：声音信箱标签 + 面板 + 语音按钮 + 音频播放器 */
+body.voice-disabled .tab[data-p="p9"],
+body.voice-disabled #p9,
+body.voice-disabled .audio-player,
+body.voice-disabled button[id^="mbv_"]{display:none !important}
+</style>
+<script>
+fetch('/api/verify').then(function(r){return r.json()}).then(function(d){if(d&&!d.voice)document.body.classList.add('voice-disabled')}).catch(function(){});
+</script>
 <div class="wrap">
   <header>
-    <h1>深度互动 · 许墨的秘密空�?/h1>
-    <p>观察手记 · 记忆碎片 · 反向课堂 · 天气联动 · 演练�?· 声音信箱 · 合著的书</p>
+    <h1>深度互动 · 许墨的秘密空�?/h1>
+    <p>观察手记 · 记忆碎片 · 反向课堂 · 天气联动 · 演练�?· 声音信箱 · 合著的书</p>
   </header>
 
   <nav class="tabs" id="tabs">
-    <div class="tab on" data-p="p1"><span class="dot">👁�?/span>观察手记</div>
+    <div class="tab on" data-p="p1"><span class="dot">👁�?/span>观察手记</div>
     <div class="tab" data-p="p4"><span class="dot">🧩</span>记忆碎片</div>
     <div class="tab" data-p="p5"><span class="dot">🎓</span>反向课堂</div>
-    <div class="tab" data-p="p6"><span class="dot">🌦�?/span>天气联动</div>
-    <div class="tab" data-p="p8"><span class="dot">🎪</span>演练�?/div>
+    <div class="tab" data-p="p6"><span class="dot">🌦�?/span>天气联动</div>
+    <div class="tab" data-p="p8"><span class="dot">🎪</span>演练�?/div>
     <div class="tab" data-p="p9"><span class="dot">📮</span>声音信箱</div>
     <div class="tab" data-p="p10"><span class="dot">📖</span>合著的书</div>
   </nav>
@@ -209,8 +219,8 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
   <!-- ============ 1. 许墨观察手记 ============ -->
   <section class="panel on" id="p1">
     <div class="card">
-      <h3><span class="bar"></span>他每天深夜，会偷偷分析你的聊�?/h3>
-      <p class="hint">语气、作息、情绪词频、和上周相比的细微变化……他会像记录实验一样记下关于你的一切，然后写一份只给你看的观察手记�?/p>
+      <h3><span class="bar"></span>他每天深夜，会偷偷分析你的聊�?/h3>
+      <p class="hint">语气、作息、情绪词频、和上周相比的细微变化……他会像记录实验一样记下关于你的一切，然后写一份只给你看的观察手记�?/p>
       <div class="btn-row">
         <button class="btn" onclick="observeGen()" id="observeBtn">生成今日观察手记</button>
         <button class="btn ghost" onclick="observeList()">历史手记</button>
@@ -220,33 +230,33 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>手记存档</h3>
       <div id="observeList"></div>
-      <div class="empty" id="observeEmpty" style="display:none">还没有手记。今天，让许墨第一次观察你�?/div>
+      <div class="empty" id="observeEmpty" style="display:none">还没有手记。今天，让许墨第一次观察你�?/div>
     </div>
   </section>
 
-  <!-- ============ 2/3. 共梦联机 & 平行世界已合�?============
-       共梦 �?主屏「清梦」App（creative_apps /api/dream，三段式共有的梦�?       平行世界 if �?�?主屏「平行宇宙观测台」App（creative_apps /api/ifline�?-->
+  <!-- ============ 2/3. 共梦联机 & 平行世界已合�?============
+       共梦 �?主屏「清梦」App（creative_apps /api/dream，三段式共有的梦�?       平行世界 if �?�?主屏「平行宇宙观测台」App（creative_apps /api/ifline�?-->
 
   <!-- ============ 4. 记忆碎片修复 ============ -->
   <section class="panel" id="p4">
     <div class="card">
-      <h3><span class="bar"></span>拼回许墨失去的记�?/h3>
-      <p class="hint">他的记忆有残缺——那些关于童年、觉醒、代号与实验记录的片段。按顺序解开谜题，每修复一片，他会把那段记忆讲给你听�?/p>
+      <h3><span class="bar"></span>拼回许墨失去的记�?/h3>
+      <p class="hint">他的记忆有残缺——那些关于童年、觉醒、代号与实验记录的片段。按顺序解开谜题，每修复一片，他会把那段记忆讲给你听�?/p>
       <div class="stat-row" id="mfStats"></div>
       <div id="mfList"></div>
-      <div class="empty" id="mfEmpty" style="display:none">碎片尚未加载�?/div>
+      <div class="empty" id="mfEmpty" style="display:none">碎片尚未加载�?/div>
     </div>
   </section>
 
   <!-- ============ 5. 反向教学课堂 ============ -->
   <section class="panel" id="p5">
     <div class="card">
-      <h3><span class="bar"></span>今天，你是教�?/h3>
-      <p class="hint">角色反转：许墨是你的学生。你出题（或让他自选课题），他认真提问、记笔记、交作业�?/p>
+      <h3><span class="bar"></span>今天，你是教�?/h3>
+      <p class="hint">角色反转：许墨是你的学生。你出题（或让他自选课题），他认真提问、记笔记、交作业�?/p>
       <label>你想给他讲的主题（可留空，让他自己选）</label>
-      <input type="text" id="clTopic" placeholder="例如：如何管理情�?/ 咖啡为什么好�?/ 随意">
+      <input type="text" id="clTopic" placeholder="例如：如何管理情�?/ 咖啡为什么好�?/ 随意">
       <div class="btn-row">
-        <button class="btn" onclick="clLesson()" id="clBtn">开始上�?/button>
+        <button class="btn" onclick="clLesson()" id="clBtn">开始上�?/button>
         <button class="btn ghost" onclick="clList()">课堂记录</button>
       </div>
       <div id="clArea" class="msg"></div>
@@ -254,7 +264,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>课堂档案</h3>
       <div id="clList"></div>
-      <div class="empty" id="clEmpty" style="display:none">还没上过课。许墨已经坐好在第一排了�?/div>
+      <div class="empty" id="clEmpty" style="display:none">还没上过课。许墨已经坐好在第一排了�?/div>
     </div>
   </section>
 
@@ -262,45 +272,45 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
   <section class="panel" id="p6">
     <div class="card">
       <h3><span class="bar"></span>你的城市的天气，决定他的心情</h3>
-      <p class="hint">下雨时他撑伞，下雪时他发来恋语市的雪，晴天他约你去晒太阳。让许墨和你的天空同步�?/p>
+      <p class="hint">下雨时他撑伞，下雪时他发来恋语市的雪，晴天他约你去晒太阳。让许墨和你的天空同步�?/p>
       <div class="btn-row">
         <button class="btn" onclick="weatherAuto()" id="weatherAutoBtn">自动获取我的天气</button>
       </div>
-      <label>或手动填�?/label>
+      <label>或手动填�?/label>
       <div class="btn-row" style="margin-top:6px">
         <input type="text" id="wxCity" placeholder="城市" style="flex:1;min-width:120px">
         <select id="wxKind" style="flex:1;min-width:120px">
-          <option value="�?>�?/option>
+          <option value="�?>�?/option>
           <option value="多云">多云</option>
-          <option value="�?>�?/option>
+          <option value="�?>�?/option>
           <option value="小雨">小雨</option>
           <option value="大雨">大雨</option>
-          <option value="雷阵�?>雷阵�?/option>
+          <option value="雷阵�?>雷阵�?/option>
           <option value="小雪">小雪</option>
           <option value="大雪">大雪</option>
-          <option value="�?>�?/option>
+          <option value="�?>�?/option>
         </select>
         <input type="text" id="wxTemp" placeholder="温度" style="flex:1;min-width:80px">
       </div>
       <div class="btn-row">
-        <button class="btn pink" onclick="weatherSync()" id="wxBtn">和许墨同步天�?/button>
+        <button class="btn pink" onclick="weatherSync()" id="wxBtn">和许墨同步天�?/button>
       </div>
       <div id="wxArea" class="msg"></div>
     </div>
     <div class="card">
       <h3><span class="bar"></span>天气记录</h3>
       <div id="wxList"></div>
-      <div class="empty" id="wxEmpty" style="display:none">还没有天气记录�?/div>
+      <div class="empty" id="wxEmpty" style="display:none">还没有天气记录�?/div>
     </div>
   </section>
 
-  <!-- ============ 7. 共同习惯已合并至主屏「共同习惯」App（wonder_apps /api/habit�?============ -->
+  <!-- ============ 7. 共同习惯已合并至主屏「共同习惯」App（wonder_apps /api/habit�?============ -->
 
   <!-- ============ 8. 危急时刻演练室 ============ -->
   <section class="panel" id="p8">
     <div class="card">
-      <h3><span class="bar"></span>先在这里，把艰难的话说一�?/h3>
-      <p class="hint">许墨会扮演对方，陪你演练现实里棘手的对话。结束后他会脱下角色，给你一份教授级的复盘�?/p>
+      <h3><span class="bar"></span>先在这里，把艰难的话说一�?/h3>
+      <p class="hint">许墨会扮演对方，陪你演练现实里棘手的对话。结束后他会脱下角色，给你一份教授级的复盘�?/p>
       <div id="rhScenes"></div>
       <div class="btn-row">
         <button class="btn" onclick="rhStart()" id="rhBtn">进入演练</button>
@@ -311,15 +321,15 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>演练档案</h3>
       <div id="rhList"></div>
-      <div class="empty" id="rhEmpty" style="display:none">还没有演练记录。有些话，先在安全的地方说一遍�?/div>
+      <div class="empty" id="rhEmpty" style="display:none">还没有演练记录。有些话，先在安全的地方说一遍�?/div>
     </div>
   </section>
 
   <!-- ============ 9. 声音信箱 ============ -->
   <section class="panel" id="p9">
     <div class="card">
-      <h3><span class="bar"></span>他随时可能留一条语音给�?/h3>
-      <p class="hint">可能是看到蝴蝶想到你，可能是读文献时的一段话，可能是提醒你降温。不定时出现——记得常回来看看�?/p>
+      <h3><span class="bar"></span>他随时可能留一条语音给�?/h3>
+      <p class="hint">可能是看到蝴蝶想到你，可能是读文献时的一段话，可能是提醒你降温。不定时出现——记得常回来看看�?/p>
       <div class="btn-row">
         <button class="btn" onclick="mbPoll()" id="mbPollBtn">查看信箱</button>
         <button class="btn ghost" onclick="mbReadAll()">全部已读</button>
@@ -329,15 +339,15 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>留言列表</h3>
       <div id="mbList"></div>
-      <div class="empty" id="mbEmpty" style="display:none">信箱空空的。也许过一会儿，他就会有话想对你说�?/div>
+      <div class="empty" id="mbEmpty" style="display:none">信箱空空的。也许过一会儿，他就会有话想对你说�?/div>
     </div>
   </section>
 
   <!-- ============ 10. 合著的书 ============ -->
   <section class="panel" id="p10">
     <div class="card">
-      <h3><span class="bar"></span>你一句，他一句，写一本你们的�?/h3>
-      <p class="hint">他开篇，你续写，他接住——轮流落笔，直到这本书只属于你们�?/p>
+      <h3><span class="bar"></span>你一句，他一句，写一本你们的�?/h3>
+      <p class="hint">他开篇，你续写，他接住——轮流落笔，直到这本书只属于你们�?/p>
       <label>书名</label>
       <input type="text" id="cbTitle" placeholder="例如：蝴蝶停过的第无数次窗台">
       <label>题材</label>
@@ -349,7 +359,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
         <option value="散文">散文</option>
       </select>
       <div class="btn-row">
-        <button class="btn" onclick="cbNew()" id="cbNewBtn">翻开第一�?/button>
+        <button class="btn" onclick="cbNew()" id="cbNewBtn">翻开第一�?/button>
         <button class="btn ghost" onclick="cbList()">书架</button>
       </div>
       <div id="cbArea" class="msg"></div>
@@ -357,11 +367,11 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>书架</h3>
       <div id="cbList"></div>
-      <div class="empty" id="cbEmpty" style="display:none">书架还是空的。等你们的第一本书�?/div>
+      <div class="empty" id="cbEmpty" style="display:none">书架还是空的。等你们的第一本书�?/div>
     </div>
   </section>
 
-  <footer>许墨 · 最深的理解，是连你自己都没发现的事，被他轻轻记�?/footer>
+  <footer>许墨 · 最深的理解，是连你自己都没发现的事，被他轻轻记�?/footer>
 </div>
 
 <script>
@@ -370,7 +380,7 @@ let curLesson = null, curRehearsal = null, curBook = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fmtTs(ts){return esc(ts)}
-function busy(btnId,on){const b=$(btnId);if(!b)return;if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span> 处理�?..'}else if(b.dataset.t){b.innerHTML=b.dataset.t;delete b.dataset.t}}
+function busy(btnId,on){const b=$(btnId);if(!b)return;if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span> 处理�?..'}else if(b.dataset.t){b.innerHTML=b.dataset.t;delete b.dataset.t}}
 async function api(url,opts){
   const r = await fetch(url,Object.assign({headers:{'Content-Type':'application/json'}},opts));
   let d = {};
@@ -392,9 +402,9 @@ async function observeGen(){
     const d = await api('/api/observe/today',{method:'POST'});
     const n=d.note;
     $('observeArea').innerHTML='<div class="item"><div class="t">今日观察手记 · '+esc(n.date)+
-      (d.cached?' <span class="badge green">今日已生�?/span>':'')+'</div>'+
+      (d.cached?' <span class="badge green">今日已生�?/span>':'')+'</div>'+
       '<div class="s">'+esc(n.text)+'</div>'+
-      '<div class="m">今日她说 '+esc(n.stats.today)+' �?· '+esc(n.ts)+'</div></div>';
+      '<div class="m">今日她说 '+esc(n.stats.today)+' �?· '+esc(n.ts)+'</div></div>';
     observeList();
   }catch(e){$('observeArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
   busy('observeBtn',false);
@@ -412,36 +422,36 @@ async function observeList(){
 }
 
 /* ================= 2/3. 共梦联机 & 平行世界 if 线已合并 =================
-   共梦 �?主屏「清梦」App�?api/dream）；if �?�?主屏「平行宇宙观测台」（/api/ifline�?*/
+   共梦 �?主屏「清梦」App�?api/dream）；if �?�?主屏「平行宇宙观测台」（/api/ifline�?*/
 
 /* ================= 4. 记忆碎片 ================= */
 async function mfList(){
   try{
     const d = await api('/api/memfrag');
     $('mfStats').innerHTML=
-      '<div class="stat"><b>'+d.solved+'/'+d.total+'</b><span>已修�?/span></div>'+
-      '<div class="stat"><b>'+(d.total-d.solved)+'</b><span>待修�?/span></div>';
+      '<div class="stat"><b>'+d.solved+'/'+d.total+'</b><span>已修�?/span></div>'+
+      '<div class="stat"><b>'+(d.total-d.solved)+'</b><span>待修�?/span></div>';
     if(!d.fragments.length){$('mfEmpty').style.display='block';$('mfList').innerHTML='';return}
     $('mfEmpty').style.display='none';
     $('mfList').innerHTML=d.fragments.map(f=>{
-      const state=f.solved?'<span class="badge green">已修�?/span>':
-        f.unlocked?'<span class="badge pink">待修�?/span>':'<span class="badge">未解�?/span>';
+      const state=f.solved?'<span class="badge green">已修�?/span>':
+        f.unlocked?'<span class="badge pink">待修�?/span>':'<span class="badge">未解�?/span>';
       return '<div class="item '+(f.unlocked?'':'frag-lock')+'">'+
         '<div class="t">碎片 '+f.order+' · '+esc(f.title)+' '+state+'</div>'+
         '<div class="s">'+esc(f.clue)+'</div>'+
         (f.unlocked&&!f.solved?
-          '<div class="divider"></div><div class="s"><b>谜题�?/b>'+esc(f.question)+'</div>'+
+          '<div class="divider"></div><div class="s"><b>谜题�?/b>'+esc(f.question)+'</div>'+
           '<label>你的答案</label><input type="text" id="mfans_'+f.id+'" placeholder="写下你的答案">'+
           '<div class="btn-row"><button class="btn small" onclick="mfSolve(\''+f.id+'\')">提交答案</button></div>'+
           '<div id="mfr_'+f.id+'" class="msg"></div>':'')+
         (f.solved?'<div class="divider"></div><div class="s">'+esc(f.memory)+'</div>':'')+
-        '<div class="m">'+(f.wrong_times?'答错 '+f.wrong_times+' �?· ':'')+'</div></div>';
+        '<div class="m">'+(f.wrong_times?'答错 '+f.wrong_times+' �?· ':'')+'</div></div>';
     }).join('');
   }catch(e){}
 }
 async function mfSolve(fid){
   const ans=$('mfans_'+fid).value.trim();
-  if(!ans){alert('先写下你的答�?);return}
+  if(!ans){alert('先写下你的答�?);return}
   try{
     const d = await api('/api/memfrag/'+fid+'/solve',{method:'POST',body:JSON.stringify({answer:ans})});
     if(d.correct){
@@ -459,11 +469,11 @@ async function clLesson(){
   try{
     const d = await api('/api/classroom/lesson',{method:'POST',body:JSON.stringify({topic:$('clTopic').value.trim()})});
     curLesson=d.lesson;
-    $('clArea').innerHTML='<div class="item"><div class="t">课题�?+esc(curLesson.topic)+'</div>'+
+    $('clArea').innerHTML='<div class="item"><div class="t">课题�?+esc(curLesson.topic)+'</div>'+
       '<div class="s">'+esc(d.opening)+'</div>'+
-      '<div class="divider"></div><div class="s"><b>他问�?/b>'+esc(d.question)+'</div>'+
+      '<div class="divider"></div><div class="s"><b>他问�?/b>'+esc(d.question)+'</div>'+
       '<label>你的回答</label><textarea id="clAns"></textarea>'+
-      '<div class="btn-row"><button class="btn small" onclick="clAnswer()">回答�?/button></div>'+
+      '<div class="btn-row"><button class="btn small" onclick="clAnswer()">回答�?/button></div>'+
       '<div id="clResp" class="msg"></div></div>';
     $('clTopic').value='';
   }catch(e){$('clArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
@@ -472,7 +482,7 @@ async function clLesson(){
 async function clAnswer(){
   if(!curLesson){alert('先开一堂课');return}
   const ans=$('clAns').value.trim();
-  if(!ans){alert('先回答他的问�?);return}
+  if(!ans){alert('先回答他的问�?);return}
   try{
     const d = await api('/api/classroom/'+curLesson.id+'/answer',{method:'POST',body:JSON.stringify({answer:ans})});
     curLesson=d.lesson;
@@ -495,17 +505,17 @@ async function clList(){
     $('clEmpty').style.display='none';
     $('clList').innerHTML=d.lessons.map(l=>
       '<div class="item"><div class="t">'+esc(l.topic)+
-      (l.done?' <span class="badge green">已结�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
-      '<div class="m">'+fmtTs(l.ts)+' · 已问 '+(l.questions||[]).length+' 个问�?/div>'+
-      (l.note?'<div class="s"><b>他的笔记�?/b>'+esc(l.note)+'</div>':'')+'</div>').join('');
+      (l.done?' <span class="badge green">已结�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
+      '<div class="m">'+fmtTs(l.ts)+' · 已问 '+(l.questions||[]).length+' 个问�?/div>'+
+      (l.note?'<div class="s"><b>他的笔记�?/b>'+esc(l.note)+'</div>':'')+'</div>').join('');
   }catch(e){}
 }
 
 /* ================= 6. 天气联动 ================= */
 function wmoText(code){
-  const m={0:'�?,1:'晴间多云',2:'多云',3:'�?,45:'�?,48:'雾凇',51:'毛毛�?,53:'毛毛�?,55:'毛毛�?,
+  const m={0:'�?,1:'晴间多云',2:'多云',3:'�?,45:'�?,48:'雾凇',51:'毛毛�?,53:'毛毛�?,55:'毛毛�?,
     56:'冻雨',57:'冻雨',61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',71:'小雪',73:'中雪',75:'大雪',
-    77:'米雪',80:'阵雨',81:'阵雨',82:'强阵�?,85:'阵雪',86:'阵雪',95:'雷阵�?,96:'雷雨伴冰�?,99:'雷雨伴冰�?};
+    77:'米雪',80:'阵雨',81:'阵雨',82:'强阵�?,85:'阵雪',86:'阵雪',95:'雷阵�?,96:'雷雨伴冰�?,99:'雷雨伴冰�?};
   return m[code]||'多云';
 }
 async function weatherAuto(){
@@ -561,9 +571,9 @@ async function wxList(){
   }catch(e){}
 }
 
-/* ================= 7. 共同习惯已合并至主屏「共同习惯」App�?api/habit�?================= */
+/* ================= 7. 共同习惯已合并至主屏「共同习惯」App�?api/habit�?================= */
 
-/* ================= 8. 演练�?================= */
+/* ================= 8. 演练�?================= */
 async function rhLoadScenes(){
   try{
     const d = await api('/api/rehearsal');
@@ -592,26 +602,26 @@ function rhRender(){
   const s=curRehearsal;
   if(!s)return;
   $('rhArea').innerHTML='<div class="item"><div class="t">演练 · '+esc(s.scene_name)+
-    (s.done?' <span class="badge green">已复�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
+    (s.done?' <span class="badge green">已复�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
     '<div class="s" style="white-space:normal">'+esc(s.scene_desc)+'</div>'+
     '<div class="divider"></div><div class="dialogue">'+
-    s.lines.map(l=>'<div class="dlg-row '+(l.who==='�??'you':'her')+'"><div class="who">'+esc(l.who)+'</div>'+
+    s.lines.map(l=>'<div class="dlg-row '+(l.who==='�??'you':'her')+'"><div class="who">'+esc(l.who)+'</div>'+
       '<div class="bub">'+esc(l.line)+'</div></div>').join('')+'</div>'+
     (s.done?'<div class="divider"></div><div class="s"><b>许墨的复盘：</b>'+esc(s.debrief)+'</div>'+
-      '<div class="btn-row"><button class="btn small" onclick="rhStart()">再练一�?/button></div>':'')+
+      '<div class="btn-row"><button class="btn small" onclick="rhStart()">再练一�?/button></div>':'')+
     '</div>';
   if(!s.done){
     $('rhArea').innerHTML+='<div class="card"><h3><span class="bar"></span>你的回应</h3>'+
-      '<textarea id="rhSay" placeholder="说点什么�?></textarea>'+
+      '<textarea id="rhSay" placeholder="说点什么�?></textarea>'+
       '<div class="btn-row">'+
-      '<button class="btn small" onclick="rhSay()">说出�?/button>'+
+      '<button class="btn small" onclick="rhSay()">说出�?/button>'+
       '<button class="btn small pink ghost" onclick="rhDebrief()">结束演练，要复盘</button></div>'+
       '<div id="rhResp" class="msg"></div></div>';
   }
 }
 async function rhSay(){
   const line=$('rhSay').value.trim();
-  if(!line){alert('先想好怎么�?);return}
+  if(!line){alert('先想好怎么�?);return}
   try{
     const d = await api('/api/rehearsal/'+curRehearsal.id+'/say',{method:'POST',body:JSON.stringify({line})});
     curRehearsal=d.session;
@@ -635,8 +645,8 @@ async function rhList(){
     $('rhList').innerHTML=d.sessions.map(s=>
       '<div class="item" style="cursor:pointer" onclick="rhOpen(\''+s.id+'\')">'+
       '<div class="t">'+esc(s.scene_name)+
-      (s.done?' <span class="badge green">已复�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
-      '<div class="m">'+fmtTs(s.ts)+' · '+(s.lines.length/2|0)+' 轮对�?/div></div>').join('');
+      (s.done?' <span class="badge green">已复�?/span>':' <span class="badge">进行�?/span>')+'</div>'+
+      '<div class="m">'+fmtTs(s.ts)+' · '+(s.lines.length/2|0)+' 轮对�?/div></div>').join('');
   }catch(e){}
 }
 async function rhOpen(rid){
@@ -653,11 +663,11 @@ async function mbPoll(){
   try{
     const d = await api('/api/mailbox/poll',{method:'POST'});
     if(d.wait){
-      $('mbMsg').innerHTML='<span class="msg">他还没有新留言。过 '+d.wait+' 小时再来看看�?/span>';
+      $('mbMsg').innerHTML='<span class="msg">他还没有新留言。过 '+d.wait+' 小时再来看看�?/span>';
     }else if(d.new.length){
-      $('mbMsg').innerHTML='<span class="msg ok">信箱�?'+d.new.length+' 条新留言�?/span>';
+      $('mbMsg').innerHTML='<span class="msg ok">信箱�?'+d.new.length+' 条新留言�?/span>';
     }else{
-      $('mbMsg').innerHTML='<span class="msg">没有新留言�?/span>';
+      $('mbMsg').innerHTML='<span class="msg">没有新留言�?/span>';
     }
     mbList();
   }catch(e){$('mbMsg').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
@@ -678,7 +688,7 @@ async function mbList(){
         (m.audio?'<audio class="audio-player" controls src="'+esc(m.audio)+'"></audio>':'')+
         '<div class="btn-row">'+
         '<button class="btn small pink'+(m.audio?' ghost':'')+'" onclick="mbVoice(\''+m.id+'\')" id="mbv_'+m.id+'">'+
-        (m.audio?'重新合成语音':'用许墨的声音念出�?)+'</button>'+
+        (m.audio?'重新合成语音':'用许墨的声音念出�?)+'</button>'+
         (m.read?'':'<button class="btn small ghost" onclick="mbRead(\''+m.id+'\')">标为已读</button>')+
         '</div></div>').join('');
   }catch(e){}
@@ -715,33 +725,33 @@ function cbRender(){
   const b=curBook;
   if(!b)return;
   const chapters=(b.chapters||[]).map(ch=>
-    '<div class="dlg-row you"><div class="who">�?/div><div class="bub">'+esc(ch.her)+'</div></div>'+
-    '<div class="dlg-row her"><div class="who">�?/div><div class="bub">'+esc(ch.him)+'</div></div>').join('');
-  $('cbArea').innerHTML='<div class="item"><div class="t">�?+esc(b.title)+'�?<span class="badge pink">'+esc(b.genre)+'</span>'+
-    (b.afterword?' <span class="badge green">已完�?/span>':'')+'</div>'+
+    '<div class="dlg-row you"><div class="who">�?/div><div class="bub">'+esc(ch.her)+'</div></div>'+
+    '<div class="dlg-row her"><div class="who">�?/div><div class="bub">'+esc(ch.him)+'</div></div>').join('');
+  $('cbArea').innerHTML='<div class="item"><div class="t">�?+esc(b.title)+'�?<span class="badge pink">'+esc(b.genre)+'</span>'+
+    (b.afterword?' <span class="badge green">已完�?/span>':'')+'</div>'+
     (b.cover?'<img class="cover-img" src="'+esc(b.cover)+'" alt="封面">':'')+
     '<div class="s"><b>开篇：</b>'+esc(b.opening)+'</div>'+
     (chapters?'<div class="divider"></div><div class="dialogue">'+chapters+'</div>':'')+
-    (b.afterword?'<div class="divider"></div><div class="s"><b>他的后记�?/b>'+esc(b.afterword)+'</div>':'')+
-    '<div class="m">'+fmtTs(b.created)+' · '+(b.chapters||[]).length+' �?/div></div>';
+    (b.afterword?'<div class="divider"></div><div class="s"><b>他的后记�?/b>'+esc(b.afterword)+'</div>':'')+
+    '<div class="m">'+fmtTs(b.created)+' · '+(b.chapters||[]).length+' �?/div></div>';
   if(!b.afterword){
-    $('cbArea').innerHTML+='<div class="card"><h3><span class="bar"></span>轮到你落�?/h3>'+
-      '<textarea id="cbLine" placeholder="写下一句，他会接住�?></textarea>'+
+    $('cbArea').innerHTML+='<div class="card"><h3><span class="bar"></span>轮到你落�?/h3>'+
+      '<textarea id="cbLine" placeholder="写下一句，他会接住�?></textarea>'+
       '<div class="btn-row">'+
-      '<button class="btn small" onclick="cbWrite()">写下这一�?/button>'+
+      '<button class="btn small" onclick="cbWrite()">写下这一�?/button>'+
       '<button class="btn small ghost" onclick="cbCover()" id="cbCoverBtn">生成封面</button>'+
-      '<button class="btn small pink ghost" onclick="cbFinish()" id="cbFinBtn">完稿（写后记�?/button></div>'+
+      '<button class="btn small pink ghost" onclick="cbFinish()" id="cbFinBtn">完稿（写后记�?/button></div>'+
       '<div id="cbResp" class="msg"></div></div>';
   }
 }
 async function cbWrite(){
   const line=$('cbLine').value.trim();
-  if(!line){alert('先写下一�?);return}
+  if(!line){alert('先写下一�?);return}
   try{
     const d = await api('/api/cobook/'+curBook.id+'/write',{method:'POST',body:JSON.stringify({sentence:line})});
     curBook=d.book;
     cbRender();
-    $('cbResp').innerHTML='<span class="msg ok">他接住了�?+esc(d.him)+'</span>';
+    $('cbResp').innerHTML='<span class="msg ok">他接住了�?+esc(d.him)+'</span>';
     cbList();
   }catch(e){$('cbResp').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
 }
@@ -769,9 +779,9 @@ async function cbList(){
     $('cbEmpty').style.display='none';
     $('cbList').innerHTML=d.books.map(b=>
       '<div class="item" style="cursor:pointer" onclick="cbOpen(\''+b.id+'\')">'+
-      '<div class="t">�?+esc(b.title)+'�?<span class="badge pink">'+esc(b.genre)+'</span>'+
-      (b.afterword?' <span class="badge green">已完�?/span>':'')+'</div>'+
-      '<div class="m">'+(b.chapters||[]).length+' �?· '+fmtTs(b.created)+'</div>'+
+      '<div class="t">�?+esc(b.title)+'�?<span class="badge pink">'+esc(b.genre)+'</span>'+
+      (b.afterword?' <span class="badge green">已完�?/span>':'')+'</div>'+
+      '<div class="m">'+(b.chapters||[]).length+' �?· '+fmtTs(b.created)+'</div>'+
       (b.cover?'<img class="cover-img" src="'+esc(b.cover)+'" alt="封面">':'')+
       '</div>').join('');
   }catch(e){}
@@ -784,7 +794,7 @@ async function cbOpen(bid){
   }catch(e){alert(e.message)}
 }
 
-/* ================= 初始�?================= */
+/* ================= 初始�?================= */
 observeList();mfList();clList();wxList();rhLoadScenes();mbList();cbList();
 </script>
 <script>
@@ -803,7 +813,7 @@ observeList();mfList();clList();wxList();rhLoadScenes();mbList();cbList();
   var IMG_KEY = 'lucien_bg_img_' + key;
   var OP_KEY = 'lucien_bg_op_' + key;
 
-  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
   if (!layer) {
     layer = document.createElement('div');
     layer.id = 'bgLayer';
@@ -825,19 +835,19 @@ observeList();mfList();clList();wxList();rhLoadScenes();mbList();cbList();
   fab.type = 'button';
   fab.title = '换背景图';
   fab.setAttribute('aria-label', '换背景图');
-  fab.textContent = '🖼�?;
+  fab.textContent = '🖼�?;
 
   var panel = document.createElement('div');
   panel.className = 'lucien-bg-panel';
   panel.innerHTML =
     '<h4>页面背景</h4>' +
-    '<div class="lbg-row"><label>透明�?/label>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
     '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
     '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
     '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
     '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
     '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
-    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
 
   document.body.appendChild(fab);
   document.body.appendChild(panel);
@@ -884,7 +894,7 @@ observeList();mfList();clList();wxList();rhLoadScenes();mbList();cbList();
         c.getContext('2d').drawImage(img, 0, 0, w, h);
         var dataUrl;
         try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
-        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
         try { localStorage.setItem(IMG_KEY, dataUrl); }
         catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
         applyImg(dataUrl);
@@ -896,7 +906,7 @@ observeList();mfList();clList();wxList();rhLoadScenes();mbList();cbList();
     e.target.value = '';
   });
 
-  // 初始�?  try {
+  // 初始�?  try {
     var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
     if (isNaN(savedOp)) savedOp = 22;
     opInput.value = savedOp;

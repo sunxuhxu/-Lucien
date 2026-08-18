@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>生图额度管理 · 许墨画境</title>
+<style>
+  :root{
+    --bg:#0d0820; --bg2:#1a1230; --card:#1f1638; --line:#3a2a5c;
+    --txt:#f3eaff; --mut:#a896c4; --acc:#e8c8ff; --acc2:#c9a3ff;
+    --gold:#f5d76e; --green:#7ee0a0; --red:#ff8a9a;
+    --fast:#7ee0a0; --medium:#c9a3ff; --high:#f5d76e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    min-height:100vh;padding:24px 16px 60px}
+  .wrap{max-width:820px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 6px;font-weight:600}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 18px;margin-bottom:16px}
+  .card h2{margin:0 0 12px;font-size:15px;color:var(--acc);font-weight:600}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .stat{display:flex;flex-direction:column;gap:2px;min-width:78px}
+  .stat .k{font-size:11px;color:var(--mut)}
+  .stat .v{font-size:20px;font-weight:600;color:var(--txt)}
+  .stat .v.fast{color:var(--fast)}
+  .stat .v.medium{color:var(--medium)}
+  .stat .v.high{color:var(--high)}
+  .stat .v.gold{color:var(--gold)}
+  .stat .v.green{color:var(--green)}
+  .divider{width:1px;height:36px;background:var(--line)}
+  form{display:flex;flex-direction:column;gap:10px}
+  .fld{display:flex;flex-direction:column;gap:4px}
+  .fld label{font-size:12px;color:var(--mut)}
+  input,button,select{font:inherit;color:var(--txt)}
+  input[type=text],input[type=number],select{
+    background:var(--bg2);border:1px solid var(--line);border-radius:8px;
+    padding:9px 12px;outline:none}
+  input:focus,select:focus{border-color:var(--acc2)}
+  select{appearance:none;-webkit-appearance:none;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--mut) 50%),linear-gradient(135deg,var(--mut) 50%,transparent 50%);
+    background-size:6px 6px;background-repeat:no-repeat;background-position:right 12px center;padding-right:30px}
+  button{cursor:pointer;border:none;border-radius:8px;padding:9px 16px;
+    background:linear-gradient(135deg,#9c6cff,#c9a3ff);color:#fff;font-weight:500}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
+  button:hover{filter:brightness(1.12)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .hint{font-size:12px;color:var(--mut);margin-top:4px}
+  .msg{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;display:none}
+  .msg.ok{background:rgba(126,224,160,.12);color:var(--green);display:block}
+  .msg.err{background:rgba(255,138,154,.12);color:var(--red);display:block}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 8px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:500;font-size:12px}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .qfast{color:var(--fast)} .qmedium{color:var(--medium)} .qhigh{color:var(--high)}
+  .mini-btn{font-size:11px;padding:3px 7px;border-radius:5px;margin:0 1px;border:1px solid var(--line);background:var(--bg2);color:var(--mut);cursor:pointer}
+  .mini-btn:hover{filter:brightness(1.15);color:var(--txt)}
+  .empty{color:var(--mut);font-size:13px;padding:14px;text-align:center}
+  .right{display:flex;justify-content:flex-end;gap:8px;margin-top:-8px}
+  @media(max-width:520px){
+    .stat{min-width:56px}
+    .stat .v{font-size:17px}
+    .divider{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>生图额度管理</h1>
+  <div class="sub" id="sub">加载中…</div>
+
+  <!-- 当前用户自己的额度（三档独立） -->
+  <div class="card">
+    <h2>我的额度</h2>
+    <div class="row" id="self-row">
+      <div class="stat"><span class="k">快速剩余</span><span class="v fast" id="s-r-fast">—</span></div>
+      <div class="divider"></div>
+      <div class="stat"><span class="k">标准剩余</span><span class="v medium" id="s-r-medium">—</span></div>
+      <div class="divider"></div>
+      <div class="stat"><span class="k">高清剩余</span><span class="v high" id="s-r-high">—</span></div>
+      <div class="divider"></div>
+      <div class="stat"><span class="k">钱包余额</span><span class="v gold" id="s-balance">—</span></div>
+    </div>
+    <div class="hint" id="self-hint"></div>
+  </div>
+
+  <!-- owner 下发表单 -->
+  <div class="card" id="grant-card" hidden>
+    <h2>下发额度（仅 owner，按质量档位独立计数）</h2>
+    <form id="grant-form">
+      <div class="fld">
+        <label>用户名（users_data 下已注册的目录名）</label>
+        <input type="text" name="username" placeholder="如 sunx" required autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>质量档位</label>
+        <select name="quality">
+          <option value="fast">快速（0.10 元/张）</option>
+          <option value="medium" selected>标准（0.50 元/张）</option>
+          <option value="high">高清（2.70 元/张）</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label>张数（正数=追加下发，负数=回收）</label>
+        <input type="number" name="count" placeholder="如 10" required step="1">
+      </div>
+      <div class="fld">
+        <label>备注（可选，最多 200 字）</label>
+        <input type="text" name="note" placeholder="如 测试额度">
+      </div>
+      <div class="right">
+        <button type="button" class="ghost" id="btn-reset">清空</button>
+        <button type="submit" id="submit-btn">下发</button>
+      </div>
+    </form>
+    <div class="msg" id="grant-msg"></div>
+  </div>
+
+  <!-- owner 列表 -->
+  <div class="card" id="list-card" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <h2 style="margin:0">所有用户额度</h2>
+      <button type="button" class="ghost" id="btn-refresh">刷新</button>
+    </div>
+    <div id="list-body"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const creds = {credentials:'include'};
+const Q_LABEL = {fast:'快速', medium:'标准', high:'高清'};
+
+function showMsg(el, text, kind){
+  el.className = 'msg ' + (kind||'');
+  el.textContent = text;
+  setTimeout(()=>{ el.className='msg'; el.textContent=''; }, 6000);
+}
+
+async function api(path, opt){
+  const r = await fetch(path, {...creds, ...opt});
+  let data;
+  try { data = await r.json(); } catch(e){ data = {error:'响应解析失败'}; }
+  if (!r.ok) throw new Error(data.error || data.detail || `HTTP ${r.status}`);
+  return data;
+}
+
+// 加载当前用户钱包（三档独立额度）
+async function loadSelf(){
+  const w = await api('/api/wallet');
+  const r = w.grant.remaining || {fast:0,medium:0,high:0};
+  $('s-r-fast').textContent = r.fast;
+  $('s-r-medium').textContent = r.medium;
+  $('s-r-high').textContent = r.high;
+  $('s-balance').textContent = w.free ? '主人免费' : w.balance.toFixed(2) + ' 元';
+  $('self-hint').textContent = w.free
+    ? '你是 owner，走月度配额，不参与张数额度；月度剩余 ' + (w.quota.unlimited ? '不限' : w.quota.remaining + ' 张')
+    : '生图扣费优先用对应档位额度（快速/标准/高清独立计数），用尽后回落钱包按档位扣费：快 ' + w.prices.fast + ' / 标 ' + w.prices.medium + ' / 高 ' + w.prices.high + ' 元/张';
+  return w;
+}
+
+// 判定 owner：调 /api/auth/me
+async function loadIdentity(){
+  const me = await api('/api/auth/me');
+  const isOwner = me.role === 'owner' || me.owner === true || me.scope === 'owner';
+  $('sub').textContent = '当前身份：' + (isOwner ? 'owner（主人）' : (me.username || me.user || '注册用户')) ;
+  if (isOwner){
+    $('grant-card').hidden = false;
+    $('list-card').hidden = false;
+    await loadList();
+  } else {
+    $('sub').textContent += ' · 仅 owner 可下发额度';
+  }
+  return isOwner;
+}
+
+// 列表（三档独立列）
+async function loadList(){
+  const body = $('list-body');
+  body.innerHTML = '<div class="empty">加载中…</div>';
+  try{
+    const d = await api('/api/wallet/grants');
+    if (!d.total){
+      body.innerHTML = '<div class="empty">暂无任何用户下发记录</div>';
+      return;
+    }
+    let rows = d.grants.map(g => {
+      const r = g.remaining || {fast:0,medium:0,high:0};
+      return `
+      <tr>
+        <td>${g.username}</td>
+        <td class="num"><span class="qfast">${r.fast}</span></td>
+        <td class="num"><span class="qmedium">${r.medium}</span></td>
+        <td class="num"><span class="qhigh">${r.high}</span></td>
+        <td class="num">${g.total_remaining}</td>
+        <td class="num">${g.updated_at || '—'}</td>
+        <td><button class="mini-btn qfast" onclick="reclaim('${g.username}','fast')">快-1</button><button class="mini-btn qmedium" onclick="reclaim('${g.username}','medium')">标-1</button><button class="mini-btn qhigh" onclick="reclaim('${g.username}','high')">高-1</button></td>
+      </tr>`;
+    }).join('');
+    body.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>用户名</th>
+          <th class="num">快速剩余</th><th class="num">标准剩余</th><th class="num">高清剩余</th>
+          <th class="num">合计</th><th class="num">最后更新</th><th>快扣1张</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch(e){
+    body.innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+  }
+}
+
+// 下发（带 quality）
+$('grant-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('grant-msg');
+  const fd = new FormData(e.target);
+  const username = (fd.get('username')||'').trim();
+  const count = parseInt(fd.get('count'), 10);
+  const quality = (fd.get('quality')||'medium');
+  const note = (fd.get('note')||'').trim();
+  if (!username){ showMsg(msg, '用户名不能为空', 'err'); return; }
+  if (isNaN(count) || count === 0){ showMsg(msg, '张数必须是整数且不能为 0', 'err'); return; }
+  try{
+    const r = await api('/api/wallet/grant', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, count, quality, note})
+    });
+    const rem = r.grant.remaining;
+    showMsg(msg, `已为 ${username} ${count>0?'追加':'回收'} ${Q_LABEL[quality]} ${Math.abs(count)} 张 → 剩余 快${rem.fast}/标${rem.medium}/高${rem.high}`, 'ok');
+    e.target.reset();
+    await loadList();
+  } catch(err){
+    showMsg(msg, err.message, 'err');
+  }
+});
+
+$('btn-reset').addEventListener('click', () => {
+  $('grant-form').reset();
+  $('grant-msg').className = 'msg';
+});
+// 快捷扣除1张（列表行内按钮）
+async function reclaim(username, quality){
+  try{
+    const r = await api('/api/wallet/grant', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, quality, count:-1, note:'快捷扣除1张'})
+    });
+    const rem = r.grant.remaining;
+    showMsg($('grant-msg'), `已扣除 ${username} ${Q_LABEL[quality]} 1 张 → 剩余 快${rem.fast}/标${rem.medium}/高${rem.high}`, 'ok');
+    await loadList();
+  } catch(err){
+    showMsg($('grant-msg'), err.message, 'err');
+  }
+}
+
+// 下发按钮文案动态（追加/回收）
+const countInput = document.querySelector('#grant-form input[name=count]');
+const submitBtn = $('submit-btn');
+function updateSubmitText(){
+  const v = parseInt(countInput.value, 10);
+  if (isNaN(v)) { submitBtn.textContent = '下发'; return; }
+  submitBtn.textContent = v > 0 ? '追加下发' : (v < 0 ? '回收扣除' : '下发');
+  submitBtn.style.opacity = v === 0 ? '.5' : '1';
+}
+countInput.addEventListener('input', updateSubmitText);
+
+$('btn-refresh').addEventListener('click', loadList);
+
+// 启动
+(async () => {
+  try{
+    await loadSelf();
+    await loadIdentity();
+  } catch(e){
+    $('sub').textContent = '加载失败：' + e.message + '（可能未登录，请先到主站登录 owner 口令）';
+  }
+})();
+</script>
+</body>
+</html>

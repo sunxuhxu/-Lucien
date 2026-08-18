@@ -15,8 +15,8 @@ from fastapi import APIRouter, Request, Response
 
 router = APIRouter()
 
-# 角色数据隔离（owner → 项目根；guest → guest_data/），详见 role_data.py
-from role_data import GUEST_DATA_DIR, RolePath, _role_ctx  # noqa: E402
+# 角色数据隔离（owner → 项目根；注册用户 → users_data/<user>/），详见 role_data.py
+from role_data import RolePath, _role_ctx  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

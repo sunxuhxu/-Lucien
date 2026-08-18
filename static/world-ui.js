@@ -33,6 +33,7 @@ function build() {
         '<div class="w-day" id="wDay">第 1 天</div>' +
         '<div class="w-time" id="wTime">08:00</div>' +
         '<div class="w-weather" id="wWeather">☀️ 晴</div>' +
+        '<div class="w-season" id="wSeason" title="当前季节">🌱 春</div>' +
       '</div>' +
       '<div class="w-mini-box" id="wMiniBox" title="点击打开大地图">' +
         '<canvas id="wMini" width="288" height="288"></canvas>' +
@@ -62,6 +63,7 @@ function build() {
       '<button class="w-fab" data-panel="pulse" title="城市脉搏 (P)">📡</button>' +
       '<button class="w-fab" data-panel="chron" title="世界编年史 (H)">📜</button>' +
       '<button class="w-fab" data-panel="build" title="世界工坊 (C)">🛠️</button>' +
+      '<button class="w-fab" data-panel="transport" title="交通与采集 (T)">🚲</button>' +
       '<button class="w-fab" id="wModeBtn" title="切换 2D/3D 视角">🧊</button>' +
       '<button class="w-fab" data-panel="set" title="设置">⚙️</button>' +
       '<button class="w-fab" id="wExitBtn" title="返回桌面">⏏</button>' +
@@ -121,6 +123,7 @@ function bindEvents() {
   E.on('place', openPlaceCard);
   E.on('pulseEvent', openPulseEventCard);
   E.on('pulseNews', showPulseNews);
+  E.on('dialogNeedDone', function (id, text) { showToast(text); });
   E.on('setInteract', function (t) {
     var el = $('wInteract');
     if (!el) return;
@@ -301,7 +304,8 @@ function bindEvents() {
     dbgEl.id = 'wDbg';
     dbgEl.style.cssText = 'position:absolute;left:6px;bottom:6px;z-index:99;font:10px/1.4 ui-monospace,monospace;color:#e5e7eb;background:rgba(0,0,0,.5);padding:4px 8px;border-radius:6px;white-space:pre;pointer-events:none;max-width:60%';
     dbgEl.textContent = 'world: building…';
-    app.appendChild(dbgEl);
+    var appEl = $('app-world');
+    if (appEl) appEl.appendChild(dbgEl);
   }
 }
 function running() { return document.body.classList.contains('app-open') && $('app-world') && $('app-world').querySelector('.app-view.open, .w-root'); }
@@ -330,6 +334,7 @@ function refreshHUD() {
   $('wMoney').textContent = '¥' + p.money;
   $('wExplore').textContent = '探索 ' + E.explorePct() + '%';
   refreshClock();
+  refreshSeason();
   refreshTrack();
 }
 /* ---- 任务追踪条 ---- */
@@ -406,6 +411,11 @@ function renderDialog(def, node, G) {
     optsHtml += '<button class="w-dlg-opt" data-i="' + i + '">' + esc(o.t) + '</button>';
   });
   if (!optsHtml) optsHtml = '<button class="w-dlg-opt" data-i="end">（结束对话）</button>';
+  /* 建模扩展·v2：NPC 需求交付按钮 */
+  var need = (E.getNpcNeed && def.id) ? E.getNpcNeed(def.id) : null;
+  var needBtn = need ? '<button class="w-dlg-opt need" data-need="1" title="' + esc(need.hint) + '">📦 交付 ' +
+    (D.ITEMS[need.want] ? (D.ITEMS[need.want].icon + ' ' + D.ITEMS[need.want].name) : need.want) + '</button>' : '';
+  optsHtml = needBtn + optsHtml;
   openModal(
     '<div class="w-dlg">' +
       '<div class="w-dlg-head">' +
@@ -420,6 +430,13 @@ function renderDialog(def, node, G) {
     btn.addEventListener('click', function () {
       if (dialogLock) return;
       dialogLock = true;
+      /* 建模扩展·v2：需求交付按钮 */
+      if (btn.dataset.need) {
+        var ok = E.deliverNeed(def.id);
+        dialogLock = false;
+        if (ok) renderDialog(def, node, G);
+        return;
+      }
       var i = btn.dataset.i;
       var opt = i === 'end' ? null : (node.options || [])[+i];
       var nextNode = null;
@@ -493,6 +510,7 @@ function togglePanel(name) {
   else if (name === 'build') html = panelBuild();
   else if (name === 'pulse') html = panelPulse();
   else if (name === 'chron') html = panelChron();
+  else if (name === 'transport') html = panelTransport();
   openModal(html, 'panel-' + name);
   wirePanel(name);
   if (name === 'map') drawBigMap();
@@ -502,6 +520,7 @@ function togglePanel(name) {
   if (name === 'build') wireBuild();
   if (name === 'pulse') wirePulse();
   if (name === 'chron') wireChron();
+  if (name === 'transport') wireTransport();
 }
 
 /* ================= 世界工坊（扩建与创造） ================= */
@@ -511,6 +530,8 @@ var NPC_COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9', '#6366f
 var npcDraft = null, npcPickMode = false;
 /* 智能设计居民（LLM 草稿，挑选后入住） */
 var smartDrafts = [], smartRemark = '', smartCount = 2, smartBusy = false;
+/* AI 智能建设（地形+地点+建筑 一站式方案） */
+var aiDraft = null, aiPickMode = false, aiBusy = false;
 
 function smartCardsHtml() {
   if (!smartDrafts.length) return '';
@@ -612,6 +633,125 @@ function wireSmartList() {
   });
 }
 
+/* ---- AI 智能建设：方案生成 / 预览 / 动工 ---- */
+function aiPosTxt() {
+  return aiDraft && aiDraft.x != null
+    ? '已选 (' + aiDraft.x + ', ' + aiDraft.y + ')'
+    : '未选（默认用脚下位置）';
+}
+
+function aiPlanHtml() {
+  if (!aiDraft || !aiDraft.plan) return '';
+  var p = aiDraft.plan;
+  var chips = (p.places || []).map(function (q) {
+    return '<span class="w-ai-chip">' + (q.icon || '📍') + ' ' + esc(q.name) +
+      ' <i>(' + q.x + ',' + q.y + ' · ' + q.w + '×' + q.h + (q.kind === 'mark' ? ' 地标' : ' 建筑') + ')</i></span>';
+  }).join('');
+  return '<div class="w-ai-plan">' +
+    '<div class="w-ai-t">🏗️ ' + esc(p.title || '建设方案') + '</div>' +
+    (p.concept ? '<div class="w-smart-remark">许墨：「' + esc(p.concept) + '」</div>' : '') +
+    (chips ? '<div class="w-ai-chips">' + chips + '</div>' : '') +
+    '<div class="w-ai-meta">' + aiDraft.tile_count + ' 格地形 · ' + (p.places || []).length +
+      ' 处地点/建筑 · 费用 ¥' + aiDraft.cost_money + ' + 体力 ' + aiDraft.cost_sp + '</div>' +
+    '<div class="w-ai-acts"><button class="w-btn-main" id="waiBuild">🏗️ 动工</button>' +
+      '<button class="w-mini-btn ghost" id="waiRedo">🔄 重新设计</button>' +
+      '<button class="w-mini-btn ghost" id="waiDrop">✕ 放弃</button></div>' +
+  '</div>';
+}
+
+function renderAiPlan() {
+  var boxEl = $('waiPlan');
+  if (!boxEl) return;
+  boxEl.innerHTML = aiPlanHtml();
+  var b = $('waiBuild'), r = $('waiRedo'), d2 = $('waiDrop');
+  if (b) b.addEventListener('click', aiBuild);
+  if (r) r.addEventListener('click', aiDesign);
+  if (d2) d2.addEventListener('click', function () {
+    aiDraft = null; renderAiPlan(); showToast('方案已放弃');
+  });
+}
+
+function aiDesign() {
+  if (aiBusy) { showToast('许墨还在构思上一份蓝图，稍等一下'); return; }
+  var ideaEl = $('waiIdea');
+  var idea = (ideaEl && ideaEl.value || '').trim();
+  if (!idea) { showToast('先说说你想建什么'); return; }
+  var S = E.state();
+  if (!S || !S.player) { showToast('世界还在加载，请稍后再试'); return; }
+  aiDraft = aiDraft || {};
+  aiDraft.idea = idea;
+  if (aiDraft.x == null || aiDraft.x !== aiDraft.x) { aiDraft.x = Math.floor(S.player.x); aiDraft.y = Math.floor(S.player.y); }
+  var px = aiDraft.x, py = aiDraft.y;
+  if (typeof px !== 'number' || !isFinite(px)) px = Math.floor(S.player.x);
+  if (typeof py !== 'number' || !isFinite(py)) py = Math.floor(S.player.y);
+  aiDraft.plan = null;
+  aiBusy = true;
+  var go = $('waiGo');
+  if (go) { go.disabled = true; go.textContent = '✨ 许墨正在绘制蓝图……'; }
+  var boxEl = $('waiPlan');
+  if (boxEl) boxEl.innerHTML = '<div class="w-sub" style="text-align:center;padding:8px 0">🦋 许墨铺开图纸，正在计算光照与风向……</div>';
+  fetch('/api/world/ai/design', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idea: idea, x: px, y: py })
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (d) {
+    aiBusy = false;
+    if (go) { go.disabled = false; go.textContent = '✨ 让许墨规划'; }
+    if (d.error) { showToast(d.error); renderAiPlan(); return; }
+    if (!d.plan) { showToast('方案构思失败，请换个说法再试'); renderAiPlan(); return; }
+    aiDraft.plan = d.plan || null;
+    aiDraft.tile_count = d.tile_count || 0;
+    aiDraft.cost_money = d.cost_money || 0;
+    aiDraft.cost_sp = d.cost_sp || 0;
+    renderAiPlan();
+  }).catch(function (err) {
+    aiBusy = false;
+    if (go) { go.disabled = false; go.textContent = '✨ 让许墨规划'; }
+    console.error('[world] aiDesign fetch failed:', err);
+    showToast('构思失败：' + (err && err.message ? err.message : '网络异常') + '，稍后再试');
+    renderAiPlan();
+  });
+}
+
+function aiBuild() {
+  if (!aiDraft || !aiDraft.plan || aiBusy) { showToast('请先生成一份建设方案'); return; }
+  var S = E.state();
+  if (!S || !S.player) { showToast('世界还在加载，请稍后再试'); return; }
+  if (S.player.money < aiDraft.cost_money || S.player.sp < aiDraft.cost_sp) {
+    showToast('💰 动工需 ¥' + aiDraft.cost_money + ' + 体力 ' + aiDraft.cost_sp + '（余额或体力不足，先休息或打工吧）');
+    return;
+  }
+  aiBusy = true;
+  var btn = $('waiBuild');
+  if (btn) { btn.disabled = true; btn.textContent = '🏗️ 施工中……'; }
+  fetch('/api/world/ai/build', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: aiDraft.plan })
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (d) {
+    aiBusy = false;
+    if (d.error) {
+      showToast(d.error);
+      if (btn) { btn.disabled = false; btn.textContent = '🏗️ 动工'; }
+      return;
+    }
+    aiDraft = null; aiPickMode = false;
+    E.applyAiBuild(d);
+    showToast('🏗️ 「' + d.title + '」落成！' + d.tile_count + ' 格地貌焕新');
+    if (d.affinity && d.affinity.delta) showToast('💗 心动 +' + d.affinity.delta);
+    closeModal(); togglePanel('build');
+  }).catch(function (err) {
+    aiBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '🏗️ 动工'; }
+    console.error('[world] aiBuild fetch failed:', err);
+    showToast('施工失败：' + (err && err.message ? err.message : '网络异常') + '，稍后再试');
+  });
+}
+
 function updateBuildBar(bm, br) {
   var bar = $('wBuildBar');
   if (!bar) return;
@@ -665,6 +805,15 @@ function panelBuild() {
       '<button class="w-btn-main" id="wbsStart">🖌️ 进入建造模式</button>' +
 
       '<div class="w-ws-sec"></div>' +
+      '<div class="w-ws-title">🏗️ AI 智能建设 <small>一句话，让许墨规划一整片风景</small></div>' +
+      '<div class="w-form-row"><label>想法</label><input class="w-input" id="waiIdea" maxlength="60" placeholder="例如：带湖心亭的夜樱庭院 / 街角露天剧场 / 滨海灯塔花园" value="' + esc((aiDraft && aiDraft.idea) || '') + '"/></div>' +
+      '<div class="w-form-row"><label>位置</label><span class="w-place-pos" id="waiPos">' + esc(aiPosTxt()) + '</span>' +
+        '<button class="w-tab" id="waiFeet">📍 我的脚下</button>' +
+        '<button class="w-tab" id="waiPick">🗺️ 地图选点</button></div>' +
+      '<button class="w-btn-main" id="waiGo">✨ 让许墨规划</button>' +
+      '<div class="w-ai-wrap" id="waiPlan">' + aiPlanHtml() + '</div>' +
+
+      '<div class="w-ws-sec"></div>' +
       '<div class="w-ws-title">✨ 智能设计居民 <small>把一个想法交给许墨，他来设计</small></div>' +
       '<div class="w-form-row"><label>想法</label><input class="w-input" id="wnSmartIdea" maxlength="60" placeholder="例如：雨夜书店的诗人 / 公园晨练团 / 会占星的面包师"/></div>' +
       '<div class="w-form-row"><label>人数</label><div id="wnSmartCounts">' +
@@ -692,6 +841,17 @@ function panelBuild() {
       '<button class="w-btn-main ghost" id="wbsPlace">✨ 去创建自定义地点</button>' +
 
       '<div class="w-ws-sec"></div>' +
+      '<div class="w-ws-title">📐 建筑模板 <small>一键放置预设建筑（在脚下生成）</small></div>' +
+      '<div class="w-tpl-grid">' +
+        Object.keys(D.BUILD_TEMPLATES).map(function (k) {
+          var t = D.BUILD_TEMPLATES[k];
+          return '<button class="w-tpl" data-tpl="' + k + '" title="' + esc(t.name + ' · ¥' + t.cost + ' · 体力 ' + t.sp) + '">' +
+            '<i>' + t.icon + '</i><span>' + esc(t.name) + '</span><small>¥' + t.cost + '</small></button>';
+        }).join('') +
+      '</div>' +
+      '<div class="w-form-row"><label>提示</label><span class="w-sub">在脚下生成，钱/体力不足会失败</span></div>' +
+
+      '<div class="w-ws-sec"></div>' +
       '<div class="w-ws-title">🗃️ 世界档案</div>' +
       '<div class="w-form-row"><label>地形改造</label><span class="w-sub">' + editN + ' 格</span>' +
         (editN ? '<button class="w-btn-danger small" id="wbsResetEdits">恢复原生地貌</button>' : '') + '</div>' +
@@ -699,8 +859,154 @@ function panelBuild() {
     '</div></div>';
 }
 
+/* ================= 建模扩展·v2：交通与采集面板 ================= */
+function panelTransport() {
+  var S = E.state();
+  /* 自行车 */
+  var onBike = S.vehicle === 'bike';
+  /* 公交站点 */
+  var stops = D.BUS_STOPS || [];
+  var stopRows = stops.map(function (id) {
+    var p = E.poiById(id);
+    if (!p) return '';
+    var dist = Math.round(Math.hypot(p.x - S.player.x, p.y - S.player.y) * 10);
+    return '<button class="w-tp-row" data-busstop="' + id + '"><b>' + esc(p.name) + '</b><span>' + dist + 'm · ¥5</span></button>';
+  }).join('');
+  /* 渡轮码头 */
+  var ports = D.FERRY_PORTS || [];
+  var portRows = ports.map(function (p) {
+    var dist = Math.round(Math.hypot(p.x - S.player.x, p.y - S.player.y) * 10);
+    return '<button class="w-tp-row" data-ferry="' + p.id + '"><b>' + esc(p.name) + '</b><span>' + dist + 'm · ¥15</span></button>';
+  }).join('');
+  /* 采集工具栏 */
+  var tools = ['tool_pick', 'tool_rod', 'tool_sickle', 'tool_net', 'tool_axe', 'tool_bucket'];
+  var toolRows = tools.map(function (id) {
+    var eq = D.EQUIPS[id] || D.NEW_EQUIPS[id];
+    if (!eq) return '';
+    var has = (S.player.equip.tool === id) || (S.player.bag || []).some(function (s) { return s.id === id; });
+    var on = S.player.equip.tool === id;
+    return '<button class="w-tpl' + (on ? ' on' : '') + '" data-tool="' + id + '" title="' + esc(eq.name + '：' + eq.desc) + '">' +
+      '<i>' + eq.icon + '</i><span>' + esc(eq.name) + '</span><small>' + (has ? (on ? '使用中' : '点击装备') : '未拥有') + '</small></button>';
+  }).join('');
+  /* 季节信息 */
+  var season = E.currentSeason ? E.currentSeason() : 'spring';
+  var sDef = D.SEASONS ? D.SEASONS[season] : null;
+  var seasonHtml = sDef ? '<div class="w-form-row"><label>季节</label><span class="w-sub">' + sDef.icon + ' ' + sDef.name +
+    (season === 'winter' ? '（湖面结冰可走）' : '') +
+    (season === 'autumn' ? '（草木转黄）' : '') +
+    (season === 'spring' ? '（花开繁盛）' : '') +
+    '</span></div>' : '';
+  return '<div class="w-panel w-panel-transport">' +
+    '<div class="w-panel-title">🚲 交通与采集<div class="w-panel-x" data-close>✕</div></div>' +
+    '<div class="w-scroll">' +
+      seasonHtml +
+      '<div class="w-ws-title">🚲 自行车</div>' +
+      '<div class="w-form-row"><label>状态</label><span class="w-sub">' + (onBike ? '骑行中（1.6 倍速，体力 -40%）' : '未骑行') + '</span>' +
+      '<button class="w-btn-main" id="wBikeBtn">' + (onBike ? '下车' : '租车 ¥200') + '</button></div>' +
+      '<div class="w-ws-sec"></div>' +
+      '<div class="w-ws-title">🚌 公交 <small>¥5 / 站</small></div>' +
+      '<div class="w-tpl-grid">' + stopRows + '</div>' +
+      '<div class="w-ws-sec"></div>' +
+      '<div class="w-ws-title">⛴️ 渡轮 <small>¥15 / 程</small></div>' +
+      '<div class="w-tpl-grid">' + portRows + '</div>' +
+      '<div class="w-ws-sec"></div>' +
+      '<div class="w-ws-title">🛠️ 采集工具 <small>装备后采集对应资源</small></div>' +
+      '<div class="w-tpl-grid">' + toolRows + '</div>' +
+    '</div></div>';
+}
+function wireTransport() {
+  var box = $('wModalBox');
+  var S = E.state();
+  var bike = box.querySelector('#wBikeBtn');
+  if (bike) bike.addEventListener('click', function () {
+    if (S.vehicle === 'bike') { E.dismountVehicle(); }
+    else { E.rideVehicle('bike'); }
+    refreshHUD();
+    /* 刷新面板 */
+    var old = modalOpen; closeModal();
+    if (old) togglePanel('transport');
+  });
+  box.querySelectorAll('[data-busstop]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var toId = b.dataset.busstop;
+      /* 找最近的当前站点作为起点 */
+      var stops = D.BUS_STOPS || [];
+      var best = null, bestD = 1e9;
+      stops.forEach(function (id) {
+        var p = E.poiById(id); if (!p) return;
+        var d = Math.hypot(p.x - S.player.x, p.y - S.player.y);
+        if (d < bestD) { bestD = d; best = id; }
+      });
+      if (best && best !== toId) {
+        /* 用 world-engine 的 teleportByTransport（通过 applyAiBuild 间接不可达，改用直接操作） */
+        if (S.player.money < 5) { showToast('需要 ¥5'); return; }
+        var p = E.poiById(toId);
+        if (!p) return;
+        S.player.money -= 5;
+        var w = E.findWalkableNear(p.x, p.y);
+        if (w) { S.player.x = w.x + 0.5; S.player.y = w.y + 0.5; }
+        E.save(); refreshHUD(); closeModal();
+        showToast('乘坐公交到达 ' + p.name + '（¥-5）');
+      }
+    });
+  });
+  box.querySelectorAll('[data-ferry]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var toId = b.dataset.ferry;
+      var ports = D.FERRY_PORTS || [];
+      var best = null, bestD = 1e9;
+      ports.forEach(function (p) {
+        var d = Math.hypot(p.x - S.player.x, p.y - S.player.y);
+        if (d < bestD) { bestD = d; best = p; }
+      });
+      var to = ports.filter(function (p) { return p.id === toId; })[0];
+      if (best && to && best.id !== toId) {
+        if (S.player.money < 15) { showToast('需要 ¥15'); return; }
+        S.player.money -= 15;
+        var w = E.findWalkableNear(Math.floor(to.x), Math.floor(to.y));
+        if (w) { S.player.x = w.x + 0.5; S.player.y = w.y + 0.5; }
+        E.save(); refreshHUD(); closeModal();
+        showToast('乘坐渡轮到达 ' + to.name + '（¥-15）');
+      }
+    });
+  });
+  box.querySelectorAll('[data-tool]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = b.dataset.tool;
+      var S = E.state();
+      var has = (S.player.bag || []).some(function (s) { return s.id === id; });
+      if (!has) { showToast('未拥有此工具，可在超市或工坊获得'); return; }
+      S.player.equip.tool = (S.player.equip.tool === id) ? null : id;
+      E.save(); refreshHUD();
+      /* 刷新面板 */
+      var old = modalOpen; closeModal();
+      if (old) togglePanel('transport');
+    });
+  });
+}
+function refreshSeason() {
+  var el = $('wSeason');
+  if (!el) return;
+  var s = E.currentSeason ? E.currentSeason() : 'spring';
+  var def = D.SEASONS ? D.SEASONS[s] : null;
+  if (!def) return;
+  var txt = def.icon + ' ' + def.name;
+  if (el.textContent !== txt) el.textContent = txt;
+}
+
 function wireBuild() {
   var box = $('wModalBox');
+  /* 建模扩展·v2：建筑模板按钮 */
+  box.querySelectorAll('[data-tpl]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var tpl = b.dataset.tpl;
+      var S = E.state();
+      var x = Math.floor(S.player.x), y = Math.floor(S.player.y);
+      var r = E.buildTemplate(tpl, x, y);
+      if (!r.ok) showToast(r.error || '建造失败');
+      else { closeModal(); refreshHUD(); }
+    });
+  });
   var st = {
     emoji: (npcDraft && npcDraft.emoji) || '🙂',
     color: (npcDraft && npcDraft.color) || NPC_COLORS[0]
@@ -727,6 +1033,28 @@ function wireBuild() {
   });
   var goPlace = box.querySelector('#wbsPlace');
   if (goPlace) goPlace.addEventListener('click', function () { openPlaceForm(); });
+
+  /* AI 智能建设 */
+  var aiFeet = box.querySelector('#waiFeet');
+  if (aiFeet) aiFeet.addEventListener('click', function () {
+    var S = E.state();
+    aiDraft = aiDraft || {};
+    aiDraft.x = Math.floor(S.player.x); aiDraft.y = Math.floor(S.player.y);
+    var posEl = box.querySelector('#waiPos');
+    if (posEl) posEl.textContent = '📍 (' + aiDraft.x + ', ' + aiDraft.y + ')';
+  });
+  var aiPick = box.querySelector('#waiPick');
+  if (aiPick) aiPick.addEventListener('click', function () {
+    aiDraft = aiDraft || {};
+    aiDraft.idea = box.querySelector('#waiIdea').value;
+    aiDraft.x = null; aiDraft.y = null;
+    aiPickMode = true;
+    closeModal();
+    togglePanel('map');
+  });
+  var aiGo = box.querySelector('#waiGo');
+  if (aiGo) aiGo.addEventListener('click', aiDesign);
+  renderAiPlan();
 
   /* 智能设计居民 */
   box.querySelectorAll('[data-wsn]').forEach(function (b) {
@@ -1083,7 +1411,7 @@ function drawBigMap() {
       g.fillRect(x * scale, y * scale, step * scale, step * scale);
     }
   /* 迷雾：未探索区域遮盖（若无天眼/未探索） */
-  var reveal = E.hasSkill('per5');
+  var reveal = E.hasSkill('per5') || !!(S && S.revealMap);
   if (!reveal) {
     g.fillStyle = 'rgba(238,234,248,.9)';
     for (var y2 = 0; y2 < D.MAP_H; y2 += step)
@@ -1312,6 +1640,10 @@ function openPlaceForm() {
 }
 
 function openPlaceCard(p) {
+  /* 建筑入内路由：若该 POI 有室内场景配置，优先切换到室内视图 */
+  if (p && p.id && window.WORLD_DATA && window.WORLD_DATA.INTERIORS && window.WORLD_DATA.INTERIORS[p.id]) {
+    return openInterior(p);
+  }
   openModal(
     '<div class="w-panel w-place-card">' +
       '<div class="w-panel-title">' + (p.icon || '📍') + ' ' + esc(p.name) + '<div class="w-panel-x" data-close>✕</div></div>' +
@@ -1330,13 +1662,120 @@ function openPlaceCard(p) {
   });
 }
 
+/* ================= 建筑入内·室内场景（全屏 AI 插画 + 热点叠加） ================= */
+function openInterior(p) {
+  var D = window.WORLD_DATA || {};
+  var cfg = D.INTERIORS && D.INTERIORS[p.id];
+  if (!cfg) { return openPlaceCard(p); }   /* 无配置 → 回退普通卡片 */
+  /* 加载中态：AI 生图可能耗时 10-30s */
+  openModal('<div class="w-int-loading">正在进入「' + esc(p.name || cfg.name) + '」...<br><small style="opacity:.7">许墨正在为你描绘室内</small></div>', 'interior', { lock: true });
+  fetch('/api/world/interiors/' + encodeURIComponent(p.id), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: p.name || cfg.name, prompt_hint: cfg.prompt_hint || '' })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.error) { showToast(d.error); closeModal(); return; }
+    renderInterior(p, cfg, d.interior || {});
+  }).catch(function () { showToast('进入失败：网络异常'); closeModal(); });
+}
+
+function renderInterior(p, cfg, d) {
+  var img = d.img || '';
+  var desc = d.desc || cfg.prompt_hint || '';
+  var cmt = d.comment || '';
+  var html = '<div class="w-interior">' +
+    '<div class="w-int-bg" style="background-image:url(\'' + esc(img) + '\')"></div>' +
+    '<div class="w-int-top">' +
+      '<button class="w-int-back" data-close>‹ 离开</button>' +
+      '<div class="w-int-title">' + (cfg.icon || p.icon || '📍') + ' ' + esc(p.name || cfg.name) + '</div>' +
+    '</div>' +
+    (cmt ? '<div class="w-int-cmt">' + esc(cmt) + '</div>' : '') +
+    '<div class="w-int-hotspots">' +
+      cfg.hotspots.map(function (h) {
+        return '<button class="w-int-hotspot type-' + h.type + '" style="left:' + h.x + '%;top:' + h.y + '%" ' +
+          'data-hot="' + esc(h.id) + '" data-type="' + esc(h.type) + '" data-label="' + esc(h.label) + '" title="' + esc(h.label) + '">' +
+          '<span class="w-hot-icon">' + h.icon + '</span><span class="w-hot-label">' + esc(h.label) + '</span></button>';
+      }).join('') +
+    '</div>' +
+    '<div class="w-int-desc">' + esc(desc).replace(/\n/g, '<br>') + '</div>' +
+    '</div>';
+  openModal(html, 'interior');
+  var box = $('wModalBox');
+  box.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeModal); });
+  box.querySelectorAll('.w-int-hotspot').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      onInteriorHotspot(p, cfg, btn.dataset.hot, btn.dataset.type, btn.dataset.label);
+    });
+  });
+}
+
+function onInteriorHotspot(p, cfg, hotId, hotType, hotLabel) {
+  var S = E.state();
+  if (hotType === 'rest') {
+    /* 室内休息热点 → 开完整休息面板（安睡/小憩） */
+    try { E.logWorld('interior_rest', '在「' + (p.name || cfg.name) + '」' + hotLabel + '准备休息'); } catch (e) {}
+    try { openRest(); } catch (e) { interiorToast('💤 休息功能暂不可用'); }
+  } else if (hotType === 'shop') {
+    /* 室内购物热点 → 开商店面板 */
+    try { E.logWorld('interior_shop', '在「' + (p.name || cfg.name) + '」' + hotLabel + '购物'); } catch (e) {}
+    try { openShop(); } catch (e) { interiorToast('🛒 商店功能暂不可用'); }
+  } else if (hotType === 'work') {
+    var expGain = 8 + Math.floor(Math.random() * 8);
+    if (E.gainExp) { try { E.gainExp(expGain); } catch (e) {} }
+    interiorToast('📚 在「' + hotLabel + '」用心一阵，经验 +' + expGain);
+    try { E.logWorld('interior_work', '在「' + (p.name || cfg.name) + '」' + hotLabel + '学习'); } catch (e) {}
+  } else if (hotType === 'view') {
+    var views = [
+      '光透过窗格洒落，岁月在此刻慢了下来。',
+      '风从远处带来海盐气息，恍惚间像听见了谁的轻笑。',
+      '这角落安静得能听见自己的心跳。',
+      '许墨说过，凝视是另一种对话。',
+      '影子斜斜地铺在地上，像谁留下的邀请。',
+      '远处城市的轮廓柔和得像一幅未干的画。'
+    ];
+    interiorToast('🌐 ' + views[Math.floor(Math.random() * views.length)]);
+  } else if (hotType === 'npc') {
+    interiorToast('💜 许墨抬眼看你：「嗯？想说什么？」');
+    try { E.logWorld('interior_npc', '在「' + (p.name || cfg.name) + '」与许墨共处'); } catch (e) {}
+    if (window.fetch) {
+      fetch('/api/affinity/add', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'interior_xumo', detail: '室内·' + hotLabel })
+      }).catch(function () {});
+    }
+  }
+}
+
+function interiorToast(msg) {
+  var box = $('wModalBox');
+  if (!box) { showToast(msg); return; }
+  var old = box.querySelector('.w-int-toast');
+  if (old) old.remove();
+  var sc = box.querySelector('.w-interior');
+  if (!sc) { showToast(msg); return; }
+  var el = document.createElement('div');
+  el.className = 'w-int-toast';
+  el.textContent = msg;
+  sc.appendChild(el);
+  setTimeout(function () { if (el.parentNode) el.remove(); }, 3200);
+}
+
 function onBigMapClick(e) {
-  if (!placePickMode && !npcPickMode) return;
+  if (!placePickMode && !npcPickMode && !aiPickMode) return;
   var rect = e.target.getBoundingClientRect();
   var tx = Math.round((e.clientX - rect.left) / rect.width * D.MAP_W);
   var ty = Math.round((e.clientY - rect.top) / rect.height * D.MAP_H);
   tx = Math.max(2, Math.min(D.MAP_W - 3, tx));
   ty = Math.max(2, Math.min(D.MAP_H - 3, ty));
+  if (aiPickMode) {
+    aiDraft = aiDraft || {};
+    aiDraft.x = tx; aiDraft.y = ty;
+    aiPickMode = false;
+    closeModal();
+    showToast('建设位置已选：(' + tx + ', ' + ty + ')');
+    togglePanel('build');
+    return;
+  }
   if (npcPickMode) {
     npcDraft = npcDraft || {};
     npcDraft.x = tx; npcDraft.y = ty;
@@ -2084,13 +2523,124 @@ function wireChron(firstOpen) {
 }
 
 /* ---- 设置面板 ---- */
+/* ---- 3D 形象（上传 GLB / GLTF 模型）：「我」与「许墨」双槽位独立 ---- */
+var M3 = { state: null };
+
+function m3Size(n) {
+  n = n || 0;
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+
+function m3Refresh() {
+  fetch('/api/model/state').then(function (r) { return r.json(); }).then(function (d) {
+    M3.state = d || { active_id: 'default', xumo_id: 'default', items: [] };
+    m3RenderList();
+  }).catch(function () {});
+}
+
+function m3Name(st, id) {
+  var items = st.items || [];
+  for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i].name;
+  return id;
+}
+
+function m3RenderList() {
+  if (!$('wM3List')) return;
+  var st = M3.state || { active_id: 'default', xumo_id: 'default', items: [] };
+  var h = '', i, it, items = st.items || [];
+  for (i = 0; i < items.length; i++) {
+    it = items[i];
+    var isMe = it.id === st.active_id;
+    var isXu = !!st.xumo_id && it.id === st.xumo_id;
+    h += '<div class="w-m3-item' + ((isMe || isXu) ? ' on' : '') + '">' +
+      '<span class="w-m3-name">' + (isMe ? '✅我 ' : '') + (isXu ? '💜许墨 ' : '') + esc(it.name) + '</span>' +
+      '<span class="w-m3-meta">' + m3Size(it.size) + ' · ' + esc(it.time) + '</span>' +
+      (isMe ? '' : '<button class="w-m3-btn" data-m3use="' + esc(it.id) + '">设为我</button>') +
+      (isXu ? '' : '<button class="w-m3-btn" data-m3xu="' + esc(it.id) + '">设为许墨</button>') +
+      '<button class="w-m3-btn w-m3-del" data-m3del="' + esc(it.id) + '">删除</button>' +
+    '</div>';
+  }
+  if (!h) h = '<div class="w-m3-empty">还没有上传过模型</div>';
+  $('wM3List').innerHTML = h;
+  if ($('wM3Cur')) $('wM3Cur').textContent = (st.active_id === 'default') ? '当前：默认小人' : ('当前：' + m3Name(st, st.active_id));
+  if ($('wM3XuCur')) $('wM3XuCur').textContent = (!st.xumo_id || st.xumo_id === 'default') ? '当前：默认许墨' : ('当前：' + m3Name(st, st.xumo_id));
+  $('wM3List').querySelectorAll('[data-m3use]').forEach(function (b) {
+    b.addEventListener('click', function () { m3Select(b.dataset.m3use, 'player'); });
+  });
+  $('wM3List').querySelectorAll('[data-m3xu]').forEach(function (b) {
+    b.addEventListener('click', function () { m3Select(b.dataset.m3xu, 'xumo'); });
+  });
+  $('wM3List').querySelectorAll('[data-m3del]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('删除这个模型？（若正被使用将恢复对应默认形象）')) return;
+      fetch('/api/model/' + b.dataset.m3del, { method: 'DELETE' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) { showToast(d.error || '删除失败'); return; }
+          M3.state = d;
+          m3RenderList();
+          m3Apply(d.active_id, d.xumo_id);
+          showToast('模型已删除');
+        }).catch(function () { showToast('网络错误'); });
+    });
+  });
+}
+
+/* 通知 3D 渲染层即时换装（2D 模式只存服务端）：玩家 / 许墨 双槽位独立 */
+function m3Apply(playerId, xumoId) {
+  var st = M3.state || {};
+  var items = st.items || [];
+  var pit = null, xit = null;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].id === playerId) pit = items[i];
+    if (items[i].id === xumoId) xit = items[i];
+  }
+  try {
+    if (window.WORLD3D && window.WORLD3D.ext && window.WORLD3D.ext.setAvatar3D) {
+      window.WORLD3D.ext.setAvatar3D(pit ? pit.url : null, xit ? xit.url : null);
+    }
+  } catch (e) {}
+}
+
+function m3Select(id, role) {
+  fetch('/api/model/select', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active_id: id, role: role || 'player' })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d.ok) { showToast(d.error || '切换失败'); return; }
+    M3.state = d;
+    m3RenderList();
+    m3Apply(d.active_id, d.xumo_id);
+    var isXu = role === 'xumo';
+    showToast(id === 'default'
+      ? (isXu ? '许墨已恢复默认形象' : '已恢复默认小人')
+      : (isXu ? '许墨的 3D 形象已更新 💜' : '你的 3D 形象已更新 ✨'));
+  }).catch(function () { showToast('网络错误'); });
+}
+
 function panelSet() {
   var S = E.state();
   return '<div class="w-panel w-panel-set">' +
     '<div class="w-panel-title">⚙️ 设置<div class="w-panel-x" data-close>✕</div></div>' +
     '<div class="w-scroll">' +
       '<div class="w-set-row"><span>时间流速</span><div>🕘 与现实同步（游戏时钟 = 现实时钟，每 24 小时度过一整天）</div></div>' +
-      '<div class="w-set-row"><span>操作说明</span><div class="w-set-doc">WASD / 方向键 移动 · Shift 奔跑 · E 交互<br>J 任务 · B 背包 · K 技能 · M 地图 · P 城市脉搏 · Esc 关闭</div></div>' +
+      '<div class="w-set-row"><span>显示完整地貌</span><div class="w-set-doc"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#7c3aed"><input type="checkbox" id="wRevealMap" style="accent-color:#7c3aed"/> 关闭迷雾遮盖，直接看全图地貌<br><span style="color:#8a7fa8">（仅影响显示，探索度统计照常累计）</span></label></div></div>' +
+      '<div class="w-set-row"><span>操作说明</span><div class="w-set-doc">WASD / 方向键 移动 · Shift 奔跑 · E 交互<br>Q/Z 旋转 · R/F 俯仰 · 右键拖拽 360° 环视 · 滚轮缩放<br>J 任务 · B 背包 · K 技能 · M 地图 · P 城市脉搏 · Esc 关闭</div></div>' +
+      '<div class="w-set-row"><span>我的 3D 形象</span><div class="w-m3-box">' +
+        '<div class="w-m3-cur" id="wM3Cur">当前：默认小人</div>' +
+        '<label class="w-m3-up">📤 <span id="wM3UpTxt">上传我的模型</span><input type="file" id="wM3Up" accept=".glb,.gltf" style="display:none"></label>' +
+        '<button class="w-m3-btn" id="wM3Reset">恢复默认小人</button>' +
+      '</div></div>' +
+      '<div class="w-set-row"><span>许墨的 3D 形象</span><div class="w-m3-box">' +
+        '<div class="w-m3-cur" id="wM3XuCur">当前：默认许墨</div>' +
+        '<label class="w-m3-up">📤 <span id="wM3XuUpTxt">上传许墨的模型</span><input type="file" id="wM3XuUp" accept=".glb,.gltf" style="display:none"></label>' +
+        '<button class="w-m3-btn" id="wM3XuReset">恢复默认许墨</button>' +
+      '</div></div>' +
+      '<div class="w-set-row"><span>模型库</span><div class="w-m3-box">' +
+        '<div class="w-m3-tip">支持 .glb（推荐）或全内嵌 .gltf，≤40MB；VRM 请先转 GLB。已上传的模型可分别「设为我」或「设为许墨」，两个形象完全独立。</div>' +
+        '<div class="w-m3-list" id="wM3List"></div>' +
+      '</div></div>' +
       '<div class="w-set-row"><span>游戏进度会自动保存在本机。<br>更换设备或清除浏览器数据将丢失存档。</span></div>' +
       '<div class="w-set-danger"><button class="w-btn-danger" id="wResetSave">重置世界（删除存档）</button></div>' +
     '</div></div>';
@@ -2103,6 +2653,81 @@ function wireSet() {
     closeModal();
     showToast('世界已重置。新的恋语市，新的开始。');
   });
+  /* 显示完整地貌开关：关闭/开启迷雾遮盖（2D 主画面+小地图+大地图面板+3D 云雾盖） */
+  var rm = $('wRevealMap');
+  if (rm) {
+    var st = E.state();
+    rm.checked = !!(st && st.revealMap);
+    rm.addEventListener('change', function () {
+      var s2 = E.state();
+      if (s2) { s2.revealMap = rm.checked; E.save(); }
+      /* 3D 模式下立即重建云雾盖实例 */
+      if (typeof rebuildFogMesh === 'function') { try { rebuildFogMesh(); } catch (_) {} }
+      showToast(rm.checked ? '🌍 已显示完整地貌（迷雾已关闭）' : '🌫️ 已恢复迷雾探索');
+    });
+  }
+  /* 3D 形象：列表 + 「我 / 许墨」双上传入口 */
+  m3RenderList();
+  m3Refresh();
+  var m3Upload = function (upId, txtId, role) {
+    var up = $(upId);
+    if (!up) return;
+    up.addEventListener('change', function () {
+      var f = up.files && up.files[0];
+      if (!f) return;
+      if (f.size > 40 * 1024 * 1024) { showToast('模型不能超过 40MB'); up.value = ''; return; }
+      var name = (f.name || '').replace(/\.(glb|gltf)$/i, '') || (role === 'xumo' ? '许墨模型' : '自传模型');
+      var txt = $(txtId), idle = txt ? txt.textContent : '';
+      up.disabled = true;
+      /* 用 multipart/form-data 流式上传，避免 base64 膨胀与整文件内存驻留，
+         显著提升外网/大文件场景的稳定性。XHR 支持 upload progress 反馈。 */
+      var fd = new FormData();
+      fd.append('file', f, f.name || 'model.glb');
+      fd.append('name', name);
+      fd.append('role', role);
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/model/upload', true);
+      xhr.timeout = 300000; /* 5 分钟超时，适配大文件慢速上传 */
+      if (txt) txt.textContent = '上传中… 0%';
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable && txt) {
+          var pct = Math.round(e.loaded / e.total * 100);
+          txt.textContent = '上传中… ' + pct + '%';
+        }
+      };
+      xhr.onload = function () {
+        up.disabled = false; up.value = '';
+        if (txt) txt.textContent = idle;
+        var d = null;
+        try { d = JSON.parse(xhr.responseText); } catch (_) {}
+        if (xhr.status >= 200 && xhr.status < 300 && d && d.ok) {
+          M3.state = d;
+          m3RenderList();
+          m3Apply(d.active_id, d.xumo_id);
+          showToast(role === 'xumo' ? '模型已应用为许墨的世界形象 💜' : '模型已应用为你的世界形象 ✨');
+        } else {
+          showToast((d && (d.error || d.detail)) || ('上传失败（HTTP ' + xhr.status + '）'));
+        }
+      };
+      xhr.onerror = function () {
+        up.disabled = false; up.value = '';
+        if (txt) txt.textContent = idle;
+        showToast('网络错误，请检查网络后重试');
+      };
+      xhr.ontimeout = function () {
+        up.disabled = false; up.value = '';
+        if (txt) txt.textContent = idle;
+        showToast('上传超时，请压缩模型或检查网络后重试');
+      };
+      xhr.send(fd);
+    });
+  };
+  m3Upload('wM3Up', 'wM3UpTxt', 'player');
+  m3Upload('wM3XuUp', 'wM3XuUpTxt', 'xumo');
+  var rst = $('wM3Reset');
+  if (rst) rst.addEventListener('click', function () { m3Select('default', 'player'); });
+  var xrst = $('wM3XuReset');
+  if (xrst) xrst.addEventListener('click', function () { m3Select('default', 'xumo'); });
 }
 
 function wirePanel(name) {
@@ -2300,10 +2925,20 @@ function renderBattle(msg) {
   var s = battleSt.shadow;
   var S = E.state();
   var st = E.calcStats();
+  var eDef = s.def || null;
+  var eIcon = eDef && eDef.icon ? eDef.icon : '👁';
+  var eName = eDef && eDef.name ? eDef.name : '记忆残影';
+  var eEl = eDef && eDef.el ? eDef.el : 'normal';
+  var elMeta = D.PLAYER_ELEMENTS ? (D.PLAYER_ELEMENTS[eEl] || D.PLAYER_ELEMENTS.normal) : { icon: '⚔️', name: '普通' };
+  var myEl = E.playerElement ? E.playerElement() : 'normal';
+  var myElMeta = (D.PLAYER_ELEMENTS && D.PLAYER_ELEMENTS[myEl]) ? D.PLAYER_ELEMENTS[myEl] : { icon: '⚔️', name: '普通' };
+  var mul = (D.ELEMENT_CHART && D.ELEMENT_CHART[myEl]) ? (D.ELEMENT_CHART[myEl][eEl] || 1) : 1;
+  var mulTxt = mul > 1.2 ? '<span class="w-bt-weak">克制 ×' + mul + '</span>' : (mul < 0.9 ? '<span class="w-bt-resist">抵抗 ×' + mul + '</span>' : '');
   openModal('<div class="w-panel w-panel-battle">' +
-    '<div class="w-bt-title">⚔️ 记忆残影</div>' +
+    '<div class="w-bt-title">⚔️ ' + esc(eName) + '</div>' +
     '<div class="w-bt-enemy">' +
-      '<div class="w-bt-eicon">👁👁</div>' +
+      '<div class="w-bt-eicon">' + eIcon + '<span class="w-bt-el">' + elMeta.icon + '</span></div>' +
+      '<div class="w-bt-emeta">' + esc(elMeta.name) + ' 系 ' + mulTxt + '</div>' +
       '<div class="w-bar w-hp big"><i style="width:' + Math.max(0, s.hp / s.hpMax * 100) + '%"></i><span>' + Math.max(0, Math.ceil(s.hp)) + '/' + s.hpMax + '</span></div>' +
     '</div>' +
     '<div class="w-bt-you">你 · HP ' + Math.ceil(S.player.hp) + '/' + st.hpMax + ' · 体力 ' + Math.ceil(S.player.sp) + '</div>' +
@@ -2390,7 +3025,7 @@ function applyModeUI(m) {
   if (rb) rb.style.display = m === '3d' ? '' : 'none';
 }
 function boot() {
-  if (!built) { build(); built = true; }
+  if (!built || !$('wCanvas')) { build(); built = true; }
   E.bindCanvas($('wCanvas'), $('wMini'));
   /* 3D 体素渲染层（可选，失败自动留在 2D） */
   var mode3dReady = false;
@@ -2432,13 +3067,11 @@ function boot() {
       if (d && typeof d.level_index === 'number') E.setLucienLevel(d.level_index + 1);
     }).catch(function () {});
   } catch (e) {}
+  /* 去掉每次进入世界都要走的「开始探索」开场白环节 */
   var S = E.state();
   if (!S.seenPrologue) {
-    showPrologueCards(function () {
-      S.seenPrologue = true;
-      E.save();
-      showToast('目标：前往街角咖啡店（跟随小地图金色圆点）');
-    });
+    S.seenPrologue = true;
+    E.save();
   }
 }
 window.WorldGame = {

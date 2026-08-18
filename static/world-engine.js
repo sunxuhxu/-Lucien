@@ -189,6 +189,9 @@ function generateWorld() {
       else if ((bi === B.GRASS || bi === B.PARK) && n < 0.06) decorMap[idx(x, y)] = 3;
     }
   }
+  /* 建模扩展·v2：高程图 + 装饰重做 */
+  generateElevation();
+  generateDecorV2();
   snapshotBase();
 }
 
@@ -310,8 +313,10 @@ function defaultSave() {
     explored: null, exploredCount: 0,
     nodes: {}, chests: {},
     seenPrologue: false, ending: null,
+    revealMap: false,   /* 显示完整地貌（关闭迷雾遮盖） */
     settings: { sfx: true },
-    playSec: 0, lucienCalls: {}
+    playSec: 0, lucienCalls: {},
+    season: 'spring', vehicle: null, npcNeeds: {}
   };
 }
 
@@ -484,6 +489,7 @@ function initNpcs() {
     npcs.push(e); npcV[def.id] = e;
     if (def.avatar) getSpriteImg(def.avatar); /* 预加载头像，进视野即可绘制 */
   }
+  initNpcNeeds();
 }
 function moveEntity(e, dx, dy, dt, speed) {
   /* 分离轴移动 + 碰撞 */
@@ -498,7 +504,7 @@ function collideCircle(x, y) {
   var y0 = Math.floor(y - r), y1 = Math.floor(y + r);
   for (var yy = y0; yy <= y1; yy++)
     for (var xx = x0; xx <= x1; xx++)
-      if (isSolid(xx, yy)) return true;
+      if (isSolidV2(xx, yy)) return true;
   return false;
 }
 function updateNpc(e, dt) {
@@ -543,6 +549,10 @@ function tryMovePlayer(dx, dy, dt) {
   if (isNight() && !hasSkill('bod4')) speed *= 0.88;
   var running = keys.shift && S.player.sp > 1;
   if (running) speed *= 1.55;
+  /* 建模扩展·v2：交通工具速度倍率 */
+  var vehMul = 1, vehDrainMul = 1;
+  if (S.vehicle === 'bike') { vehMul = D.VEHICLES.bike.spdMul; vehDrainMul = D.VEHICLES.bike.spDrain; }
+  speed *= vehMul;
 
   var len = Math.hypot(dx, dy) || 1;
   moveEntity(p, dx / len, dy / len, dt, speed);
@@ -556,6 +566,7 @@ function tryMovePlayer(dx, dy, dt) {
     if (S.player.equip.shoes === 'shoes_wind') drain *= 0.8;
   }
   if (hasSkill('min5')) drain *= 0.7;
+  drain *= vehDrainMul;   /* vehicle 体力消耗倍率 */
   drain *= 1 - Math.min(60, st.spSave) / 100;
   if (drain > 0) p.sp = Math.max(0, p.sp - drain * dt);
   else {
@@ -667,6 +678,8 @@ function advanceTime(dt) {
     logWorld('day', '第 ' + S.day + ' 天开始了');
     toast('第 ' + S.day + ' 天开始了');
     pulseExpireCheck(S.day);
+    advanceSeasonIfNeeded();
+    resetNpcNeedsForNewDay();
     /* 城市自己生长：新的一天有几率冒出新的动态（冷却 10 分钟真实时间） */
     if (S.mainStage >= 1 && S.day > pulseGenDay && Date.now() - pulseLastGenAt > 10 * 60 * 1000) {
       pulseGenDay = S.day;
@@ -736,6 +749,22 @@ function loadCustomPlaces() {
       if (applied) { _clearChunks(); toast('📍 自定义地点已同步（' + list.length + ' 处）'); }
     }).catch(function () {});
   } catch (e) {}
+}
+
+/* ================= AI 智能建设（后端方案一键落地） ================= */
+function applyAiBuild(res) {
+  if (!res) return;
+  var edits = res.edits || [];
+  for (var i = 0; i < edits.length; i++) applyTileEdit(edits[i], true);
+  var places = res.places || [];
+  for (var j = 0; j < places.length; j++) applyCustomPlace(places[j], true);
+  if (res.cost_money) S.player.money = Math.max(0, S.player.money - res.cost_money);
+  if (res.cost_sp) S.player.sp = Math.max(0, S.player.sp - res.cost_sp);
+  logWorld('place', '「' + (res.title || '新的风景') + '」在恋语市落成了（AI 规划 ' + (res.tile_count || 0) + ' 格）');
+  _clearChunks();
+  unstickPlayer();
+  saveGame();
+  refreshUI();
 }
 
 /* ================= 世界扩建：地形改造（建造模式） ================= */
@@ -1418,11 +1447,15 @@ function _computeInteractTarget() {
     var cx = poi.x + (poi.w || 1) / 2, cy = poi.y + (poi.h || 1) + 0.8;
     d = Math.hypot(cx - p.x, cy - p.y);
     if (d > 2.6) continue;
-    if (poi.id === 'market') { if (d < bestD + 0.6) { bestD = d; best = { kind: 'shop', label: '进入 日夜超市' }; } }
+    if (poi.id === 'market') {
+      if (window.WORLD_DATA.INTERIORS && window.WORLD_DATA.INTERIORS.market && d < bestD + 0.6) { bestD = d; best = { kind: 'place', p: poi, label: '进入 ' + poi.name }; }
+      else if (d < bestD + 0.6) { bestD = d; best = { kind: 'shop', label: '进入 日夜超市' }; }
+    }
     else if (poi.id === 'cafe' && S.mainStage === 0) { if (d < bestD + 0.8) { bestD = d; best = { kind: 'cafe0', label: '走进 街角咖啡店' }; } }
     else if (poi.id === 'home') {
       if (d < bestD + 0.6) {
         if (S.mainStage === 5 && !S.ending) { bestD = d; best = { kind: 'finale', label: '回家 · 整理一切' }; }
+        else if (window.WORLD_DATA.INTERIORS && window.WORLD_DATA.INTERIORS.home) { bestD = d; best = { kind: 'place', p: poi, label: '进入 ' + poi.name }; }
         else { bestD = d; best = { kind: 'rest', label: '回公寓 休息' }; }
       }
     }
@@ -1444,8 +1477,8 @@ function _computeInteractTarget() {
     else if (poi.id === 'temple' || poi.id === 'shrine') {
       if (!S.worldFlags.temple_open && d < bestD + 2.2) { bestD = d; best = { kind: 'puzzle', id: 'stele', label: '查看 星辰石碑' }; }
     }
-    else if (poi.custom) {
-      if (d < bestD + 0.8) { bestD = d; best = { kind: 'place', p: poi, label: '查看 ' + poi.name }; }
+    else if (poi.custom || (window.WORLD_DATA.INTERIORS && window.WORLD_DATA.INTERIORS[poi.id])) {
+      if (d < bestD + 0.8) { bestD = d; best = { kind: 'place', p: poi, label: (window.WORLD_DATA.INTERIORS && window.WORLD_DATA.INTERIORS[poi.id] ? '进入 ' : '查看 ') + poi.name }; }
     }
     else if (poi.pulseEv) {
       if (d < bestD + 1) {
@@ -1672,7 +1705,17 @@ function makeG() {
     },
     callAffinity: function (action) { callAffinity(action, '世界·恋语市'); },
     explorePct: explorePct,
-    fixLighthouse: fixLighthouse
+    fixLighthouse: fixLighthouse,
+    /* 建模扩展·v2 */
+    elevationAt: function (x, y) { return elevationAt(x, y); },
+    currentSeason: function () { return S.season || 'spring'; },
+    seasonDef: function () { return D.SEASONS[S.season || 'spring']; },
+    rideVehicle: function (kind) { return rideVehicle(kind); },
+    dismountVehicle: function () { return dismountVehicle(); },
+    currentVehicle: function () { return S.vehicle; },
+    npcNeedOf: function (id) { return getNpcNeed(id); },
+    deliverNeed: function (id) { return deliverNeed(id); },
+    wildlifeNear: function () { return wildlife.slice(0, 8); }
   };
 }
 
@@ -2238,6 +2281,7 @@ function newParticle(kind) {
 
 /* 迷雾 */
 function drawFog() {
+  if (S && S.revealMap) return;   /* 显示完整地貌：不遮盖 */
   var ox = offX, oy = offY;
   var t0x = Math.floor(camera.x - viewW / TILE / 2) - 1, t1x = Math.ceil(camera.x + viewW / TILE / 2) + 1;
   var t0y = Math.floor(camera.y - viewH / TILE / 2) - 1, t1y = Math.ceil(camera.y + viewH / TILE / 2) + 1;
@@ -2257,10 +2301,11 @@ function renderMinimap() {
   var size = MW * miniScale;
   miniCtx.clearRect(0, 0, size, size);
   var step = 2;   /* 每 2 tile 采样 */
+  var reveal = !!(S && S.revealMap);
   for (var y = 0; y < MH; y += step)
     for (var x = 0; x < MW; x += step) {
       var i = idx(x, y);
-      if (!exploredArr[i]) continue;
+      if (!exploredArr[i] && !reveal) continue;
       var b = biomeMap[i];
       var st = D.BIOME_STYLE[b];
       miniCtx.fillStyle = st.base;
@@ -2564,8 +2609,10 @@ function loop(ts) {
 
   advanceTime(dt);
   updateNpcsAll(dt);
-  spawnShadowChance(dt);
+  spawnEnemyV2(dt);
   updateShadows(dt);
+  updateWildlife(dt);
+  updateVehicle(dt);
   tickEditQueue(dt);
   tickLogQueue(dt);
 
@@ -2813,10 +2860,550 @@ window.WORLD_ENG = {
   loadWorldEdits: loadWorldEdits,
   resetWorldEdits: resetWorldEdits,
   flushEditsNow: flushEditsNow,
+  applyAiBuild: applyAiBuild,
   applyCustomNpc: applyCustomNpc,
   removeCustomNpc: removeCustomNpc,
   loadCustomNpcs: loadCustomNpcs,
-  findWalkableNear: findWalkableNear
+  findWalkableNear: findWalkableNear,
+  /* 建模扩展·v2 */
+  elevationAt: function (x, y) { return elevationAt(x, y); },
+  currentSeason: function () { return S ? (S.season || 'spring') : 'spring'; },
+  rideVehicle: function (k) { return rideVehicle(k); },
+  dismountVehicle: function () { return dismountVehicle(); },
+  getNpcNeed: getNpcNeed,
+  deliverNeed: deliverNeed,
+  wildlifeAll: function () { return wildlife; },
+  buildTemplate: buildTemplate,
+  applyAiBuildV2: applyAiBuildV2
 };
+
+/* ============================================================
+ * 建模扩展·v2 子系统
+ * ============================================================ */
+
+/* ---------- Elevation 高程图 ----------
+ * 0~1 归一化高度，独立于 biome 的 fbm 第二通道。
+ * 影响：3D 模式立体起伏 / 2D 山坡渐变着色 / 瀑布点位 / 高地可眺望。
+ */
+var elevMap = null;
+function generateElevation() {
+  elevMap = new Float32Array(MW * MH);
+  var S1 = MAP_SEED + 101;
+  for (var y = 0; y < MH; y++) {
+    for (var x = 0; x < MW; x++) {
+      var e = fbm(x / 30, y / 30, S1, 4);
+      /* 北部山脉高，东南沿海低 */
+      var north = Math.max(0, (34 - y) / 34);
+      e += north * north * 0.35;
+      e -= Math.max(0, (x - 112) / 34) * 0.25;
+      e -= Math.max(0, (y - 108) / 40) * 0.20;
+      /* 深海压低 */
+      if (biomeAt(x, y) === B.DEEP) e = Math.min(e, 0.10);
+      elevMap[idx(x, y)] = Math.max(0, Math.min(1, e));
+    }
+  }
+}
+function elevationAt(x, y) {
+  if (!elevMap || !inMap(x, y)) return 0;
+  return elevMap[idx(x, y)];
+}
+/* 高程渲染辅助：返回 (r,g,b) 着色叠加，使山地呈现明暗渐变 */
+function elevationShade(x, y) {
+  var e = elevationAt(x, y);
+  if (e <= 0) return null;
+  /* 高度越大越亮（雪线以上偏白），低洼偏暗 */
+  var v = (e - 0.5) * 0.4;
+  if (v === 0) return null;
+  return v > 0
+    ? 'rgba(255,255,255,' + (v * 0.5).toFixed(2) + ')'
+    : 'rgba(0,0,0,' + (-v * 0.4).toFixed(2) + ')';
+}
+
+/* ---------- Season 季节系统 ----------
+ * 每 7 天一季，循环 春→夏→秋→冬。
+ * 影响天气概率（rainBias）、植被生成（grassBoost/flowerChance）、湖面结冰（frozenLake）。
+ */
+function currentSeason() {
+  if (S && S.season) return S.season;
+  return 'spring';
+}
+function advanceSeasonIfNeeded() {
+  if (!S) return;
+  var expected = D.seasonByDay(S.day);
+  if (S.season !== expected) {
+    var old = S.season || expected;
+    S.season = expected;
+    var def = D.SEASONS[expected];
+    logWorld('season', '季节转入「' + def.name + '」' + def.icon);
+    toast('季节转入「' + def.name + '」' + def.icon);
+    /* 季节切换时部分装饰需要重生成（花/草/雪） */
+    regenerateSeasonalDecor();
+    refreshUI();
+  }
+}
+/* 季节对 biome 着色的调制：返回叠加色或 null */
+function seasonTintFor(b) {
+  if (!S || !S.season) return null;
+  var def = D.SEASONS[S.season];
+  if (!def) return null;
+  /* 冬季：水域以外的非建筑 tile 叠白 */
+  if (S.season === 'winter' && b !== B.DEEP && b !== B.WATER && b !== B.BUILD) {
+    return 'rgba(255,255,255,0.18)';
+  }
+  /* 秋季：草地/森林叠黄 */
+  if (S.season === 'autumn' && (b === B.GRASS || b === B.FOREST || b === B.PARK)) {
+    return 'rgba(220,140,60,0.22)';
+  }
+  /* 春季：草地叠嫩绿 */
+  if (S.season === 'spring' && (b === B.GRASS || b === B.PARK)) {
+    return 'rgba(120,210,150,0.15)';
+  }
+  return null;
+}
+/* 冬季湖面结冰：返回 true 表示该 tile 可走（覆盖 SOLID[WATER]） */
+function isFrozenWater(x, y) {
+  if (!S || S.season !== 'winter') return false;
+  if (!D.SEASONS.winter.frozenLake) return false;
+  var b = biomeAt(x, y);
+  return b === B.WATER;   /* 深海不冻，仅浅水冻 */
+}
+/* 重写 isSolid 行为（钩子：碰撞检测调用 isSolidV2） */
+function isSolidV2(x, y) {
+  if (!inMap(x, y)) return true;
+  var b = biomeAt(x, y);
+  if (isFrozenWater(x, y)) return false;   /* 冻水可走 */
+  return !!SOLID[b];
+}
+
+/* ---------- 装饰分布重做 generateDecorV2 ----------
+ * 用 DECOR_DIST 概率表替代旧的硬编码 decor 生成。
+ * 季节调制：春季花/草概率上调，冬季花几乎为0、雪地露石头。
+ */
+function generateDecorV2() {
+  /* 不重置已有 decorMap（保留原 decor 生成兼容），叠加新类型 */
+  var seasonDef = D.SEASONS[currentSeason()];
+  for (var y = 0; y < MH; y++) {
+    for (var x = 0; x < MW; x++) {
+      var b = biomeAt(x, y);
+      var dist = D.DECOR_DIST[b];
+      if (!dist) continue;
+      var n = hash2(x, y, MAP_SEED + 77);
+      /* 按 decor 类型权重抽样 */
+      var best = 0, bestP = 0;
+      for (var dk in dist) {
+        if (!dist.hasOwnProperty(dk)) continue;
+        var p = dist[dk];
+        /* 季节调制 */
+        if (seasonDef) {
+          if (dk === '3' || dk === '14') p *= seasonDef.flowerChance;   /* 花/野花 */
+          if (dk === '1' && seasonDef.grassBoost) p *= seasonDef.grassBoost;
+          if (seasonDef.snow && (dk === '5' || dk === '6' || dk === '3' || dk === '14')) p *= 0.2;
+        }
+        if (n < p && p > bestP) { best = parseInt(dk, 10); bestP = p; }
+      }
+      if (bestP > 0 && best !== 0) {
+        /* 仅当原 decorMap 为 0（未生成）时才覆盖，避免破坏原 decor */
+        if (decorMap[idx(x, y)] === 0) decorMap[idx(x, y)] = best;
+      }
+    }
+  }
+}
+/* 季节切换时重新生成花/草（仅春季/秋季切换） */
+function regenerateSeasonalDecor() {
+  /* 把花(3)和野花(14)和灌木(5)清掉，按新季节重新生成 */
+  for (var i = 0; i < decorMap.length; i++) {
+    var d = decorMap[i];
+    if (d === 3 || d === 14 || d === 5) decorMap[i] = 0;
+  }
+  generateDecorV2();
+}
+
+/* ---------- 流动生物 Wildlife ----------
+ * 纯视觉生态层，不参与碰撞。每种按 cap 数量在玩家视野周围生成。
+ */
+var wildlife = [];
+function wildlifeActiveTypes() {
+  var h = gameHour();
+  var season = currentSeason();
+  var out = [];
+  for (var k in D.WILDLIFE_TYPES) {
+    if (!D.WILDLIFE_TYPES.hasOwnProperty(k)) continue;
+    var def = D.WILDLIFE_TYPES[k];
+    if (def.hours.indexOf(h) < 0) continue;
+    var mul = def.seasonMul ? (def.seasonMul[season] || 0) : 1;
+    if (mul <= 0) continue;
+    out.push({ k: k, def: def, mul: mul });
+  }
+  return out;
+}
+function spawnWildlifeOne(kind, def) {
+  /* 在玩家视野半径 8~16 内随机一点 */
+  var ang = Math.random() * Math.PI * 2, d = 8 + Math.random() * 8;
+  var sx = S.player.x + Math.cos(ang) * d, sy = S.player.y + Math.sin(ang) * d;
+  if (!inMap(Math.floor(sx), Math.floor(sy))) return;
+  /* 水生生物只在水面 */
+  if (def.waterOnly) {
+    var b = biomeAt(Math.floor(sx), Math.floor(sy));
+    if (b !== B.WATER && b !== B.DEEP) return;
+  } else {
+    /* 陆生不落在不可通行 tile */
+    if (isSolidV2(Math.floor(sx), Math.floor(sy))) return;
+  }
+  wildlife.push({
+    kind: kind, x: sx, y: sy, vx: 0, vy: 0,
+    wob: Math.random() * 6.28,
+    life: 30 + Math.random() * 60,   /* 秒 */
+    dir: Math.random() * 6.28
+  });
+}
+function updateWildlife(dt) {
+  if (!S) return;
+  var active = wildlifeActiveTypes();
+  /* 生成：按 cap 和 mul 决定是否补 */
+  for (var i = 0; i < active.length; i++) {
+    var a = active[i];
+    var cap = D.WILDLIFE_CAP[a.k] || 4;
+    var cnt = 0;
+    for (var j = 0; j < wildlife.length; j++) if (wildlife[j].kind === a.k) cnt++;
+    if (cnt >= cap) continue;
+    /* 生成概率：每秒 0.15 * mul */
+    if (Math.random() < dt * 0.15 * a.mul) spawnWildlifeOne(a.k, a.def);
+  }
+  /* 更新位置 + 寿命 */
+  for (var i = wildlife.length - 1; i >= 0; i--) {
+    var w = wildlife[i];
+    w.life -= dt;
+    if (w.life <= 0) { wildlife.splice(i, 1); continue; }
+    /* 远离玩家 > 24 自动消失 */
+    var dxp = w.x - S.player.x, dyp = w.y - S.player.y;
+    if (dxp * dxp + dyp * dyp > 576) { wildlife.splice(i, 1); continue; }
+    /* 漂移：缓慢转向 + 速度 */
+    w.wob += dt;
+    w.dir += Math.sin(w.wob) * dt * 1.2;
+    var sp = D.WILDLIFE_TYPES[w.kind].speed;
+    var nx = w.x + Math.cos(w.dir) * sp * dt;
+    var ny = w.y + Math.sin(w.dir) * sp * dt;
+    /* 水生限制在水域 */
+    if (D.WILDLIFE_TYPES[w.kind].waterOnly) {
+      if (inMap(Math.floor(nx), Math.floor(ny))) {
+        var b = biomeAt(Math.floor(nx), Math.floor(ny));
+        if (b === B.WATER || b === B.DEEP) { w.x = nx; w.y = ny; }
+        else w.dir += 2.0;   /* 转向 */
+      }
+    } else {
+      if (inMap(Math.floor(nx), Math.floor(ny)) && !isSolidV2(Math.floor(nx), Math.floor(ny))) {
+        w.x = nx; w.y = ny;
+      } else {
+        w.dir += 2.5;
+      }
+    }
+  }
+}
+function wildlifeNear() {
+  var out = [];
+  for (var i = 0; i < wildlife.length && out.length < 8; i++) {
+    var w = wildlife[i];
+    out.push({ kind: w.kind, x: w.x, y: w.y, icon: D.WILDLIFE_TYPES[w.kind].icon });
+  }
+  return out;
+}
+
+/* ---------- 交通工具 Vehicle ----------
+ * 自行车：骑乘后 1.6 倍速，体力消耗 -40%；按 V 切换。
+ * 公交/渡轮：点对点传送，消耗金钱，需到站等待。
+ */
+function rideVehicle(kind) {
+  if (kind !== 'bike') return false;
+  if (S.vehicle === 'bike') { dismountVehicle(); return true; }
+  if (!hasItem('bike_key') && S.player.money < D.VEHICLES.bike.cost) {
+    toast('需要 ¥' + D.VEHICLES.bike.cost + ' 或自行车钥匙');
+    return false;
+  }
+  if (!hasItem('bike_key')) {
+    S.player.money -= D.VEHICLES.bike.cost;
+    giveItem('bike_key', 1);   /* 一次性购买后变成钥匙 */
+  }
+  S.vehicle = 'bike';
+  toast('骑上自行车。按 V 下车。');
+  refreshUI();
+  return true;
+}
+function dismountVehicle() {
+  if (S.vehicle === 'bike') {
+    S.vehicle = null;
+    toast('下了车。');
+    refreshUI();
+  }
+}
+function updateVehicle(dt) {
+  /* 自行车的体力消耗减免已在 tryMovePlayer 里通过 S.vehicle 判断（见下） */
+}
+/* 传送：公交/渡轮 */
+function teleportByTransport(kind, fromId, toId) {
+  var v = D.VEHICLES[kind];
+  if (!v) return false;
+  if (S.player.money < v.cost) { toast('需要 ¥' + v.cost); return false; }
+  var ports = kind === 'bus' ? D.BUS_STOPS.map(function (id) { return poiById(id); }).filter(Boolean) : D.FERRY_PORTS;
+  var from = null, to = null;
+  for (var i = 0; i < ports.length; i++) {
+    if ((ports[i].id || ports[i].id === 0) === fromId) from = ports[i];
+    if ((ports[i].id || ports[i].id === 0) === toId) to = ports[i];
+  }
+  if (!from || !to) return false;
+  S.player.money -= v.cost;
+  S.player.x = to.x + 0.5; S.player.y = to.y + (to.h || 2) + 0.5;
+  /* 传送到不可走 tile 时挪到附近可走点 */
+  var w = findWalkableNear(Math.floor(S.player.x), Math.floor(S.player.y));
+  if (w) { S.player.x = w.x + 0.5; S.player.y = w.y + 0.5; }
+  camera.x = S.player.x; camera.y = S.player.y;
+  toast('乘坐' + v.name + '到达 ' + (to.name || to.id) + '（¥-' + v.cost + '）');
+  updateExplore();
+  refreshUI();
+  return true;
+}
+
+/* ---------- 多元敌人 spawnEnemyV2 ----------
+ * 取代 spawnShadowChance：根据 mainStage 和地点随机抽敌人类型。
+ */
+function spawnEnemyV2(dt) {
+  if (!isNight() || S.ending) return;
+  if (S.mainStage >= 6) return;
+  var px = Math.floor(S.player.x), py = Math.floor(S.player.y);
+  var inCity = inMap(px, py) && cityMask[idx(px, py)];
+  /* 城内不生成 boss/lurker；野外更危险 */
+  var totalCap = inCity ? 1 : 3;
+  if (shadows.length >= totalCap) return;
+  /* 生成概率：野外高于城内 */
+  var p = inCity ? 0.020 : 0.060;
+  if (Math.random() > dt * p) return;
+  /* 抽类型：默认 shadow，后期 mainStage>=3 解锁 ranged/splitter/lurker，>=5 解锁 boss（极低概率） */
+  var pool = ['shadow'];
+  if (S.mainStage >= 2) pool.push('ranged');
+  if (S.mainStage >= 3) pool.push('splitter', 'lurker');
+  if (S.mainStage >= 4 && !inCity && Math.random() < 0.04) pool.push('boss');
+  var kind = pool[Math.floor(Math.random() * pool.length)];
+  var def = D.ENEMIES[kind];
+  if (!def) { kind = 'shadow'; def = D.ENEMIES.shadow; }
+  var ang = Math.random() * Math.PI * 2, d = 9 + Math.random() * 6;
+  var sx = S.player.x + Math.cos(ang) * d, sy = S.player.y + Math.sin(ang) * d;
+  if (!inMap(Math.floor(sx), Math.floor(sy)) || isSolidV2(Math.floor(sx), Math.floor(sy))) return;
+  /* 按 mainStage 缩放 hp/atk */
+  var stg = S.mainStage;
+  var hpMul = 1 + stg * 0.25, atkMul = 1 + stg * 0.18;
+  shadows.push({
+    kind: kind, def: def,
+    x: sx, y: sy, wob: Math.random() * 7,
+    hp: Math.round(def.hp * hpMul), hpMax: Math.round(def.hp * hpMul),
+    atk: Math.round(def.atk * atkMul),
+    el: def.el, color: def.color
+  });
+  /* boss 出现时全局提示 */
+  if (kind === 'boss') {
+    logWorld('battle', '强烈的异常波动——回声巨影出现了！');
+    toast('⚠️ 回声巨影出现了！');
+  }
+}
+/* 战斗结算扩展：处理 boss 掉落核心、splitter 分裂 */
+function battleEndV2(win, fled) {
+  var s = battleShadow;
+  battleShadow = null;
+  if (win) {
+    shadows.splice(shadows.indexOf(s), 1);
+    var def = s.def || D.ENEMIES.shadow;
+    gainExp(def.exp + S.mainStage * 8);
+    /* 掉落 */
+    var drop = def.drop || 'crystal';
+    var n = def.dropN || 1;
+    if (Math.random() < 0.4) n += 1;
+    giveItem(drop, n);
+    logWorld('battle', '击退了 ' + def.name);
+    /* splitter 分裂：在原位置生成 2 个小残影 */
+    if (def.kind === 'splitter' && s.hp <= 0) {
+      /* 已死，不分裂（分裂在 hp <= 40% 时触发，由 updateShadows 处理） */
+    }
+  } else if (fled) {
+    var ang = Math.atan2(S.player.y - s.y, S.player.x - s.x);
+    S.player.x += Math.cos(ang) * 2; S.player.y += Math.sin(ang) * 2;
+  } else {
+    shadows.splice(shadows.indexOf(s), 1);
+    S.player.hp = 1;
+    S.player.money = Math.max(0, S.player.money - 20);
+    var home = poiById('home');
+    S.player.x = home.x + 1.5; S.player.y = home.y + home.h + 1;
+    logWorld('battle', '被 ' + (s.def ? s.def.name : '残影') + ' 击倒，恍惚中被送回了公寓（¥-20）');
+    toast('你在恍惚中被送回了公寓……（¥-20）');
+  }
+  refreshUI();
+}
+/* 玩家当前元素（基于装备/技能） */
+function playerElement() {
+  if (hasSkill('min5')) return 'ice';
+  var charm = S.player.equip.charm;
+  if (charm === 'charm_echo') return 'lightning';
+  var weapon = S.player.equip.weapon;
+  if (weapon === 'weapon_supp') return 'fire';
+  return 'normal';
+}
+function elementMul(atkEl, defEl) {
+  var chart = D.ELEMENT_CHART[atkEl];
+  if (!chart) return 1;
+  return chart[defEl] || 1;
+}
+
+/* ---------- NPC 需求系统 ----------
+ * 每个 NPC 每天可触发 1 个需求。S.npcNeeds[id] = { idx, fulfilled }。
+ * idx 是 NPC_NEEDS[id] 数组的下标。
+ */
+function initNpcNeeds() {
+  if (!S.npcNeeds) S.npcNeeds = {};
+  for (var i = 0; i < D.NPCS.length; i++) {
+    var id = D.NPCS[i].id;
+    if (!D.NPC_NEEDS[id]) continue;
+    if (!S.npcNeeds[id]) S.npcNeeds[id] = { idx: -1, fulfilled: 0, lastDay: 0 };
+  }
+}
+function resetNpcNeedsForNewDay() {
+  if (!S.npcNeeds) return;
+  for (var id in S.npcNeeds) {
+    if (!S.npcNeeds.hasOwnProperty(id)) continue;
+    var n = S.npcNeeds[id];
+    /* 每天随机抽一个新需求（如果昨天已完成） */
+    var pool = D.NPC_NEEDS[id];
+    if (!pool || !pool.length) continue;
+    if (n.fulfilled || n.idx < 0) {
+      n.idx = Math.floor(Math.random() * pool.length);
+      n.fulfilled = 0;
+      n.lastDay = S.day;
+    }
+  }
+}
+function getNpcNeed(id) {
+  if (!S.npcNeeds || !S.npcNeeds[id] || !D.NPC_NEEDS[id]) return null;
+  var n = S.npcNeeds[id];
+  if (n.idx < 0 || n.fulfilled) return null;
+  var need = D.NPC_NEEDS[id][n.idx];
+  if (!need) return null;
+  return {
+    want: need.want,
+    hint: need.dialog_hint,
+    done: need.dialog_done,
+    reward: need.reward,
+    npcId: id
+  };
+}
+function deliverNeed(id) {
+  var need = getNpcNeed(id);
+  if (!need) return false;
+  if (!hasItem(need.want, 1)) {
+    toast('身上没有 ' + (D.ITEMS[need.want] ? D.ITEMS[need.want].name : need.want));
+    return false;
+  }
+  takeItem(need.want, 1);
+  var r = need.reward || {};
+  if (r.aff) {
+    /* 直接调用 addAff，避开 G.min1 加成 */
+    S.npcAff[id] = Math.min(100, (S.npcAff[id] || 0) + r.aff);
+    var who = id;
+    for (var i = 0; i < D.NPCS.length; i++) if (D.NPCS[i].id === id) who = D.NPCS[i].name;
+    toast(who + ' 好感 +' + r.aff);
+  }
+  if (r.money) { S.player.money += r.money; toast('获得 ¥' + r.money); }
+  if (r.exp) gainExp(r.exp);
+  if (r.item) giveItem(r.item, 1);
+  S.npcNeeds[id].fulfilled = 1;
+  if (ui.dialogNeedDone) ui.dialogNeedDone(id, need.done);
+  else toast(need.done);
+  refreshUI();
+  return true;
+}
+
+/* ---------- 建筑模板一键放置 ----------
+ * 玩家选择模板 + 起点坐标，引擎铺地形+装饰，扣钱扣体力。
+ */
+function buildTemplate(tplId, x0, y0) {
+  var tpl = D.BUILD_TEMPLATES[tplId];
+  if (!tpl) return { ok: false, error: '模板不存在' };
+  if (S.player.money < tpl.cost) return { ok: false, error: '需要 ¥' + tpl.cost };
+  var st = calcStats();
+  if (S.player.sp < tpl.sp) return { ok: false, error: '体力不足' };
+  /* 检查区域是否可建（不压在 SOLID 或 POI 上） */
+  for (var y = y0; y < y0 + tpl.h; y++) {
+    for (var x = x0; x < x0 + tpl.w; x++) {
+      if (!inMap(x, y)) return { ok: false, error: '越界' };
+      var b = biomeAt(x, y);
+      if (SOLID[b] && b !== B.BUILD) return { ok: false, error: '该地形不可建（' + x + ',' + y + '）' };
+    }
+  }
+  /* 铺地形 */
+  for (var y = y0; y < y0 + tpl.h; y++)
+    for (var x = x0; x < x0 + tpl.w; x++)
+      if (inMap(x, y)) biomeMap[idx(x, y)] = tpl.b;
+  /* 铺装饰 */
+  for (var i = 0; i < tpl.decors.length; i++) {
+    var dc = tpl.decors[i];
+    var dx = x0 + dc.dx, dy = y0 + dc.dy;
+    if (inMap(dx, dy)) decorMap[idx(dx, dy)] = dc.d;
+  }
+  /* 记录 worldEdit */
+  applyAiBuild({ terrain: [{ shape: 'rect', x: x0, y: y0, w: tpl.w, h: tpl.h, b: tpl.b }], places: [], _tpl: tplId });
+  S.player.money -= tpl.cost;
+  S.player.sp = Math.max(0, S.player.sp - tpl.sp);
+  toast('已建造：' + tpl.icon + ' ' + tpl.name + '（¥-' + tpl.cost + ', 体力-' + tpl.sp + '）');
+  refreshUI();
+  if (ext3d) ext3d.markTerrainDirty();
+  return { ok: true };
+}
+
+/* ---------- AI 建设 v2 ----------
+ * 接收 { terrain:[], places:[], decors:[{x,y,d}], npcs:[...], event:{...} }
+ * terrain / places 走原 applyAiBuild；decors 走新逻辑；npcs 走 applyCustomNpc。
+ */
+function applyAiBuildV2(plan) {
+  if (!plan) return { ok: false, error: '空方案' };
+  var money = 0, sp = 0, tileCount = 0;
+  /* 1) terrain */
+  if (plan.terrain && plan.terrain.length) {
+    var r1 = applyAiBuild({ terrain: plan.terrain, places: [] });
+    if (r1 && r1.tile_count) tileCount += r1.tile_count;
+    if (r1 && r1.cost_money) money += r1.cost_money;
+    if (r1 && r1.cost_sp) sp += r1.cost_sp;
+  }
+  /* 2) places（用 applyAiBuild 的 places 字段） */
+  if (plan.places && plan.places.length) {
+    var r2 = applyAiBuild({ terrain: [], places: plan.places });
+    if (r2 && r2.cost_money) money += r2.cost_money;
+    if (r2 && r2.cost_sp) sp += r2.cost_sp;
+  }
+  /* 3) decors */
+  if (plan.decors && plan.decors.length) {
+    var dCost = 0;
+    for (var i = 0; i < plan.decors.length; i++) {
+      var d = plan.decors[i];
+      if (!inMap(d.x, d.y)) continue;
+      var dv = parseInt(d.d, 10);
+      if (!(dv in D.DECOR_TYPES)) continue;
+      decorMap[idx(d.x, d.y)] = dv;
+      dCost += 2;
+    }
+    money += dCost;
+    sp += Math.ceil(dCost / 10);
+    tileCount += plan.decors.length;
+  }
+  /* 4) npcs（自定义居民） */
+  if (plan.npcs && plan.npcs.length) {
+    for (var j = 0; j < plan.npcs.length; j++) {
+      var np = plan.npcs[j];
+      applyCustomNpc(np);
+      money += 30; sp += 8;
+    }
+  }
+  /* 5) event（追加到世界脉搏） */
+  if (plan.event && plan.event.title) {
+    try { triggerPulseGen(plan.event.title, false, plan.event); } catch (e) {}
+    money += 10;
+  }
+  if (ext3d) ext3d.markTerrainDirty();
+  return { ok: true, tile_count: tileCount, cost_money: money, cost_sp: sp };
+}
 
 })();

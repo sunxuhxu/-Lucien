@@ -93,6 +93,14 @@ guest_data/
 models/
 .diag/
 
+# ===== Static runtime artifacts =====
+static/img2img/
+static/img_quota/
+static/_diag.py
+static/_tut_s*.js
+static/*.gbk_bak
+static/*.bak
+
 # ===== Diagnostic / scratch scripts =====
 .diag_*.py
 .diag_*.ps1
@@ -222,3 +230,63 @@ world_places.json
 world_pulse.json
 xumo_avatar.json
 xumo_diary.json
+
+# ===== Additional runtime data =====
+users.json
+users_data/
+life_state.json.tmp*
+world_interiors.json
+font_library.json
+font_settings.json
+models3d.json
+api_settings.json
+review_summaries.json
+guest_cookie.txt
+
+# ===== Node modules =====
+node_modules/
+
+# ===== Katago engine =====
+katago/
+
+# ===== Plugin systems =====
+plugin_core/
+plugins/
+
+# ===== Temporary diagnostic scripts =====
+_*.js
+_*.py
+_*.ps1
+_*.txt
+_acorn_*.js
+_check_*.ps1
+_deep_check.js
+_diff_snapshot.js
+_esbuild_*.js
+_extract*.js
+_find_*.ps1
+_find_*.js
+_final_dep_check.ps1
+_head_*.txt
+_inline*.js
+_make_test*.js
+_recheck_scripts.js
+_scan_head.py
+_syntax_check*.ps1
+_test_*.js
+_test_*.ps1
+_track_depth.js
+_try_closers.js
+_verify_fix*.js
+_vm_check.js
+
+# ===== Additional temp files =====
+启动器.bat
+启动器.py
+启动远程访问.bat
+*.png.tmp
+me_avatar.jpg
+me_profile.json
+pay_qr.png
+xumo5.png
+_window_crop.png

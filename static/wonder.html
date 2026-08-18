@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>奇想功能�?· 许墨的颠覆性实验室</title>
+<title>奇想功能�?· 许墨的颠覆性实验室</title>
 <style>
 :root{
   --bg:#f3eefb;--elev:#ffffff;--card:#faf7fe;
@@ -203,34 +203,41 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
 </style>
 </head>
 <body>
+<style>
+/* 非主人（未通过 xumo2026 口令）隐藏所有语音功能 */
+body.voice-disabled #rcpVoiceBtn{display:none !important}
+</style>
+<script>
+fetch('/api/verify').then(function(r){return r.json()}).then(function(d){if(d&&!d.voice)document.body.classList.add('voice-disabled')}).catch(function(){});
+</script>
 <div class="wrap">
   <header>
-    <h1>奇想功能�?· 许墨的颠覆性实验室</h1>
-    <p>决策预言�?· 默契测验 · 悬疑事件�?· 反向剧场 · 年度报告 · 习惯管家 · 晚间回顾 · 记忆博物�?/p>
+    <h1>奇想功能�?· 许墨的颠覆性实验室</h1>
+    <p>决策预言�?· 默契测验 · 悬疑事件�?· 反向剧场 · 年度报告 · 习惯管家 · 晚间回顾 · 记忆博物�?/p>
   </header>
 
   <nav class="tabs" id="tabs">
-    <div class="tab on" data-p="p1"><span class="dot">🔮</span>预言�?/div>
+    <div class="tab on" data-p="p1"><span class="dot">🔮</span>预言�?/div>
     <div class="tab" data-p="p2"><span class="dot">💞</span>默契测验</div>
-    <div class="tab" data-p="p3"><span class="dot">🕵�?/span>事件�?/div>
+    <div class="tab" data-p="p3"><span class="dot">🕵�?/span>事件�?/div>
     <div class="tab" data-p="p4"><span class="dot">🎭</span>剧场</div>
     <div class="tab" data-p="p5"><span class="dot">📜</span>年度报告</div>
-    <div class="tab" data-p="p6"><span class="dot">�?/span>习惯管家</div>
+    <div class="tab" data-p="p6"><span class="dot">�?/span>习惯管家</div>
     <div class="tab" data-p="p7"><span class="dot">🌙</span>晚间回顾</div>
-    <div class="tab" data-p="p8"><span class="dot">🏛�?/span>博物�?/div>
+    <div class="tab" data-p="p8"><span class="dot">🏛�?/span>博物�?/div>
   </nav>
 
-  <!-- ============ 1. 决策预言�?============ -->
+  <!-- ============ 1. 决策预言�?============ -->
   <section class="panel on" id="p1">
     <div class="card">
-      <h3><span class="bar"></span>选择困难症终结�?/h3>
+      <h3><span class="bar"></span>选择困难症终结�?/h3>
       <label>你的问题</label>
       <input type="text" id="oracleQ" placeholder="例如：今晚要不要去那家新开的餐厅？">
-      <label>选项（至�?2 个）</label>
+      <label>选项（至�?2 个）</label>
       <div id="oracleOpts"></div>
       <div class="btn-row">
-        <button class="btn ghost small" onclick="addOracleOpt()">�?添加选项</button>
-        <button class="btn" onclick="oracleAsk()" id="oracleBtn">让许墨拍�?/button>
+        <button class="btn ghost small" onclick="addOracleOpt()">�?添加选项</button>
+        <button class="btn" onclick="oracleAsk()" id="oracleBtn">让许墨拍�?/button>
       </div>
       <div id="oracleRes" class="msg"></div>
     </div>
@@ -238,7 +245,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
       <h3><span class="bar"></span>预言记录与准确率</h3>
       <div class="stat-row" id="oracleStats"></div>
       <div id="oracleList"></div>
-      <div class="empty" id="oracleEmpty" style="display:none">还没有预言记录。给许墨一个机会，他不会让你失望�?/div>
+      <div class="empty" id="oracleEmpty" style="display:none">还没有预言记录。给许墨一个机会，他不会让你失望�?/div>
     </div>
   </section>
 
@@ -246,7 +253,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
   <section class="panel" id="p2">
     <div class="card">
       <h3><span class="bar"></span>你有多了解自己？许墨有多了解你？</h3>
-      <p class="hint">许墨会基于你的记忆、朋友圈和约会记录出 5 道题。你来答题，比对你们两人的默契�?/p>
+      <p class="hint">许墨会基于你的记忆、朋友圈和约会记录出 5 道题。你来答题，比对你们两人的默契�?/p>
       <div class="btn-row">
         <button class="btn" onclick="quizNew()" id="quizNewBtn">出题</button>
         <button class="btn ghost" onclick="quizList()">历史记录</button>
@@ -260,36 +267,36 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     </div>
   </section>
 
-  <!-- ============ 3. 每日悬疑事件�?============ -->
+  <!-- ============ 3. 每日悬疑事件�?============ -->
   <section class="panel" id="p3">
     <div class="card">
       <h3><span class="bar"></span>今日案件</h3>
       <div class="stat-row" id="caseStats"></div>
       <div id="caseBody"></div>
-      <div id="caseEmpty" class="empty" style="display:none">今日案件尚未发布。许墨正在黑天鹅档案馆里翻阅卷宗…�?/div>
+      <div id="caseEmpty" class="empty" style="display:none">今日案件尚未发布。许墨正在黑天鹅档案馆里翻阅卷宗…�?/div>
     </div>
     <div class="card">
       <h3><span class="bar"></span>案件档案</h3>
       <div id="caseHist"></div>
-      <div class="empty" id="caseHistEmpty">档案室空空如�?/div>
+      <div class="empty" id="caseHistEmpty">档案室空空如�?/div>
     </div>
   </section>
 
   <!-- ============ 4. 反向扮演剧场 ============ -->
   <section class="panel" id="p4">
     <div class="card">
-      <h3><span class="bar"></span>你演许墨，她演女�?/h3>
-      <label>主题词（可留空，让许墨随缘挑�?/label>
-      <input type="text" id="thTheme" placeholder="例如：雨�?/ 实验�?/ 天台观星 / 被放鸽子">
+      <h3><span class="bar"></span>你演许墨，她演女�?/h3>
+      <label>主题词（可留空，让许墨随缘挑�?/label>
+      <input type="text" id="thTheme" placeholder="例如：雨�?/ 实验�?/ 天台观星 / 被放鸽子">
       <div class="btn-row">
-        <button class="btn" onclick="thNew()">开一场新�?/button>
+        <button class="btn" onclick="thNew()">开一场新�?/button>
       </div>
       <div id="thArea" class="msg"></div>
     </div>
     <div class="card">
       <h3><span class="bar"></span>演出档案</h3>
       <div id="thHist"></div>
-      <div class="empty" id="thHistEmpty">还没有演出记录。舞台已经搭好，等你上台�?/div>
+      <div class="empty" id="thHistEmpty">还没有演出记录。舞台已经搭好，等你上台�?/div>
     </div>
   </section>
 
@@ -299,7 +306,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
       <h3><span class="bar"></span>生成年度关系报告</h3>
       <label>年份</label>
       <input type="text" id="rpYear" value="">
-      <p class="hint">许墨会汇总这一年的聊天、记忆、约会、朋友圈与时光盒数据，写一封只属于你们两人的年度报告�?/p>
+      <p class="hint">许墨会汇总这一年的聊天、记忆、约会、朋友圈与时光盒数据，写一封只属于你们两人的年度报告�?/p>
       <div class="btn-row">
         <button class="btn" onclick="rpGen()" id="rpGenBtn">生成报告</button>
       </div>
@@ -308,7 +315,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>历年报告</h3>
       <div id="rpHist"></div>
-      <div class="empty" id="rpHistEmpty">还没有报告。让许墨为你们写第一封吧�?/div>
+      <div class="empty" id="rpHistEmpty">还没有报告。让许墨为你们写第一封吧�?/div>
     </div>
   </section>
 
@@ -319,7 +326,7 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
       <div class="stat-row" id="habitStats"></div>
       <div id="habitList"></div>
       <div class="btn-row">
-        <button class="btn" onclick="habitEnc()" id="habitEncBtn">求一句夸�?/button>
+        <button class="btn" onclick="habitEnc()" id="habitEncBtn">求一句夸�?/button>
         <button class="btn ghost" onclick="habitList2()">刷新</button>
       </div>
       <div id="habitEnc" class="msg"></div>
@@ -327,9 +334,9 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
     <div class="card">
       <h3><span class="bar"></span>新建习惯</h3>
       <label>习惯名称</label>
-      <input type="text" id="habitName" placeholder="例如：喝�?/ 23 点前睡觉 / 久坐 1 小时起来走走">
-      <label>每日提醒时间（可选，到点提醒未打卡项�?/label>
-      <input type="text" id="habitTime" placeholder="例如�?1:00，留空则不提�?>
+      <input type="text" id="habitName" placeholder="例如：喝�?/ 23 点前睡觉 / 久坐 1 小时起来走走">
+      <label>每日提醒时间（可选，到点提醒未打卡项�?/label>
+      <input type="text" id="habitTime" placeholder="例如�?1:00，留空则不提�?>
       <div class="btn-row">
         <button class="btn pink" onclick="habitAdd()">添加习惯</button>
         <button class="btn ghost" onclick="habitRemind()">保存提醒</button>
@@ -342,52 +349,52 @@ footer{text-align:center;font-size:11.5px;color:var(--faint);padding:18px 0}
   <section class="panel" id="p7">
     <div class="card">
       <h3><span class="bar"></span>今日回顾播报</h3>
-      <p class="hint">许墨会翻看你们今天的对话与经历，写一段睡前电台式的回顾；还可以让他的声音念给你听�?/p>
+      <p class="hint">许墨会翻看你们今天的对话与经历，写一段睡前电台式的回顾；还可以让他的声音念给你听�?/p>
       <div class="btn-row">
         <button class="btn" onclick="rcpGen(false)">生成回顾</button>
         <button class="btn ghost" onclick="rcpGen(true)">重新生成</button>
-        <button class="btn pink" onclick="rcpVoice()" id="rcpVoiceBtn">合成许墨的声�?/button>
+        <button class="btn pink" onclick="rcpVoice()" id="rcpVoiceBtn">合成许墨的声�?/button>
       </div>
       <div id="rcpArea" class="msg"></div>
     </div>
     <div class="card">
       <h3><span class="bar"></span>回顾存档</h3>
       <div id="rcpHist"></div>
-      <div class="empty" id="rcpHistEmpty">还没有回顾存档。今晚，让许墨陪你收个尾�?/div>
+      <div class="empty" id="rcpHistEmpty">还没有回顾存档。今晚，让许墨陪你收个尾�?/div>
     </div>
   </section>
 
-  <!-- ============ 8. 记忆博物�?============ -->
+  <!-- ============ 8. 记忆博物�?============ -->
   <section class="panel" id="p8">
     <div class="card">
-      <h3><span class="bar"></span>时光�?/h3>
-      <p class="hint">记忆、朋友圈、约会、纪念日、日记……都被编织在同一条时间线上。点击「收藏为展品」�?/p>
+      <h3><span class="bar"></span>时光�?/h3>
+      <p class="hint">记忆、朋友圈、约会、纪念日、日记……都被编织在同一条时间线上。点击「收藏为展品」�?/p>
       <div id="tlList"></div>
-      <div class="empty" id="tlEmpty" style="display:none">时光轴还是空的。去和许墨创造点回忆吧�?/div>
+      <div class="empty" id="tlEmpty" style="display:none">时光轴还是空的。去和许墨创造点回忆吧�?/div>
     </div>
     <div class="card">
       <h3><span class="bar"></span>馆藏展品</h3>
       <div class="btn-row">
-        <button class="btn ghost" onclick="tlRefresh()">刷新时光�?/button>
-        <button class="btn" onclick="museumTour()">让许墨导�?/button>
+        <button class="btn ghost" onclick="tlRefresh()">刷新时光�?/button>
+        <button class="btn" onclick="museumTour()">让许墨导�?/button>
       </div>
       <div id="musTour" class="msg"></div>
       <div id="musList"></div>
-      <div class="empty" id="musEmpty" style="display:none">展馆空空如也。把最珍贵的瞬间挂上墙吧�?/div>
+      <div class="empty" id="musEmpty" style="display:none">展馆空空如也。把最珍贵的瞬间挂上墙吧�?/div>
     </div>
   </section>
 
-  <footer>许墨 · 记忆是唯一不会背叛我们的证�?/footer>
+  <footer>许墨 · 记忆是唯一不会背叛我们的证�?/footer>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-const TAB_ICON = {p1:'🔮',p2:'💞',p3:'🕵�?,p4:'🎭',p5:'📜',p6:'�?,p7:'🌙',p8:'🏛�?};
+const TAB_ICON = {p1:'🔮',p2:'💞',p3:'🕵�?,p4:'🎭',p5:'📜',p6:'�?,p7:'🌙',p8:'🏛�?};
 let curQuiz = null, curCase = null, curScene = null, curRecap = null, oracleSel = [], tlCache = [];
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fmtTs(ts){return esc(ts)}
-function busy(btnId,on){const b=$(btnId);if(!b)return;if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span> 处理中�?}else if(b.dataset.t){b.innerHTML=b.dataset.t;delete b.dataset.t}}
+function busy(btnId,on){const b=$(btnId);if(!b)return;if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span> 处理中�?}else if(b.dataset.t){b.innerHTML=b.dataset.t;delete b.dataset.t}}
 async function api(url,opts){
   const r = await fetch(url,Object.assign({headers:{'Content-Type':'application/json'}},opts));
   let d = {};
@@ -405,11 +412,11 @@ document.getElementById('tabs').addEventListener('click',function(e){
   if(t.dataset.p==='p8'){tlLoad()}
 });
 
-/* ================= 1. 预言�?================= */
+/* ================= 1. 预言�?================= */
 function addOracleOpt(v){
   const d = document.createElement('div'); d.className='opt';
   d.innerHTML='<input type="text" value="'+esc(v||'')+'" placeholder="选项">'+
-    '<button class="btn ghost small" onclick="this.parentNode.remove()">�?/button>';
+    '<button class="btn ghost small" onclick="this.parentNode.remove()">�?/button>';
   $('oracleOpts').appendChild(d);
 }
 function oracleOpts(){
@@ -422,8 +429,8 @@ async function oracleAsk(){
   try{
     const d = await api('/api/oracle/ask',{method:'POST',body:JSON.stringify({question:q,options:opts})});
     $('oracleRes').innerHTML='<div class="item"><div class="t">'+esc(d.item.question)+'</div>'+
-      '<div class="s">许墨的选择�?b>'+esc(d.item.pick)+'</b><br>'+esc(d.item.reason)+'</div>'+
-      '<div class="m">'+fmtTs(d.item.ts)+' · 结果揭晓后告诉我准不�?/div></div>';
+      '<div class="s">许墨的选择�?b>'+esc(d.item.pick)+'</b><br>'+esc(d.item.reason)+'</div>'+
+      '<div class="m">'+fmtTs(d.item.ts)+' · 结果揭晓后告诉我准不�?/div></div>';
     $('oracleQ').value='';$('oracleOpts').innerHTML='';
     oracleList();
   }catch(e){$('oracleRes').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
@@ -435,19 +442,19 @@ async function oracleList(){
     const s=d.stats;
     $('oracleStats').innerHTML=
       '<div class="stat"><b>'+s.total+'</b><span>预言总数</span></div>'+
-      '<div class="stat"><b>'+(s.accuracy||'--')+'%</b><span>准确�?/span></div>'+
+      '<div class="stat"><b>'+(s.accuracy||'--')+'%</b><span>准确�?/span></div>'+
       '<div class="stat"><b>'+s.right+'</b><span>命中</span></div>'+
       '<div class="stat"><b>'+s.wrong+'</b><span>翻车</span></div>'+
-      '<div class="stat"><b>'+s.pending+'</b><span>待揭�?/span></div>';
+      '<div class="stat"><b>'+s.pending+'</b><span>待揭�?/span></div>';
     if(!d.items.length){$('oracleEmpty').style.display='block';$('oracleList').innerHTML='';return}
     $('oracleEmpty').style.display='none';
     $('oracleList').innerHTML=d.items.map(it=>{
-      const st=it.status==='right'?'<span class="badge green">命中</span>':it.status==='wrong'?'<span class="badge red">翻车</span>':'<span class="badge">待揭�?/span>';
+      const st=it.status==='right'?'<span class="badge green">命中</span>':it.status==='wrong'?'<span class="badge red">翻车</span>':'<span class="badge">待揭�?/span>';
       const btns=it.status==='pending'?
-        '<div class="btn-row"><button class="btn small" onclick="oracleVerdict(\''+it.id+'\',\'right\')">选对�?/button>'+
-        '<button class="btn small pink" onclick="oracleVerdict(\''+it.id+'\',\'wrong\')">选错�?/button></div>':'';
+        '<div class="btn-row"><button class="btn small" onclick="oracleVerdict(\''+it.id+'\',\'right\')">选对�?/button>'+
+        '<button class="btn small pink" onclick="oracleVerdict(\''+it.id+'\',\'wrong\')">选错�?/button></div>':'';
       return '<div class="item"><div class="t">'+esc(it.question)+' '+st+'</div>'+
-        '<div class="s">许墨�?b>'+esc(it.pick)+'</b> �?'+esc(it.reason)+'</div>'+
+        '<div class="s">许墨�?b>'+esc(it.pick)+'</b> �?'+esc(it.reason)+'</div>'+
         '<div class="m">'+fmtTs(it.ts)+'</div>'+btns+'</div>';
     }).join('');
   }catch(e){}
@@ -464,14 +471,14 @@ async function quizNew(){
     const d = await api('/api/quiz/generate',{method:'POST',body:'{}'});
     curQuiz=d.quiz;
     $('quizArea').innerHTML='<div class="item"><div class="t">许墨出题完成</div>'+
-      '<div class="s">�?'+curQuiz.questions.length+' 题，凭直觉回答就好。答完后我会告诉你，你们有多默契�?/div></div>'+
+      '<div class="s">�?'+curQuiz.questions.length+' 题，凭直觉回答就好。答完后我会告诉你，你们有多默契�?/div></div>'+
       curQuiz.questions.map((q,qi)=>{
         return '<div class="quiz-q"><div class="q">'+(qi+1)+'. '+esc(q.q)+'</div>'+
           q.options.map((o,oi)=>{
             return '<label class="opt"><input type="radio" name="q'+qi+'" value="'+esc(o)+'" onclick="quizPick('+qi+','+oi+')"><span>'+esc(o)+'</span></label>';
           }).join('')+'</div>';
       }).join('')+
-      '<div class="btn-row"><button class="btn" onclick="quizSubmit()">交卷，比对默�?/button></div>';
+      '<div class="btn-row"><button class="btn" onclick="quizSubmit()">交卷，比对默�?/button></div>';
   }catch(e){$('quizArea').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
   busy('quizNewBtn',false);
 }
@@ -482,17 +489,17 @@ function quizPick(qi,oi){
   q.pick=q.options[oi];
 }
 async function quizSubmit(){
-  if(!curQuiz||curQuiz.questions.some(q=>!q.pick)){$('quizArea').innerHTML='<span class="msg err">还有题目没回�?/span>';return}
+  if(!curQuiz||curQuiz.questions.some(q=>!q.pick)){$('quizArea').innerHTML='<span class="msg err">还有题目没回�?/span>';return}
   try{
     const d = await api('/api/quiz/submit',{method:'POST',body:JSON.stringify({quiz_id:curQuiz.id,answers:curQuiz.questions.map(q=>q.pick)})});
     const score=d.score;
     const color=score>=80?'#059669':score>=60?'#b45309':'#dc2626';
-    $('quizArea').innerHTML='<div class="item"><div class="t">默契�?<b style="font-size:24px;color:'+color+'">'+score+'</b> / 100</div>'+
+    $('quizArea').innerHTML='<div class="item"><div class="t">默契�?<b style="font-size:24px;color:'+color+'">'+score+'</b> / 100</div>'+
       '<div class="s">'+esc(d.quiz.verdict)+'</div></div>'+
       d.detail.map((x,i)=>{
         return '<div class="item"><div class="t">'+(i+1)+'. '+esc(x.q)+' '+
           (x.correct?'<span class="badge green">默契</span>':'<span class="badge red">偏差</span>')+'</div>'+
-          '<div class="s">许墨的答案：<b>'+esc(x.answer)+'</b>（你的答案：'+esc(x.user||'未答')+'�?/div>'+
+          '<div class="s">许墨的答案：<b>'+esc(x.answer)+'</b>（你的答案：'+esc(x.user||'未答')+'�?/div>'+
           (x.reason?'<div class="m">许墨的理由：'+esc(x.reason)+'</div>':'')+'</div>';
       }).join('');
     quizList();
@@ -504,15 +511,15 @@ async function quizList(){
     if(!d.quizzes.length){$('quizHistEmpty').style.display='block';$('quizHist').innerHTML='';return}
     $('quizHistEmpty').style.display='none';
     $('quizHist').innerHTML=d.quizzes.map(q=>{
-      return '<div class="item"><div class="t">'+fmtTs(q.ts)+' <span class="badge pink">'+q.score+' �?/span>'+
-        (q.status==='pending'?'<span class="badge">未作�?/span>':'')+'</div>'+
+      return '<div class="item"><div class="t">'+fmtTs(q.ts)+' <span class="badge pink">'+q.score+' �?/span>'+
+        (q.status==='pending'?'<span class="badge">未作�?/span>':'')+'</div>'+
         (q.verdict?'<div class="s">'+esc(q.verdict)+'</div>':'')+
-        '<div class="m">�?'+(q.questions||[]).length+' �?· 历史最�?'+d.stats.best+'</div></div>';
+        '<div class="m">�?'+(q.questions||[]).length+' �?· 历史最�?'+d.stats.best+'</div></div>';
     }).join('');
   }catch(e){}
 }
 
-/* ================= 3. 悬疑事件�?================= */
+/* ================= 3. 悬疑事件�?================= */
 async function caseInit(){await caseHist();}
 async function caseNew(){
   busy('caseNewBtn',true);
@@ -533,26 +540,26 @@ async function caseLoad(){
       '<div class="stat"><b>'+st.stats.points+'</b><span>积分</span></div>';
     if(!d.case){curCase=null;
       $('caseBody').innerHTML='<div class="empty">今日案件尚未发布</div>'+
-        '<div class="btn-row"><button class="btn" id="caseNewBtn" onclick="caseNew()">许墨，发布今日案�?/button></div>';
+        '<div class="btn-row"><button class="btn" id="caseNewBtn" onclick="caseNew()">许墨，发布今日案�?/button></div>';
       return}
     curCase=d.case;
     const c=d.case;
-    const solved=c.solved?'<span class="badge green">已破�?+'+c.score+'�?/span>':c.submitted?'<span class="badge">已提交，等许墨判�?/span>':'';
+    const solved=c.solved?'<span class="badge green">已破�?+'+c.score+'�?/span>':c.submitted?'<span class="badge">已提交，等许墨判�?/span>':'';
     $('caseBody').innerHTML='<div class="item"><div class="t">'+esc(c.title)+' '+solved+'<span class="badge">'+esc(c.diff||'normal')+'</span></div>'+
       '<div class="s" style="white-space:pre-wrap">'+esc(c.story)+'</div>'+
       '<div class="m">'+esc(c.date)+' · 已用线索 '+(c.clues||[]).length+'/3</div>'+
       (c.clues&&c.clues.length?'<div class="divider"></div><div class="s">'+
-        c.clues.map(x=>'<b>线索'+x.n+'</b>�?+esc(x.text)).join('<br>')+'</div>':'')+
-      (c.verdict?'<div class="divider"></div><div class="s">许墨判定�?b>'+
-        (c.verdict==='correct'?'正确':c.verdict==='close'?'接近真相':'偏离�?)+'</b> '+esc(c.comment||'')+'</div>':'')+
-      (c.solved?'<div class="divider"></div><div class="s"><b>真相</b>�?+esc(c.answer)+'</div>':'')+
+        c.clues.map(x=>'<b>线索'+x.n+'</b>�?+esc(x.text)).join('<br>')+'</div>':'')+
+      (c.verdict?'<div class="divider"></div><div class="s">许墨判定�?b>'+
+        (c.verdict==='correct'?'正确':c.verdict==='close'?'接近真相':'偏离�?)+'</b> '+esc(c.comment||'')+'</div>':'')+
+      (c.solved?'<div class="divider"></div><div class="s"><b>真相</b>�?+esc(c.answer)+'</div>':'')+
       '</div>';
     if(!c.solved){
       $('caseBody').innerHTML+='<div class="btn-row">'+
-        '<button class="btn ghost small" onclick="caseClue()"'+(c.submitted?' disabled':'')+'>要一条线索（�?'+(3-(c.clues||[]).length)+'�?/button></div>';
+        '<button class="btn ghost small" onclick="caseClue()"'+(c.submitted?' disabled':'')+'>要一条线索（�?'+(3-(c.clues||[]).length)+'�?/button></div>';
       if(!c.submitted){
         $('caseBody').innerHTML+='<label>你的推理答案</label><textarea id="caseAns" placeholder="写下你的答案"></textarea>'+
-          '<label>推理过程</label><textarea id="caseWhy" placeholder="你的推理链条…�?></textarea>'+
+          '<label>推理过程</label><textarea id="caseWhy" placeholder="你的推理链条…�?></textarea>'+
           '<div class="btn-row"><button class="btn" onclick="caseSubmit()">提交推理</button></div>';
       }else if(!c.solved){
         $('caseBody').innerHTML+='<div class="btn-row"><button class="btn" onclick="caseReveal()">揭晓真相</button></div>';
@@ -587,8 +594,8 @@ async function caseHist(){
     $('caseHistEmpty').style.display='none';
     $('caseHist').innerHTML=d.cases.map(c=>{
       return '<div class="item"><div class="t">'+esc(c.date)+' · '+esc(c.title)+
-        (c.solved?'<span class="badge green">'+c.score+'�?/span>':c.submitted?'<span class="badge">待揭�?/span>':'<span class="badge">未解</span>')+
-        '</div><div class="m">'+esc(c.user_answer||'未作�?)+'</div></div>';
+        (c.solved?'<span class="badge green">'+c.score+'�?/span>':c.submitted?'<span class="badge">待揭�?/span>':'<span class="badge">未解</span>')+
+        '</div><div class="m">'+esc(c.user_answer||'未作�?)+'</div></div>';
     }).join('');
   }catch(e){}
 }
@@ -608,19 +615,19 @@ function renderScene(){
   const s=curScene;
   let html='<div class="item"><div class="t">'+esc(s.title)+'</div>'+
     '<div class="s">'+esc(s.setting)+'</div>'+
-    '<div class="m">'+fmtTs(s.ts)+' · '+(s.status==='done'?'已谢�?:'演出�?)+'</div></div>'+
+    '<div class="m">'+fmtTs(s.ts)+' · '+(s.status==='done'?'已谢�?:'演出�?)+'</div></div>'+
     '<div class="dialogue" id="thDial">'+s.lines.map(l=>
-      '<div class="dlg '+(l.role==='you'?'you':'her')+'"><div class="who">'+(l.role==='you'?'�?许墨)':'女主')+'</div><div class="bub">'+esc(l.text)+'</div></div>'
+      '<div class="dlg '+(l.role==='you'?'you':'her')+'"><div class="who">'+(l.role==='you'?'�?许墨)':'女主')+'</div><div class="bub">'+esc(l.text)+'</div></div>'
     ).join('')+'</div>';
   if(s.status==='acting'){
-    html+='<input type="text" id="thLine" placeholder="以许墨的身份说一句台词…�? onkeydown="if(event.key===\'Enter\')thAct()">'+
-      '<div class="btn-row"><button class="btn" onclick="thAct()">说这�?/button>'+
+    html+='<input type="text" id="thLine" placeholder="以许墨的身份说一句台词…�? onkeydown="if(event.key===\'Enter\')thAct()">'+
+      '<div class="btn-row"><button class="btn" onclick="thAct()">说这�?/button>'+
       '<button class="btn pink" onclick="thFinish()">谢幕，请许墨点评</button></div>';
   }else{
     const dims=s.dims||{};
-    html+='<div class="item"><div class="t">许墨的评�?<span class="badge pink">'+s.score+' �?/span></div>'+
+    html+='<div class="item"><div class="t">许墨的评�?<span class="badge pink">'+s.score+' �?/span></div>'+
       '<div class="s">'+esc(s.review)+'</div>'+
-      (s.suggestion?'<div class="m">改进建议�?+esc(s.suggestion)+'</div>':'')+
+      (s.suggestion?'<div class="m">改进建议�?+esc(s.suggestion)+'</div>':'')+
       (Object.keys(dims).length?'<div class="divider"></div>'+
         Object.entries(dims).map(([k,v])=>'<div style="font-size:12px;color:var(--dim)">'+esc(k)+' '+v+'</div>'+
           '<div class="dim-bar"><i style="width:'+v+'%"></i></div>').join(''):'')+
@@ -638,7 +645,7 @@ async function thAct(){
   }catch(e){alert(e.message)}
 }
 async function thFinish(){
-  if(!confirm('要谢幕并请许墨点评这场演出吗�?))return;
+  if(!confirm('要谢幕并请许墨点评这场演出吗�?))return;
   busy('thFinBtn',true);
   try{
     const d = await api('/api/theater/'+curScene.id+'/finish',{method:'POST'});
@@ -653,8 +660,8 @@ async function thHist(){
     $('thHistEmpty').style.display='none';
     $('thHist').innerHTML=d.scenes.map(s=>
       '<div class="item"><div class="t">'+esc(s.title)+
-      (s.status==='done'?'<span class="badge pink">'+s.score+' �?/span>':'<span class="badge">演出�?/span>')+
-      '</div><div class="m">'+fmtTs(s.ts)+' · '+s.lines.length+' 句台�?/div></div>'
+      (s.status==='done'?'<span class="badge pink">'+s.score+' �?/span>':'<span class="badge">演出�?/span>')+
+      '</div><div class="m">'+fmtTs(s.ts)+' · '+s.lines.length+' 句台�?/div></div>'
     ).join('');
   }catch(e){}
 }
@@ -674,19 +681,19 @@ function renderRp(rep){
   $('rpArea').innerHTML=
     '<div class="item"><div class="t">'+rep.year+' 年度关系报告</div>'+
     '<div class="s" style="white-space:pre-wrap;margin-top:8px">'+esc(r.opening)+'</div></div>'+
-    '<div class="item"><div class="t">年度关键�?/div><div style="margin-top:6px">'+
+    '<div class="item"><div class="t">年度关键�?/div><div style="margin-top:6px">'+
     (r.keywords||[]).map(k=>'<span class="kw">'+esc(k)+'</span>').join('')+'</div></div>'+
     '<div class="item"><div class="t">那些瞬间</div>'+
-    (r.moments||[]).map(m=>'<div class="s"><b>'+esc(m.title)+'</b>�?+esc(m.desc)+'</div>').join('')+'</div>'+
+    (r.moments||[]).map(m=>'<div class="s"><b>'+esc(m.title)+'</b>�?+esc(m.desc)+'</div>').join('')+'</div>'+
     '<div class="item"><div class="t">这一年的数据</div><div class="stat-row">'+
-    '<div class="stat"><b>'+esc(r.data?.affinity??rep.summary.affinity)+'</b><span>好感�?/span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.affinity??rep.summary.affinity)+'</b><span>好感�?/span></div>'+
     '<div class="stat"><b>'+esc(r.data?.dates??rep.summary.dates)+'</b><span>约会次数</span></div>'+
-    '<div class="stat"><b>'+esc(r.data?.memories??rep.summary.memories)+'</b><span>许墨的记�?/span></div>'+
-    '<div class="stat"><b>'+esc(r.data?.moments??rep.summary.moments)+'</b><span>朋友�?/span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.memories??rep.summary.memories)+'</b><span>许墨的记�?/span></div>'+
+    '<div class="stat"><b>'+esc(r.data?.moments??rep.summary.moments)+'</b><span>朋友�?/span></div>'+
     '<div class="stat"><b>'+esc(r.data?.convos??rep.summary.conversations)+'</b><span>对话轮数</span></div>'+
     '</div></div>'+
-    '<div class="item"><div class="t">许墨的年度心�?/div><div class="s">'+esc(r.heart)+'</div></div>'+
-    '<div class="item"><div class="t">来年的约�?/div><div class="s">'+esc(r.promise)+'</div></div>';
+    '<div class="item"><div class="t">许墨的年度心�?/div><div class="s">'+esc(r.heart)+'</div></div>'+
+    '<div class="item"><div class="t">来年的约�?/div><div class="s">'+esc(r.promise)+'</div></div>';
   rpHist();
 }
 async function rpHist(){
@@ -715,11 +722,11 @@ async function habitList2(){
       '<div class="stat"><b>'+d.habits.length+'</b><span>习惯</span></div>'+
       '<div class="stat"><b>'+d.done+'</b><span>今日完成</span></div>'+
       '<div class="stat"><b>'+d.habits.filter(h=>h.streak>0).length+'</b><span>保持连续</span></div>';
-    if(!d.habits.length){$('habitList').innerHTML='<div class="empty">还没有习惯。先立一个小目标�?/div>';return}
+    if(!d.habits.length){$('habitList').innerHTML='<div class="empty">还没有习惯。先立一个小目标�?/div>';return}
     $('habitList').innerHTML=d.habits.map(h=>
       '<div class="item"><div class="t">'+esc(h.emoji)+' '+esc(h.name)+
-      (h.done_today?'<span class="badge green">今日完成</span>':'<span class="badge">未打�?/span>')+
-      '</div><div class="m">连续 '+h.streak+' �?· 最�?'+h.best+' · 累计 '+h.total+' �?/div>'+
+      (h.done_today?'<span class="badge green">今日完成</span>':'<span class="badge">未打�?/span>')+
+      '</div><div class="m">连续 '+h.streak+' �?· 最�?'+h.best+' · 累计 '+h.total+' �?/div>'+
       '<div class="btn-row"><button class="btn small '+(h.done_today?'ghost pink':'')+'" onclick="habitCheck(\''+h.id+'\')">'+
       (h.done_today?'取消打卡':'打卡')+'</button></div></div>'
     ).join('');
@@ -733,10 +740,10 @@ async function habitCheck(hid){
 }
 async function habitAdd(){
   const name=$('habitName').value.trim();
-  if(!name){$('habitMsg').innerHTML='<span class="msg err">请填写习惯名�?/span>';return}
+  if(!name){$('habitMsg').innerHTML='<span class="msg err">请填写习惯名�?/span>';return}
   try{
     await api('/api/habit',{method:'POST',body:JSON.stringify({name})});
-    $('habitName').value='';$('habitMsg').innerHTML='<span class="msg ok">习惯已收录�?/span>';
+    $('habitName').value='';$('habitMsg').innerHTML='<span class="msg ok">习惯已收录�?/span>';
     habitList2();
   }catch(e){$('habitMsg').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
 }
@@ -744,7 +751,7 @@ async function habitRemind(){
   const t=$('habitTime').value.trim();
   try{
     await api('/api/habit/remind',{method:'POST',body:JSON.stringify({time:t})});
-    $('habitMsg').innerHTML='<span class="msg ok">'+(t?'已设置每�?'+t+' 提醒':'已取消提�?)+'�?/span>';
+    $('habitMsg').innerHTML='<span class="msg ok">'+(t?'已设置每�?'+t+' 提醒':'已取消提�?)+'�?/span>';
   }catch(e){$('habitMsg').innerHTML='<span class="msg err">'+esc(e.message)+'</span>'}
 }
 async function habitEnc(){
@@ -762,7 +769,7 @@ setInterval(async()=>{
   try{
     const d = await api('/api/habit/reminder');
     if(d.due){
-      const pending=d.pending.length?'未打卡：'+d.pending.join('�?)+'�?:'今天的习惯都完成了，辛苦了�?;
+      const pending=d.pending.length?'未打卡：'+d.pending.join('�?)+'�?:'今天的习惯都完成了，辛苦了�?;
       alert('许墨的提醒：'+pending);
       habitList2();
     }
@@ -801,14 +808,14 @@ async function rcpHist(){
     $('rcpHistEmpty').style.display='none';
     $('rcpHist').innerHTML=d.recaps.map(r=>
       '<div class="item"><div class="t">'+esc(r.date)+' 晚间回顾</div>'+
-      '<div class="s">'+esc(r.text.slice(0,80))+'�?/div>'+
+      '<div class="s">'+esc(r.text.slice(0,80))+'�?/div>'+
       (r.audio?'<audio class="audio-player" controls src="'+r.audio+'"></audio>':'')+
       '</div>'
     ).join('');
   }catch(e){}
 }
 
-/* ================= 8. 博物�?================= */
+/* ================= 8. 博物�?================= */
 async function tlLoad(){
   try{
     const d = await api('/api/museum/timeline');
@@ -818,7 +825,7 @@ async function tlLoad(){
     $('tlList').innerHTML=d.items.map(it=>
       '<div class="item"><div class="t"><span class="tl-type">'+esc(it.label)+'</span> '+fmtTs(it.ts)+'</div>'+
       '<div class="s">'+esc(it.text)+'</div>'+
-      '<div class="btn-row"><button class="btn small ghost" onclick="musAdd(\''+it.type+'\',\''+esc(it.text).replace(/'/g,'&#39;')+'\')">收藏为展�?/button></div></div>'
+      '<div class="btn-row"><button class="btn small ghost" onclick="musAdd(\''+it.type+'\',\''+esc(it.text).replace(/'/g,'&#39;')+'\')">收藏为展�?/button></div></div>'
     ).join('');
     musLoad();
   }catch(e){}
@@ -838,7 +845,7 @@ async function musLoad(){
     $('musList').innerHTML=d.exhibits.map(e=>
       '<div class="item"><div class="t">'+esc(e.title)+' <span class="badge">'+esc(e.label)+'</span></div>'+
       '<div class="s">'+esc(e.desc)+'</div>'+
-      '<div class="m">'+esc(e.text.slice(0,60))+'�?· '+fmtTs(e.ts)+'</div>'+
+      '<div class="m">'+esc(e.text.slice(0,60))+'�?· '+fmtTs(e.ts)+'</div>'+
       '<div class="btn-row"><button class="btn small pink ghost" onclick="musDel(\''+e.id+'\')">撤下展品</button></div></div>'
     ).join('');
   }catch(e){}
@@ -852,11 +859,11 @@ async function museumTour(){
   if(!ex.exhibits.length){alert('展馆还是空的，先收藏展品');return}
   try{
     const d = await api('/api/museum/tour',{method:'POST',body:JSON.stringify({ids:ex.exhibits.map(e=>e.id)})});
-    $('musTour').innerHTML='<div class="item"><div class="t">许墨的导�?/div><div class="s">'+esc(d.tour)+'</div></div>';
+    $('musTour').innerHTML='<div class="item"><div class="t">许墨的导�?/div><div class="s">'+esc(d.tour)+'</div></div>';
   }catch(e){alert(e.message)}
 }
 
-/* ================= 初始�?================= */
+/* ================= 初始�?================= */
 addOracleOpt();addOracleOpt();
 $('rpYear').value=new Date().getFullYear();
 oracleList();quizList();caseHist();thHist();rpHist();rcpHist();tlLoad();
@@ -877,7 +884,7 @@ oracleList();quizList();caseHist();thHist();rpHist();rcpHist();tlLoad();
   var IMG_KEY = 'lucien_bg_img_' + key;
   var OP_KEY = 'lucien_bg_op_' + key;
 
-  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
   if (!layer) {
     layer = document.createElement('div');
     layer.id = 'bgLayer';
@@ -899,19 +906,19 @@ oracleList();quizList();caseHist();thHist();rpHist();rcpHist();tlLoad();
   fab.type = 'button';
   fab.title = '换背景图';
   fab.setAttribute('aria-label', '换背景图');
-  fab.textContent = '🖼�?;
+  fab.textContent = '🖼�?;
 
   var panel = document.createElement('div');
   panel.className = 'lucien-bg-panel';
   panel.innerHTML =
     '<h4>页面背景</h4>' +
-    '<div class="lbg-row"><label>透明�?/label>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
     '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
     '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
     '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
     '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
     '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
-    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
 
   document.body.appendChild(fab);
   document.body.appendChild(panel);
@@ -958,7 +965,7 @@ oracleList();quizList();caseHist();thHist();rpHist();rcpHist();tlLoad();
         c.getContext('2d').drawImage(img, 0, 0, w, h);
         var dataUrl;
         try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
-        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
         try { localStorage.setItem(IMG_KEY, dataUrl); }
         catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
         applyImg(dataUrl);
@@ -970,7 +977,7 @@ oracleList();quizList();caseHist();thHist();rpHist();rcpHist();tlLoad();
     e.target.value = '';
   });
 
-  // 初始�?  try {
+  // 初始�?  try {
     var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
     if (isNaN(savedOp)) savedOp = 22;
     opInput.value = savedOp;

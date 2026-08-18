@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light" />
+<title>扩展编辑器 - 许墨</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&family=Ma+Shan+Zheng&family=Long+Cang&display=swap" rel="stylesheet">
+<style>
+  @font-face{font-family:"LXGW WenKai";src:url("/static/fonts/LXGWWenKai-Regular.ttf?v=2") format("truetype");font-weight:400;font-display:swap}
+  @font-face{font-family:"LXGW WenKai";src:url("/static/fonts/LXGWWenKai-Medium.ttf?v=2") format("truetype");font-weight:500;font-display:swap}
+  :root{
+    --color-bg:#f3eefb;--color-elev:#ffffff;--color-card:#faf7fe;
+    --color-primary:#7c3aed;--color-primary-soft:#6d28d9;--color-primary-dim:#5b21b6;
+    --color-accent:#8b5cf6;--color-pink:#db2777;
+    --color-text:#2b2140;--color-text-dim:#6f6785;--color-text-faint:#9a92ad;
+    --color-border:rgba(124,58,237,.14);--color-border-strong:rgba(124,58,237,.28);
+    --color-online:#059669;--color-offline:#dc2626;
+    --shadow-sm:0 1px 3px rgba(76,29,149,.08),0 2px 8px rgba(76,29,149,.06);
+    --shadow-md:0 10px 32px rgba(76,29,149,.14);
+    --radius-sm:10px;--radius-md:16px;--radius-lg:22px;
+    --ease-out:cubic-bezier(.16,1,.3,1);--ease-back:cubic-bezier(.34,1.56,.64,1);
+    --dur-fast:150ms;--dur-normal:260ms;--dur-slow:380ms;
+    --font-sans:"LXGW WenKai","PingFang SC","Microsoft YaHei",serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-sans);
+    background:var(--color-bg);
+    color:var(--color-text);-webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:1200px;margin:0 auto;padding:20px}
+  
+  .header{
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:24px;padding:20px;background:var(--color-elev);
+    border-radius:var(--radius-md);box-shadow:var(--shadow-sm);
+  }
+  .header h1{font-size:24px;color:var(--color-primary)}
+  
+  .tabs{display:flex;gap:8px;margin-bottom:20px}
+  .tab{
+    padding:10px 20px;border:none;background:var(--color-card);
+    color:var(--color-text-dim);border-radius:var(--radius-sm);
+    cursor:pointer;transition:all var(--dur-fast);
+  }
+  .tab.active{background:var(--color-primary);color:white}
+  .tab:hover:not(.active){background:var(--color-primary-soft);color:white}
+  
+  .editor-layout{display:grid;grid-template-columns:300px 1fr;gap:20px}
+  
+  .sidebar{background:var(--color-elev);padding:20px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)}
+  .sidebar h3{margin-bottom:16px;color:var(--color-primary)}
+  
+  .extension-list{max-height:400px;overflow-y:auto}
+  .extension-item{
+    padding:12px;margin-bottom:8px;background:var(--color-card);
+    border-radius:var(--radius-sm);cursor:pointer;transition:all var(--dur-fast);
+    border:1px solid transparent;
+  }
+  .extension-item:hover{border-color:var(--color-primary);transform:translateX(4px)}
+  .extension-item.active{background:var(--color-primary);color:white}
+  .extension-item h4{font-size:14px;margin-bottom:4px}
+  .extension-item p{font-size:12px;opacity:0.8}
+  
+  .main-editor{background:var(--color-elev);padding:24px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)}
+  
+  .form-group{margin-bottom:20px}
+  .form-group label{display:block;margin-bottom:8px;color:var(--color-text-dim);font-size:14px}
+  .form-group input,.form-group textarea,.form-group select{
+    width:100%;padding:12px;border:1px solid var(--color-border);
+    border-radius:var(--radius-sm);font-family:var(--font-sans);
+    transition:border-color var(--dur-fast);
+  }
+  .form-group input:focus,.form-group textarea:focus,.form-group select:focus{
+    border-color:var(--color-primary);outline:none;
+  }
+  .form-group textarea{min-height:120px;resize:vertical}
+  
+  .btn-group{display:flex;gap:12px;margin-top:24px}
+  .btn{
+    padding:12px 24px;border:none;border-radius:var(--radius-sm);
+    cursor:pointer;transition:all var(--dur-fast);font-family:var(--font-sans);
+  }
+  .btn-primary{background:var(--color-primary);color:white}
+  .btn-primary:hover{background:var(--color-primary-soft)}
+  .btn-secondary{background:var(--color-card);color:var(--color-text)}
+  .btn-secondary:hover{background:var(--color-border-strong)}
+  .btn-success{background:#059669;color:white}
+  .btn-success:hover{background:#047857}
+  
+  .config-editor{background:var(--color-card);padding:16px;border-radius:var(--radius-sm);margin-top:16px}
+  .config-editor pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:var(--radius-sm);overflow-x:auto;font-family:'Consolas','Monaco',monospace;font-size:13px}
+  
+  .ai-builder{background:linear-gradient(135deg,rgba(124,58,237,.1),rgba(139,92,246,.1));padding:20px;border-radius:var(--radius-md);margin-bottom:20px;border:1px solid var(--color-border)}
+  .ai-builder h3{color:var(--color-primary);margin-bottom:12px}
+  .ai-builder textarea{width:100%;min-height:80px;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);margin-bottom:12px;font-family:var(--font-sans)}
+  
+  .chat-interface{background:var(--color-card);padding:16px;border-radius:var(--radius-sm);margin-top:16px;max-height:300px;overflow-y:auto}
+  .chat-message{margin-bottom:12px;padding:12px;border-radius:var(--radius-sm);background:var(--color-elev)}
+  .chat-message.user{background:var(--color-primary);color:white;margin-left:40px}
+  .chat-message.ai{margin-right:40px}
+  
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center}
+  .modal.active{display:flex}
+  .modal-content{background:var(--color-elev);padding:24px;border-radius:var(--radius-md);max-width:500px;width:90%;box-shadow:var(--shadow-md)}
+  
+  .import-export{display:flex;gap:12px;margin-top:16px}
+  .file-input{display:none}
+  
+  @media(max-width:768px){
+    .editor-layout{grid-template-columns:1fr}
+    .extension-list{max-height:200px}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🦋 扩展编辑器</h1>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="showImportExport()">导入/导出</button>
+      <button class="btn btn-primary" onclick="createNewExtension()">+ 新建扩展</button>
+    </div>
+  </div>
+  
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('editor')">可视化编辑</button>
+    <button class="tab" onclick="switchTab('ai-builder')">AI对话构建</button>
+    <button class="tab" onclick="switchTab('nl-generate')">自然语言生成</button>
+  </div>
+  
+  <div class="editor-layout">
+    <div class="sidebar">
+      <h3>我的扩展</h3>
+      <div class="extension-list" id="extensionList">
+        <!-- 扩展列表动态生成 -->
+      </div>
+    </div>
+    
+    <div class="main-editor">
+      <!-- 可视化编辑器 -->
+      <div id="editor-panel">
+        <div class="form-group">
+          <label>扩展名称</label>
+          <input type="text" id="extName" placeholder="输入扩展名称">
+        </div>
+        
+        <div class="form-group">
+          <label>扩展类型</label>
+          <select id="extType" onchange="updateFormFields()">
+            <option value="prompt_template">提示词模板</option>
+            <option value="tool_chain">工具链</option>
+            <option value="workflow">工作流</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>描述</label>
+          <textarea id="extDescription" placeholder="描述这个扩展的功能"></textarea>
+        </div>
+        
+        <div id="type-specific-fields">
+          <!-- 动态字段 -->
+        </div>
+        
+        <div class="form-group">
+          <label>优先级 (数字越小优先级越高)</label>
+          <input type="number" id="extPriority" value="10" min="1" max="100">
+        </div>
+        
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="testExtension()">测试</button>
+          <button class="btn btn-primary" onclick="saveExtension()">保存</button>
+        </div>
+        
+        <div class="config-editor">
+          <h4>配置预览</h4>
+          <pre id="configPreview">{}</pre>
+        </div>
+      </div>
+      
+      <!-- AI对话构建 -->
+      <div id="ai-builder-panel" style="display:none">
+        <div class="ai-builder">
+          <h3>🤖 AI对话式扩展构建</h3>
+          <p style="margin-bottom:12px;color:var(--color-text-dim)">我会通过对话了解你的需求，帮你创建扩展</p>
+          <button class="btn btn-primary" onclick="startAIConversation()">开始对话</button>
+        </div>
+        
+        <div class="chat-interface" id="chatInterface" style="display:none">
+          <div id="chatMessages"></div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <input type="text" id="chatInput" placeholder="输入你的回答..." style="flex:1;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+            <button class="btn btn-primary" onclick="sendChatMessage()">发送</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 自然语言生成 -->
+      <div id="nl-generate-panel" style="display:none">
+        <div class="ai-builder">
+          <h3>✨ 自然语言生成扩展</h3>
+          <p style="margin-bottom:12px;color:var(--color-text-dim)">用一句话描述你想要的扩展，AI会自动生成配置</p>
+          <textarea id="nlDescription" placeholder="例如：让AI在深夜时语气更温柔，当用户提到天气时调用天气API"></textarea>
+          <button class="btn btn-primary" onclick="generateFromNL()">生成扩展</button>
+        </div>
+        
+        <div id="nlResult" style="display:none;margin-top:16px">
+          <div class="config-editor">
+            <h4>生成的配置</h4>
+            <pre id="nlConfigPreview"></pre>
+          </div>
+          <div id="nlSuggestions" style="margin-top:12px"></div>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="editNLConfig()">编辑</button>
+            <button class="btn btn-success" onclick="saveNLConfig()">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 导入导出模态框 -->
+<div class="modal" id="importExportModal">
+  <div class="modal-content">
+    <h3>导入/导出扩展</h3>
+    <div class="import-export">
+      <button class="btn btn-primary" onclick="exportExtensions()">导出所有扩展</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">导入扩展</button>
+      <input type="file" id="importFile" class="file-input" accept=".json" onchange="importExtensions(event)">
+    </div>
+    <button class="btn btn-secondary" style="margin-top:16px" onclick="closeModal()">关闭</button>
+  </div>
+</div>
+
+<script>
+let currentExtensionId = null;
+let conversationId = null;
+let generatedConfig = null;
+
+// 页面加载时获取扩展列表
+document.addEventListener('DOMContentLoaded', () => {
+  loadExtensions();
+  updateFormFields();
+  
+  // 监听输入变化更新预览
+  document.querySelectorAll('input, textarea, select').forEach(el => {
+    el.addEventListener('input', updateConfigPreview);
+  });
+});
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id$="-panel"]').forEach(p => p.style.display = 'none');
+  
+  event.target.classList.add('active');
+  document.getElementById(`${tabName}-panel`).style.display = 'block';
+}
+
+function loadExtensions() {
+  fetch('/api/extensions')
+    .then(res => res.json())
+    .then(data => {
+      const list = document.getElementById('extensionList');
+      list.innerHTML = '';
+      
+      data.extensions.forEach(ext => {
+        const item = document.createElement('div');
+        item.className = 'extension-item';
+        item.dataset.id = ext.id;
+        item.innerHTML = `
+          <h4>${ext.name}</h4>
+          <p>${ext.type} - ${ext.enabled ? '✓' : '✗'}</p>
+        `;
+        item.onclick = () => loadExtension(ext.id);
+        list.appendChild(item);
+      });
+    });
+}
+
+function loadExtension(extId) {
+  currentExtensionId = extId;
+  
+  fetch(`/api/extensions/${extId}`)
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('extName').value = data.name;
+      document.getElementById('extType').value = data.type;
+      document.getElementById('extDescription').value = data.description;
+      document.getElementById('extPriority').value = data.priority;
+      
+      updateFormFields();
+      loadTypeSpecificConfig(data.config);
+      updateConfigPreview();
+      
+      // 高亮选中项
+      document.querySelectorAll('.extension-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.id === extId) {
+          item.classList.add('active');
+        }
+      });
+    });
+}
+
+function updateFormFields() {
+  const type = document.getElementById('extType').value;
+  const container = document.getElementById('type-specific-fields');
+  
+  let html = '';
+  
+  if (type === 'prompt_template') {
+    html = `
+      <div class="form-group">
+        <label>触发方式</label>
+        <select id="triggerType">
+          <option value="always">始终触发</option>
+          <option value="keyword">关键词</option>
+          <option value="regex">正则表达式</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>触发模式</label>
+        <input type="text" id="triggerPattern" placeholder="关键词，用逗号分隔">
+      </div>
+      <div class="form-group">
+        <label>注入位置</label>
+        <select id="injectPosition">
+          <option value="system_suffix">系统提示词后置（默认）</option>
+          <option value="system_prefix">系统提示词前置</option>
+          <option value="user_prefix">用户消息前置</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>提示词内容</label>
+        <textarea id="promptContent" placeholder="输入自定义提示词内容"></textarea>
+      </div>
+    `;
+  } else if (type === 'tool_chain') {
+    html = `
+      <div class="form-group">
+        <label>触发方式</label>
+        <select id="triggerType">
+          <option value="keyword">关键词</option>
+          <option value="always">始终触发</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>触发模式</label>
+        <input type="text" id="triggerPattern" placeholder="关键词，用逗号分隔">
+      </div>
+      <div class="form-group">
+        <label>输出格式</label>
+        <select id="outputFormat">
+          <option value="json">JSON</option>
+          <option value="raw">原始文本</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>工具配置 (JSON格式)</label>
+        <textarea id="toolsConfig" placeholder='[{"type":"http_get","name":"weather","params":{"url":"https://api.weather.com"}}]'></textarea>
+      </div>
+    `;
+  } else if (type === 'workflow') {
+    html = `
+      <div class="form-group">
+        <label>工作流步骤 (JSON格式)</label>
+        <textarea id="workflowSteps" placeholder='[{"id":"s1","type":"prompt","config":{"var":"result","template":"处理用户输入"},"next":"s2"}]'></textarea>
+      </div>
+    `;
+  }
+  
+  container.innerHTML = html;
+  updateConfigPreview();
+}
+
+function loadTypeSpecificConfig(config) {
+  if (document.getElementById('triggerType')) {
+    document.getElementById('triggerType').value = config.trigger || 'always';
+  }
+  if (document.getElementById('triggerPattern')) {
+    document.getElementById('triggerPattern').value = config.trigger_pattern || '';
+  }
+  if (document.getElementById('injectPosition')) {
+    document.getElementById('injectPosition').value = config.inject_position || 'system_suffix';
+  }
+  if (document.getElementById('promptContent')) {
+    document.getElementById('promptContent').value = config.content || '';
+  }
+  if (document.getElementById('outputFormat')) {
+    document.getElementById('outputFormat').value = config.output_format || 'json';
+  }
+  if (document.getElementById('toolsConfig')) {
+    document.getElementById('toolsConfig').value = JSON.stringify(config.tools || [], null, 2);
+  }
+  if (document.getElementById('workflowSteps')) {
+    document.getElementById('workflowSteps').value = JSON.stringify(config.steps || [], null, 2);
+  }
+}
+
+function updateConfigPreview() {
+  const config = buildConfigObject();
+  document.getElementById('configPreview').textContent = JSON.stringify(config, null, 2);
+}
+
+function buildConfigObject() {
+  const type = document.getElementById('extType').value;
+  const config = {
+    name: document.getElementById('extName').value,
+    type: type,
+    description: document.getElementById('extDescription').value,
+    priority: parseInt(document.getElementById('extPriority').value) || 10,
+    enabled: true,
+    config: {}
+  };
+  
+  if (type === 'prompt_template') {
+    config.config = {
+      trigger: document.getElementById('triggerType')?.value || 'always',
+      trigger_pattern: document.getElementById('triggerPattern')?.value || '',
+      inject_position: document.getElementById('injectPosition')?.value || 'system_suffix',
+      content: document.getElementById('promptContent')?.value || ''
+    };
+  } else if (type === 'tool_chain') {
+    config.config = {
+      trigger: document.getElementById('triggerType')?.value || 'keyword',
+      trigger_pattern: document.getElementById('triggerPattern')?.value || '',
+      output_format: document.getElementById('outputFormat')?.value || 'json',
+      tools: parseJSONField('toolsConfig') || []
+    };
+  } else if (type === 'workflow') {
+    config.config = {
+      steps: parseJSONField('workflowSteps') || []
+    };
+  }
+  
+  return config;
+}
+
+function parseJSONField(fieldId) {
+  try {
+    const field = document.getElementById(fieldId);
+    return field ? JSON.parse(field.value) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveExtension() {
+  const config = buildConfigObject();
+  
+  if (!config.name) {
+    alert('请输入扩展名称');
+    return;
+  }
+  
+  const url = currentExtensionId ? `/api/extensions/${currentExtensionId}` : '/api/extensions';
+  const method = currentExtensionId ? 'PUT' : 'POST';
+  
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config)
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert('保存成功！');
+    currentExtensionId = data.id;
+    loadExtensions();
+  })
+  .catch(err => alert('保存失败：' + err.message));
+}
+
+function testExtension() {
+  const config = buildConfigObject();
+  
+  fetch('/api/extensions/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config)
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert('测试结果：' + JSON.stringify(data, null, 2));
+  })
+  .catch(err => alert('测试失败：' + err.message));
+}
+
+function createNewExtension() {
+  currentExtensionId = null;
+  document.getElementById('extName').value = '';
+  document.getElementById('extDescription').value = '';
+  document.getElementById('extPriority').value = 10;
+  updateFormFields();
+  document.querySelectorAll('.extension-item').forEach(item => item.classList.remove('active'));
+}
+
+// AI对话构建
+function startAIConversation() {
+  fetch('/api/extensions/builder/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: 'owner' })
+  })
+  .then(res => res.json())
+  .then(data => {
+    conversationId = data.conversation_id;
+    document.getElementById('chatInterface').style.display = 'block';
+    addChatMessage(data.message, 'ai');
+  });
+}
+
+function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  
+  if (!message || !conversationId) return;
+  
+  addChatMessage(message, 'user');
+  input.value = '';
+  
+  fetch('/api/extensions/builder/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      user_input: message
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    addChatMessage(data.message, 'ai');
+    
+    if (data.step === 'generating_config' && data.draft_config) {
+      generatedConfig = data.draft_config;
+      showConfigFromAI(data.draft_config);
+    }
+  });
+}
+
+function addChatMessage(message, type) {
+  const container = document.getElementById('chatMessages');
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `chat-message ${type}`;
+  msgDiv.textContent = message;
+  container.appendChild(msgDiv);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showConfigFromAI(config) {
+  const html = `
+    <div class="config-editor">
+      <h4>AI生成的配置</h4>
+      <pre>${JSON.stringify(config, null, 2)}</pre>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-success" onclick="saveAIConfig()">保存配置</button>
+      <button class="btn btn-secondary" onclick="switchTab('editor');loadAIConfigToEditor()">手动编辑</button>
+    </div>
+  `;
+  
+  document.getElementById('chatInterface').innerHTML += html;
+}
+
+function saveAIConfig() {
+  if (!generatedConfig) return;
+  
+  fetch('/api/extensions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(generatedConfig)
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert('扩展保存成功！');
+    loadExtensions();
+  });
+}
+
+function loadAIConfigToEditor() {
+  if (!generatedConfig) return;
+  
+  switchTab('editor');
+  document.getElementById('extName').value = generatedConfig.name;
+  document.getElementById('extType').value = generatedConfig.type;
+  document.getElementById('extDescription').value = generatedConfig.description;
+  document.getElementById('extPriority').value = generatedConfig.priority;
+  
+  updateFormFields();
+  loadTypeSpecificConfig(generatedConfig.config);
+  updateConfigPreview();
+}
+
+// 自然语言生成
+function generateFromNL() {
+  const description = document.getElementById('nlDescription').value.trim();
+  
+  if (!description) {
+    alert('请输入扩展描述');
+    return;
+  }
+  
+  fetch('/api/extensions/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description, user_id: 'owner' })
+  })
+  .then(res => res.json())
+  .then(data => {
+    generatedConfig = data.config;
+    document.getElementById('nlConfigPreview').textContent = JSON.stringify(data.config, null, 2);
+    
+    const suggestionsHtml = data.suggestions.map(s => `<p>• ${s}</p>`).join('');
+    document.getElementById('nlSuggestions').innerHTML = `<h4>建议</h4>${suggestionsHtml}`;
+    
+    document.getElementById('nlResult').style.display = 'block';
+  });
+}
+
+function editNLConfig() {
+  loadAIConfigToEditor();
+}
+
+function saveNLConfig() {
+  saveAIConfig();
+}
+
+// 导入导出
+function showImportExport() {
+  document.getElementById('importExportModal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('importExportModal').classList.remove('active');
+}
+
+function exportExtensions() {
+  fetch('/api/extensions')
+    .then(res => res.json())
+    .then(data => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'extensions_export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+}
+
+function importExtensions(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      
+      // 导入每个扩展
+      data.extensions.forEach(ext => {
+        fetch('/api/extensions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ext)
+        });
+      });
+      
+      alert('导入成功！');
+      loadExtensions();
+      closeModal();
+    } catch (err) {
+      alert('导入失败：文件格式错误');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// 键盘事件
+document.getElementById('chatInput').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') {
+    sendChatMessage();
+  }
+});
+</script>
+</body>
+</html>

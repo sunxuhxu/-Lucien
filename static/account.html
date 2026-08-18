@@ -52,6 +52,7 @@
   .files label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 2px; cursor: pointer; }
   .files label:hover { background: rgba(255,255,255,.05); }
   .files .sz { opacity: .5; font-size: 11px; margin-left: auto; }
+  .field { margin-bottom: 10px; }
   .toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
     background: rgba(20,6,40,.92); border: 1px solid rgba(255,255,255,.2); color: #fff;
     padding: 12px 20px; border-radius: 12px; font-size: 13.5px; opacity: 0; pointer-events: none;
@@ -77,6 +78,76 @@
       <span class="user-tag" id="whoami">检测中…</span>
       <button class="ghost sm" onclick="doLogout()">退出登录</button>
     </div>
+  </div>
+
+  <!-- 管理员：注册用户管理 -->
+  <div class="card" id="adminCard" style="display:none;">
+    <h2>管理员 · 注册用户</h2>
+    <div class="desc">最高管理员可查看所有注册用户的公开资料。口令哈希等敏感信息不会展示。</div>
+    <div id="adminUsers" class="files">加载中…</div>
+  </div>
+
+  <!-- 账号资料 -->
+  <div class="card" id="profileCard" style="display:none;">
+    <h2>账号资料</h2>
+    <div class="desc">这些资料会作为许墨认识你的依据。用户名不可修改，其它字段都可随时更新。</div>
+    <div class="row" style="align-items:flex-start; gap:18px; flex-wrap:wrap;">
+      <div class="avatar-box" style="flex-shrink:0; text-align:center;">
+        <div class="avatar-preview" id="profAvatar" style="width:80px; height:80px; border-radius:50%; background:rgba(255,255,255,.08) url('') center/cover; border:2px solid rgba(255,255,255,.2); margin:0 auto 6px;"></div>
+        <input type="file" id="profAvatarFile" accept="image/png,image/jpeg,image/webp,image/gif" style="font-size:11px; max-width:140px; margin-top:4px;">
+      </div>
+      <div style="flex:1; min-width:220px;">
+        <div class="muted" style="margin-bottom:4px;">用户名（不可修改）</div>
+        <input type="text" id="profUsername" readonly style="margin-bottom:10px; opacity:.7;">
+        <div class="muted" style="margin-bottom:4px;">昵称 <span class="pill">选填</span></div>
+        <input type="text" id="profNickname" placeholder="1-24 位中英文/数字/空格" style="margin-bottom:10px;">
+        <div class="grid">
+          <div>
+            <div class="muted" style="margin-bottom:4px;">生日</div>
+            <input type="date" id="profBirthday" style="margin-top:0;">
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:4px;">性别</div>
+            <select id="profGender" style="margin-top:0;">
+              <option value="">不设置</option>
+              <option value="female">女</option>
+              <option value="male">男</option>
+              <option value="other">其它</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <button onclick="saveProfile()">💾 保存资料</button>
+      <button class="ghost sm" onclick="loadProfile()">重置</button>
+    </div>
+  </div>
+
+  <!-- 修改密码 -->
+  <div class="card" id="pwdCard" style="display:none;">
+    <h2>修改密码</h2>
+    <div class="desc">修改后，该账号在其它设备的所有会话会立即失效；本设备会自动续签新会话，无需重新登录。</div>
+    <div class="field" style="margin-bottom:10px;">
+      <div class="muted" style="margin-bottom:4px;">旧密码</div>
+      <input type="password" id="oldPwd" placeholder="当前密码" autocomplete="current-password" style="margin-top:0;">
+    </div>
+    <div class="field" style="margin-bottom:10px;">
+      <div class="muted" style="margin-bottom:4px;">新密码 <span class="pill">≥8 位</span></div>
+      <input type="password" id="newPwd" placeholder="新密码" autocomplete="new-password" style="margin-top:0;">
+    </div>
+    <div class="field" style="margin-bottom:10px;">
+      <div class="muted" style="margin-bottom:4px;">确认新密码</div>
+      <input type="password" id="newPwd2" placeholder="再输一次新密码" autocomplete="new-password" style="margin-top:0;">
+    </div>
+    <button onclick="changePwd()">🔑 修改密码</button>
+  </div>
+
+  <!-- 注销所有会话 -->
+  <div class="card" id="sessionCard" style="display:none;">
+    <h2>会话安全</h2>
+    <div class="desc">点击下方按钮可立即注销该账号在所有设备（含当前设备）上的所有会话。适用于密码外泄、设备丢失等场景。注销后需重新登录。</div>
+    <button class="danger" onclick="logoutAll()">🚪 注销所有会话</button>
   </div>
 
   <!-- 全量快照 -->
@@ -156,8 +227,18 @@ async function refreshMe() {
   try {
     const r = await api('/api/auth/me'); const d = await r.json();
     if (d.authenticated) {
-      const scope = d.scope === 'owner' ? '主人（本地）' : (d.scope === 'guest' ? '访客' : d.username);
+      const isAdmin = !!(d.is_admin || d.role === 'admin');
+      const scope = d.scope === 'owner' ? '主人（本地）' : (isAdmin ? '管理员 · ' + d.username : d.username);
       $('whoami').textContent = '已登录：' + scope;
+      $('adminCard').style.display = isAdmin ? 'block' : 'none';
+      if (isAdmin) loadAdminUsers();
+      // 仅注册用户展示账号资料/修改密码/会话安全卡片
+      if (d.username) {
+        $('profileCard').style.display = 'block';
+        $('pwdCard').style.display = 'block';
+        $('sessionCard').style.display = 'block';
+        loadProfile();
+      }
     } else {
       $('whoami').textContent = '未登录';
     }
@@ -166,6 +247,114 @@ async function refreshMe() {
 async function doLogout() {
   await api('/api/auth/logout', {method:'POST'});
   toast('已退出登录'); setTimeout(()=>location.href='/', 800);
+}
+
+// ---- 管理员：查看注册用户 ----
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+async function loadAdminUsers() {
+  const box = $('adminUsers');
+  try {
+    const r = await api('/api/admin/users'); const d = await r.json();
+    const list = d.users || [];
+    if (!list.length) { box.innerHTML = '<div class="muted">暂无注册用户</div>'; return; }
+    box.innerHTML = list.map(u => `
+      <div class="snap">
+        <div class="info">
+          <b>${esc(u.username)}</b>${u.role === 'admin' ? ' <span class="pill">管理员</span>' : ''}<br>
+          <span class="muted">${esc(u.nickname || '未设置昵称')} · ${esc(u.gender || '未设置性别')} · ${esc(u.birthday || '未设置生日')} · 注册于 ${esc(u.created_at || '-')}</span>
+        </div>
+        ${u.avatar ? `<img src="${esc(u.avatar)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : ''}
+      </div>`).join('');
+  } catch(e) { box.innerHTML = '<div class="muted">加载失败</div>'; }
+}
+
+// ---- 账号资料 ----
+let _profileAvatarDataUrl = '';
+let _lastProfile = null;
+
+async function loadProfile() {
+  try {
+    const r = await api('/api/auth/profile'); const d = await r.json();
+    if (!d.ok) return;
+    const p = d.profile;
+    _lastProfile = {...p};
+    _profileAvatarDataUrl = '';
+    $('profUsername').value = p.username || '';
+    $('profNickname').value = p.nickname || '';
+    $('profBirthday').value = p.birthday || '';
+    $('profGender').value = p.gender || '';
+    if (p.avatar) {
+      $('profAvatar').style.backgroundImage = `url('${p.avatar}')`;
+    } else {
+      $('profAvatar').style.backgroundImage = '';
+    }
+    $('profAvatarFile').value = '';
+  } catch(e) {}
+}
+$('profAvatarFile') && $('profAvatarFile').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 2 * 1024 * 1024) { toast('头像不能超过 2MB', false); e.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _profileAvatarDataUrl = ev.target.result;
+    $('profAvatar').style.backgroundImage = `url(${_profileAvatarDataUrl})`;
+  };
+  reader.readAsDataURL(f);
+});
+async function saveProfile() {
+  const body = {
+    nickname: $('profNickname').value.trim(),
+    birthday: $('profBirthday').value,
+    gender: $('profGender').value,
+  };
+  if (_profileAvatarDataUrl) body.avatar = _profileAvatarDataUrl;
+  // 若字段为空字符串则不发送（保留原值）；如需清空，传 null（接口实现：仅更新提供的字段）
+  try {
+    const r = await api('/api/auth/profile', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (d.ok) { toast('资料已保存'); loadProfile(); }
+    else toast(d.detail || '保存失败', false);
+  } catch(e) { toast('保存失败', false); }
+}
+
+// ---- 修改密码 ----
+async function changePwd() {
+  const oldp = $('oldPwd').value;
+  const newp = $('newPwd').value;
+  const newp2 = $('newPwd2').value;
+  if (!oldp || !newp) { toast('请填写完整', false); return; }
+  if (newp.length < 8) { toast('新密码至少 8 位', false); return; }
+  if (newp !== newp2) { toast('两次新密码不一致', false); return; }
+  try {
+    const r = await api('/api/auth/password', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ old_password: oldp, new_password: newp })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast('密码已修改，其它设备会话已失效');
+      $('oldPwd').value = ''; $('newPwd').value = ''; $('newPwd2').value = '';
+    } else toast(d.detail || '修改失败', false);
+  } catch(e) { toast('修改失败', false); }
+}
+
+// ---- 注销所有会话 ----
+async function logoutAll() {
+  if (!confirm('确定注销该账号在所有设备上的所有会话？当前设备也会立即退出。')) return;
+  try {
+    const r = await api('/api/auth/logout-all', { method:'POST' });
+    const d = await r.json();
+    if (d.ok) { toast('所有会话已注销'); setTimeout(()=>location.href='/', 1000); }
+    else toast(d.detail || '操作失败', false);
+  } catch(e) { toast('操作失败', false); }
 }
 
 async function loadFiles() {

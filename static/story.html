@@ -168,11 +168,18 @@
 </style>
 </head>
 <body>
+<style>
+/* 非主人（未通过 xumo2026 口令）隐藏所有语音功能 */
+body.voice-disabled .voice-btn{display:none !important}
+</style>
+<script>
+fetch('/api/verify').then(function(r){return r.json()}).then(function(d){if(d&&!d.voice)document.body.classList.add('voice-disabled')}).catch(function(){});
+</script>
 <div class="app">
   <aside class="side">
     <div class="brand">许墨 · 互动养成<small>六大系统 · 剧情 / 经济 / 养成 / 晚安 / 树洞 / 节日</small></div>
     <nav class="nav" id="nav"></nav>
-    <div class="meta">数据随账号隔�?· 树洞聊完即焚</div>
+    <div class="meta">数据随账号隔�?· 树洞聊完即焚</div>
   </aside>
 
   <main class="main">
@@ -192,8 +199,8 @@ const FEATURES = [
   {key:"economy", em:"💰", name:"许墨工作经济", tag:"工资攒钱 · 共同基金 · 晋升剧情"},
   {key:"traits", em:"🌱", name:"特质养成系统", tag:"行为驱动成长 · 主页展示"},
   {key:"night", em:"🌙", name:"定制晚安故事", tag:"基于今日互动 · TTS 朗读"},
-  {key:"treehole", em:"🕳�?, name:"树洞模式", tag:"匿名倾诉 · 聊完即焚"},
-  {key:"festival", em:"🎉", name:"节日事件引擎", tag:"自动识别节日 / 生日 / 纪念�?},
+  {key:"treehole", em:"🕳�?, name:"树洞模式", tag:"匿名倾诉 · 聊完即焚"},
+  {key:"festival", em:"🎉", name:"节日事件引擎", tag:"自动识别节日 / 生日 / 纪念�?},
 ];
 let cur="story";
 const state={story:{sid:null}};
@@ -219,7 +226,7 @@ async function playTTS(text){
   if(!text) return;
   try{
     const r=await fetch('/api/tts',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,280)})});
-    if(!r.ok){toast('语音服务未启�?);return;}
+    if(!r.ok){toast('语音服务未启�?);return;}
     const blob=await r.blob();const url=URL.createObjectURL(blob);
     const a=document.getElementById('audio');a.src=url;a.play();
   }catch(e){toast('语音合成失败');}
@@ -245,10 +252,10 @@ function render(){
 
 /* ============ 1. 互动剧情副本 ============ */
 async function viewStory(v){
-  v.appendChild(el(`<div class="card"><div class="muted">选择主题开启一段多结局互动叙事。你的每个选择都会改变剧情走向，抵达结局时可生成专属<strong>纪念�?+ 配图</strong>�?/div>
+  v.appendChild(el(`<div class="card"><div class="muted">选择主题开启一段多结局互动叙事。你的每个选择都会改变剧情走向，抵达结局时可生成专属<strong>纪念�?+ 配图</strong>�?/div>
     <div class="sec-title"><span class="em">🎨</span>选择剧本主题</div><div class="grid cols-3" id="themes"></div>
     <label>自定义标题（可选）</label><input id="storyTitle" placeholder="留空则使用主题名"/>
-    <div class="row" style="margin-top:14px"><button class="btn" id="startBtn">�?开启剧�?/button><span class="muted" id="themeHint"></span></div></div>`));
+    <div class="row" style="margin-top:14px"><button class="btn" id="startBtn">�?开启剧�?/button><span class="muted" id="themeHint"></span></div></div>`));
   let themes=[];try{const d=await api('GET','/api/story/themes');themes=d.themes||[];}catch(e){}
   let sel=themes[0]?themes[0].key:'campus';
   const tc=document.getElementById('themes');
@@ -259,17 +266,17 @@ async function viewStory(v){
     tc.appendChild(c);
   });
   document.getElementById('startBtn').onclick=async()=>{
-    const btn=document.getElementById('startBtn');btn.disabled=true;btn.textContent='生成中�?;
+    const btn=document.getElementById('startBtn');btn.disabled=true;btn.textContent='生成中�?;
     try{
       const d=await api('POST','/api/story/start',{theme:sel,title:document.getElementById('storyTitle').value});
       state.story.sid=d.session.id;showStoryNode(v,d.session);
-    }catch(e){}finally{btn.disabled=false;btn.textContent='�?开启剧�?;}
+    }catch(e){}finally{btn.disabled=false;btn.textContent='�?开启剧�?;}
   };
   // sessions list
-  v.appendChild(el(`<div class="sec-title"><span class="em">🗂�?/span>我的剧情存档</div>`));
+  v.appendChild(el(`<div class="sec-title"><span class="em">🗂�?/span>我的剧情存档</div>`));
   const list=el(`<div class="grid cols-2" id="sessions"></div>`);v.appendChild(list);
   try{const d=await api('GET','/api/story/sessions');(d.sessions||[]).forEach(s=>{
-    const c=el(`<div class="chip"><div class="t">${esc(s.title)} ${s.is_ending?'<span class="badge">已结局·'+(s.ending_type||'')+'</span>':''}</div><div class="d">${s.steps} �?· ${esc(s.created)} ${s.has_card?'· 💌有纪念卡':''}</div></div>`);
+    const c=el(`<div class="chip"><div class="t">${esc(s.title)} ${s.is_ending?'<span class="badge">已结局·'+(s.ending_type||'')+'</span>':''}</div><div class="d">${s.steps} �?· ${esc(s.created)} ${s.has_card?'· 💌有纪念卡':''}</div></div>`);
     c.onclick=async()=>{const sd=await api('GET','/api/story/'+s.id);state.story.sid=s.id;showStoryNode(v,sd.session);};
     list.appendChild(c);
   });}catch(e){}
@@ -277,7 +284,7 @@ async function viewStory(v){
 async function showStoryNode(v,session){
   // clear and show interactive panel
   v.innerHTML='';
-  const wrap=el(`<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(session.title)}</b> · �?${session.step} �?/div><span class="pill">${esc(session.genre)}</span></div><div id="nodeBox"></div></div>`);
+  const wrap=el(`<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(session.title)}</b> · �?${session.step} �?/div><span class="pill">${esc(session.genre)}</span></div><div id="nodeBox"></div></div>`);
   v.appendChild(wrap);
   renderNode(wrap.querySelector('#nodeBox'),session);
 }
@@ -287,12 +294,12 @@ function renderNode(box,session){
   box.appendChild(el(`<div class="story-node">${esc(node.narrative)}</div>`));
   if(session.is_ending){
     box.appendChild(el(`<div class="tag-end">${esc(session.ending_type||'结局')}</div>`));
-    const end=el(`<div class="muted" style="margin-top:12px">这段剧情已抵达结局。为它生成一张专属纪念卡吧�?/div>`);
+    const end=el(`<div class="muted" style="margin-top:12px">这段剧情已抵达结局。为它生成一张专属纪念卡吧�?/div>`);
     box.appendChild(end);
-    const b=el(`<button class="btn gold" style="margin-top:10px">💌 生成纪念�?+ 配图</button>`);
+    const b=el(`<button class="btn gold" style="margin-top:10px">💌 生成纪念�?+ 配图</button>`);
     b.onclick=async()=>{
-      b.disabled=true;b.textContent='生成中�?;
-      try{const d=await api('POST','/api/story/'+state.story.sid+'/card');showCard(box,d.card);}catch(e){}finally{b.disabled=false;b.textContent='💌 生成纪念�?+ 配图';}
+      b.disabled=true;b.textContent='生成中�?;
+      try{const d=await api('POST','/api/story/'+state.story.sid+'/card');showCard(box,d.card);}catch(e){}finally{b.disabled=false;b.textContent='💌 生成纪念�?+ 配图';}
     };
     box.appendChild(b);
     if(session.card) showCard(box,session.card);
@@ -316,8 +323,8 @@ function showCard(box,card){
   const c=el(`<div class="memo-card" style="margin-top:14px">
     ${card.image?`<img src="${esc(card.image)}"/>`:''}
     <div class="mc-body">
-      <div class="mc-title">${esc(card.title||'纪念�?)} <span class="badge">${esc(card.ending_type||'')}</span></div>
-      <div class="mc-quote">�?{esc(card.quote||'')}�?/div>
+      <div class="mc-title">${esc(card.title||'纪念�?)} <span class="badge">${esc(card.ending_type||'')}</span></div>
+      <div class="mc-quote">�?{esc(card.quote||'')}�?/div>
       <div class="mc-text">${esc(card.card_text||'')}</div>
       ${ttsBtn((card.quote||'')+' '+(card.card_text||''))}
     </div></div>`);
@@ -326,17 +333,17 @@ function showCard(box,card){
 
 /* ============ 2. 工作经济系统 ============ */
 async function viewEconomy(v){
-  v.appendChild(el(`<div class="card" id="econCard"><div class="muted">许墨有自己的职业、工资与攒钱计划。你们设�?strong>共同基金</strong>一起买约会礼物、纪念品，并会随着晋升开启新剧情�?/div></div>`));
+  v.appendChild(el(`<div class="card" id="econCard"><div class="muted">许墨有自己的职业、工资与攒钱计划。你们设�?strong>共同基金</strong>一起买约会礼物、纪念品，并会随着晋升开启新剧情�?/div></div>`));
   const card=document.getElementById('econCard');
   let d;try{d=await api('GET','/api/economy/state');}catch(e){return;}
   const s=d;
   card.appendChild(el(`<div class="grid cols-3" style="margin-top:14px">
     <div class="item"><div class="em">💼</div><div><div class="muted">职业 / 职级</div><b>${esc(s.job_name)} · ${esc(s.title)}</b></div></div>
-    <div class="item"><div class="em">💵</div><div><div class="muted">月薪</div><b>${s.salary} �?/b></div></div>
-    <div class="item"><div class="em">📅</div><div><div class="muted">已结算天�?/div><b>${s.day} �?/b></div></div>
-    <div class="item"><div class="em">🏦</div><div><div class="muted">个人存款</div><b>${s.savings} �?/b></div></div>
-    <div class="item"><div class="em">💞</div><div><div class="muted">共同基金</div><b>${s.joint_fund} �?/b></div></div>
-    <div class="item"><div class="em">🎖�?/div><div><div class="muted">晋升次数</div><b>${s.promotions} �?/b></div></div>
+    <div class="item"><div class="em">💵</div><div><div class="muted">月薪</div><b>${s.salary} �?/b></div></div>
+    <div class="item"><div class="em">📅</div><div><div class="muted">已结算天�?/div><b>${s.day} �?/b></div></div>
+    <div class="item"><div class="em">🏦</div><div><div class="muted">个人存款</div><b>${s.savings} �?/b></div></div>
+    <div class="item"><div class="em">💞</div><div><div class="muted">共同基金</div><b>${s.joint_fund} �?/b></div></div>
+    <div class="item"><div class="em">🎖�?/div><div><div class="muted">晋升次数</div><b>${s.promotions} �?/b></div></div>
   </div>`));
   const act=el(`<div class="row" style="margin-top:16px">
     <button class="btn" id="dailyBtn">📅 结算今日工资</button>
@@ -344,63 +351,63 @@ async function viewEconomy(v){
     <button class="btn ghost" id="jobBtn">💼 更换职业</button>
   </div>`);
   card.appendChild(act);
-  card.appendChild(el(`<div class="sec-title"><span class="em">🛍�?/span>共同基金 · 约会礼物 / 纪念�?/div>`));
+  card.appendChild(el(`<div class="sec-title"><span class="em">🛍�?/span>共同基金 · 约会礼物 / 纪念�?/div>`));
   const shop=el(`<div class="grid cols-3" id="shop"></div>`);card.appendChild(shop);
   (d.shop||[]).forEach(it=>{
-    const c=el(`<div class="item"><div class="em">${it.emoji}</div><div style="flex:1"><div><b>${esc(it.name)}</b> · <span class="muted">${it.price} �?/span></div><div class="muted" style="font-size:12px">${esc(it.note)}</div></div><button class="btn ghost" data-id="${it.id}">购买</button></div>`);
+    const c=el(`<div class="item"><div class="em">${it.emoji}</div><div style="flex:1"><div><b>${esc(it.name)}</b> · <span class="muted">${it.price} �?/span></div><div class="muted" style="font-size:12px">${esc(it.note)}</div></div><button class="btn ghost" data-id="${it.id}">购买</button></div>`);
     c.querySelector('button').onclick=async(btn)=>{btn.disabled=true;try{await api('POST','/api/economy/buy',{item_id:it.id});toast('已用共同基金购入 🎁');refreshEcon();}catch(e){}finally{btn.disabled=false;}};
     shop.appendChild(c);
   });
   card.appendChild(el(`<div class="sec-title"><span class="em">🎁</span>已拥有的心意</div>`));
   const owned=el(`<div class="grid cols-2" id="owned"></div>`);card.appendChild(owned);
   (s.items||[]).forEach(it=>{owned.appendChild(el(`<div class="item"><div class="em">${it.emoji}</div><div><b>${esc(it.name)}</b><div class="muted" style="font-size:12px">${esc(it.for)} · ${esc(it.time)}</div></div></div>`));});
-  if(!(s.items||[]).length)owned.appendChild(el(`<div class="muted">还没有用共同基金买过礼物，去挑一件吧�?/div>`));
+  if(!(s.items||[]).length)owned.appendChild(el(`<div class="muted">还没有用共同基金买过礼物，去挑一件吧�?/div>`));
   card.appendChild(el(`<div class="sec-title"><span class="em">📜</span>经济流水</div>`));
   card.appendChild(el(`<div class="log" id="elog"></div>`));
   (s.log||[]).forEach(l=>{document.getElementById('elog').appendChild(el(`<div><span class="ic">${l.icon}</span>${esc(l.text)} ${l.amount?('<b>'+(l.amount>0?'+':'')+l.amount+'</b>'):''} <span class="muted">· ${esc(l.time)}</span></div>`));});
 
-  document.getElementById('dailyBtn').onclick=async(b)=>{b.disabled=true;try{const r=await api('POST','/api/economy/daily');toast('今日工资已结�?💰');refreshEcon();}catch(e){}finally{b.disabled=false;}};
-  document.getElementById('promoBtn').onclick=async(b)=>{b.disabled=true;b.textContent='生成剧情中�?;try{const r=await api('POST','/api/economy/promote');toast('许墨升职�?🎉');if(r.story)showStoryModal('晋升 · '+s.job_name,r.story);refreshEcon();}catch(e){}finally{b.disabled=false;b.textContent='🎉 触发晋升剧情';}};
+  document.getElementById('dailyBtn').onclick=async(b)=>{b.disabled=true;try{const r=await api('POST','/api/economy/daily');toast('今日工资已结�?💰');refreshEcon();}catch(e){}finally{b.disabled=false;}};
+  document.getElementById('promoBtn').onclick=async(b)=>{b.disabled=true;b.textContent='生成剧情中�?;try{const r=await api('POST','/api/economy/promote');toast('许墨升职�?🎉');if(r.story)showStoryModal('晋升 · '+s.job_name,r.story);refreshEcon();}catch(e){}finally{b.disabled=false;b.textContent='🎉 触发晋升剧情';}};
   document.getElementById('jobBtn').onclick=async()=>{
     const key=prompt('输入职业 key（researcher/designer/doctor/teacher/engineer）：','researcher');if(!key)return;
-    try{await api('POST','/api/economy/setjob',{job_key:key});toast('职业已更�?);refreshEcon();}catch(e){}
+    try{await api('POST','/api/economy/setjob',{job_key:key});toast('职业已更�?);refreshEcon();}catch(e){}
   };
 }
 async function refreshEcon(){const v=document.getElementById('view');v.innerHTML='';viewEconomy(v);}
 
 /* ============ 3. 特质养成 ============ */
 async function viewTraits(v){
-  v.appendChild(el(`<div class="card" id="traitCard"><div class="muted">许墨会因为你�?strong>生长出新的样�?/strong>——新口头禅、新技能、新习惯。这些由你们真实的行为互动驱动解锁，并展现在主页上�?/div></div>`));
+  v.appendChild(el(`<div class="card" id="traitCard"><div class="muted">许墨会因为你�?strong>生长出新的样�?/strong>——新口头禅、新技能、新习惯。这些由你们真实的行为互动驱动解锁，并展现在主页上�?/div></div>`));
   const card=document.getElementById('traitCard');
   let d;try{d=await api('GET','/api/traits');}catch(e){return;}
-  card.appendChild(el(`<div class="row" style="margin-top:12px"><span class="pill">养成等级 <b>Lv.${d.level}</b></span><span class="pill">经验 <b>${d.exp}</b></span><span class="pill">距下�?<b>${d.next_exp}</b></span></div>
+  card.appendChild(el(`<div class="row" style="margin-top:12px"><span class="pill">养成等级 <b>Lv.${d.level}</b></span><span class="pill">经验 <b>${d.exp}</b></span><span class="pill">距下�?<b>${d.next_exp}</b></span></div>
     <div class="bar"><i style="width:${100-d.next_exp}%"></i></div>`));
   const sec=(em,t)=>card.appendChild(el(`<div class="sec-title"><span class="em">${em}</span>${t}</div>`));
-  const list=(arr,key)=>{const g=el(`<div class="grid cols-2" id="${key}"></div>`);card.appendChild(g);(arr||[]).forEach(x=>{g.appendChild(el(`<div class="item"><div class="em">${key==='catchphrases'?'💬':key==='skills'?'🛠�?:'🔁'}</div><div style="flex:1"><b>${esc(x.text||x.name)}</b><div class="muted" style="font-size:12px">${esc(x.src||'')}${x.reason?(' · '+esc(x.reason)):''} · ${esc(x.time||'')}</div></div></div>`));});if(!(arr||[]).length)g.appendChild(el(`<div class="muted">暂无，去「行为解锁」试试�?/div>`));};
+  const list=(arr,key)=>{const g=el(`<div class="grid cols-2" id="${key}"></div>`);card.appendChild(g);(arr||[]).forEach(x=>{g.appendChild(el(`<div class="item"><div class="em">${key==='catchphrases'?'💬':key==='skills'?'🛠�?:'🔁'}</div><div style="flex:1"><b>${esc(x.text||x.name)}</b><div class="muted" style="font-size:12px">${esc(x.src||'')}${x.reason?(' · '+esc(x.reason)):''} · ${esc(x.time||'')}</div></div></div>`));});if(!(arr||[]).length)g.appendChild(el(`<div class="muted">暂无，去「行为解锁」试试�?/div>`));};
   sec('💬','新口头禅');list(d.catchphrases,'catchphrases');
-  sec('🛠�?,'新技�?);list(d.skills,'skills');
-  sec('🔁','新习�?);list(d.habits,'habits');
+  sec('🛠�?,'新技�?);list(d.skills,'skills');
+  sec('🔁','新习�?);list(d.habits,'habits');
 
-  card.appendChild(el(`<div class="sec-title"><span class="em">�?/span>行为驱动解锁</div>
-    <div class="muted">描述一段你与许墨的互动，看他会因此长出什么新特质�?/div>
-    <textarea id="beh" placeholder="例如：今天我难过低落，许墨什么也没说，只是默默陪我坐了一整晚�?></textarea>
-    <div class="row" style="margin-top:10px"><button class="btn" id="observeBtn">🌱 观察并解�?/button><button class="btn ghost" id="scanBtn">🔍 扫描今日聊天建议</button></div>
+  card.appendChild(el(`<div class="sec-title"><span class="em">�?/span>行为驱动解锁</div>
+    <div class="muted">描述一段你与许墨的互动，看他会因此长出什么新特质�?/div>
+    <textarea id="beh" placeholder="例如：今天我难过低落，许墨什么也没说，只是默默陪我坐了一整晚�?></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="observeBtn">🌱 观察并解�?/button><button class="btn ghost" id="scanBtn">🔍 扫描今日聊天建议</button></div>
     <div id="obResult"></div>`));
-  document.getElementById('observeBtn').onclick=async(b)=>{const t=document.getElementById('beh').value.trim();if(!t){toast('先描述一段互�?);return;}b.disabled=true;b.textContent='观察中�?;try{const r=await api('POST','/api/traits/observe',{behavior:t});if(r.unlocked){toast('解锁新特�?�?);document.getElementById('obResult').appendChild(el(`<div class="item" style="margin-top:10px"><div class="em">�?/div><div><b>${esc(r.unlocked.text||r.unlocked.name)}</b><div class="muted" style="font-size:12px">${esc(r.unlocked.reason||'')}</div></div></div>`));}else{document.getElementById('obResult').appendChild(el(`<div class="muted" style="margin-top:10px">这段互动暂时还不足以长出新特质，多陪伴就好～</div>`));}refreshTraits();}catch(e){}finally{b.disabled=false;b.textContent='🌱 观察并解�?;}};
-  document.getElementById('scanBtn').onclick=async(b)=>{b.disabled=true;try{const r=await api('POST','/api/traits/scan');const box=document.getElementById('obResult');(r.suggestions||[]).forEach(s=>{box.appendChild(el(`<div class="item" style="margin-top:8px"><div class="em">💡</div><div style="flex:1"><b>${esc(s.text)}</b><div class="muted" style="font-size:12px">${esc(s.reason||'')}</div></div><button class="btn ghost" onclick="confirmTrait(${JSON.stringify(s.kind)}, ${JSON.stringify(s.text)})">确认解锁</button></div>`));});if(!(r.suggestions||[]).length)box.appendChild(el(`<div class="muted" style="margin-top:8px">${esc(r.note||'今天暂无新发�?)}</div>`));}catch(e){}finally{b.disabled=false;}};
+  document.getElementById('observeBtn').onclick=async(b)=>{const t=document.getElementById('beh').value.trim();if(!t){toast('先描述一段互�?);return;}b.disabled=true;b.textContent='观察中�?;try{const r=await api('POST','/api/traits/observe',{behavior:t});if(r.unlocked){toast('解锁新特�?�?);document.getElementById('obResult').appendChild(el(`<div class="item" style="margin-top:10px"><div class="em">�?/div><div><b>${esc(r.unlocked.text||r.unlocked.name)}</b><div class="muted" style="font-size:12px">${esc(r.unlocked.reason||'')}</div></div></div>`));}else{document.getElementById('obResult').appendChild(el(`<div class="muted" style="margin-top:10px">这段互动暂时还不足以长出新特质，多陪伴就好～</div>`));}refreshTraits();}catch(e){}finally{b.disabled=false;b.textContent='🌱 观察并解�?;}};
+  document.getElementById('scanBtn').onclick=async(b)=>{b.disabled=true;try{const r=await api('POST','/api/traits/scan');const box=document.getElementById('obResult');(r.suggestions||[]).forEach(s=>{box.appendChild(el(`<div class="item" style="margin-top:8px"><div class="em">💡</div><div style="flex:1"><b>${esc(s.text)}</b><div class="muted" style="font-size:12px">${esc(s.reason||'')}</div></div><button class="btn ghost" onclick="confirmTrait(${JSON.stringify(s.kind)}, ${JSON.stringify(s.text)})">确认解锁</button></div>`));});if(!(r.suggestions||[]).length)box.appendChild(el(`<div class="muted" style="margin-top:8px">${esc(r.note||'今天暂无新发�?)}</div>`));}catch(e){}finally{b.disabled=false;}};
 }
-window.confirmTrait=async(kind,text)=>{try{await api('POST','/api/traits/log',{kind,text:text});toast('已记�?�?);refreshTraits();}catch(e){}};
+window.confirmTrait=async(kind,text)=>{try{await api('POST','/api/traits/log',{kind,text:text});toast('已记�?�?);refreshTraits();}catch(e){}};
 async function refreshTraits(){const v=document.getElementById('view');v.innerHTML='';viewTraits(v);}
 
 /* ============ 4. 定制晚安故事 ============ */
 async function viewNight(v){
-  v.appendChild(el(`<div class="card" id="nightCard"><div class="muted">许墨会根�?strong>今天你们真实的聊天互�?/strong>，生成一段只属于你们的睡前故事，可听他温柔读给你听，并配上图�?/div>
+  v.appendChild(el(`<div class="card" id="nightCard"><div class="muted">许墨会根�?strong>今天你们真实的聊天互�?/strong>，生成一段只属于你们的睡前故事，可听他温柔读给你听，并配上图�?/div>
     <div class="row" style="margin-top:14px"><button class="btn" id="genBtn">🌙 生成今日晚安故事</button><span class="muted" id="nightHint"></span></div>
     <div id="nightOut"></div></div>`));
   const out=document.getElementById('nightOut');
   let d;try{d=await api('GET','/api/nightstory/today');}catch(e){}
-  if(d&&d.story){renderNight(out,d.story);document.getElementById('nightHint').textContent='今日已生成，可重新生成覆�?;}
-  document.getElementById('genBtn').onclick=async(b)=>{b.disabled=true;b.textContent='编织中�?;try{const r=await api('POST','/api/nightstory/generate',{});renderNight(out,r.story);toast('晚安故事已生�?🌙');}catch(e){}finally{b.disabled=false;b.textContent='🌙 生成今日晚安故事';}};
+  if(d&&d.story){renderNight(out,d.story);document.getElementById('nightHint').textContent='今日已生成，可重新生成覆�?;}
+  document.getElementById('genBtn').onclick=async(b)=>{b.disabled=true;b.textContent='编织中�?;try{const r=await api('POST','/api/nightstory/generate',{});renderNight(out,r.story);toast('晚安故事已生�?🌙');}catch(e){}finally{b.disabled=false;b.textContent='🌙 生成今日晚安故事';}};
 }
 function renderNight(out,s){
   out.innerHTML='';
@@ -411,37 +418,37 @@ function renderNight(out,s){
 /* ============ 5. 树洞模式 ============ */
 function viewTreehole(v){
   v.appendChild(el(`<div class="card">
-    <div class="muted">这里�?strong>匿名树洞</strong>。你可以卸下所有伪装倾诉，许墨会用最温柔的方式接住你�?    <span style="color:var(--accent2)">聊完即焚</span>——这里的内容不会被记住，也不会写入任何记忆，刷新或关闭即消失，零负担�?/div>
+    <div class="muted">这里�?strong>匿名树洞</strong>。你可以卸下所有伪装倾诉，许墨会用最温柔的方式接住你�?    <span style="color:var(--accent2)">聊完即焚</span>——这里的内容不会被记住，也不会写入任何记忆，刷新或关闭即消失，零负担�?/div>
     <div id="thBox" style="margin-top:14px;display:flex;flex-direction:column;gap:10px"></div>
-    <textarea id="thInput" style="margin-top:12px" placeholder="想说什么都行，这里只有风和你�?></textarea>
+    <textarea id="thInput" style="margin-top:12px" placeholder="想说什么都行，这里只有风和你�?></textarea>
     <div class="row" style="margin-top:10px"><button class="btn pink" id="thSend">🌿 倾诉</button><button class="btn ghost" id="thBurn">🔥 聊完即焚（清空）</button></div>
   </div>`));
   const box=document.getElementById('thBox');
   function addMsg(role,text){box.appendChild(el(`<div class="story-node" style="${role==='user'?'background:#20283c':'background:linear-gradient(180deg,#241a26,#1a141e);border-color:#3a2a36'}">${esc(text)}</div>`));box.scrollTop=box.scrollHeight;}
   let sid='';
   document.getElementById('thSend').onclick=async(b)=>{const t=document.getElementById('thInput').value.trim();if(!t){toast('说点什么吧');return;}addMsg('user',t);document.getElementById('thInput').value='';b.disabled=true;try{const r=await api('POST','/api/treehole/chat',{text:t,session_id:sid});sid=r.session_id;addMsg('assistant',r.reply);}catch(e){}finally{b.disabled=false;}};
-  document.getElementById('thBurn').onclick=async()=>{if(sid){try{await api('POST','/api/treehole/close',{session_id:sid});}catch(e){}}sid='';box.innerHTML='';toast('已焚毁，如风过无�?🔥');};
+  document.getElementById('thBurn').onclick=async()=>{if(sid){try{await api('POST','/api/treehole/close',{session_id:sid});}catch(e){}}sid='';box.innerHTML='';toast('已焚毁，如风过无�?🔥');};
 }
 
 /* ============ 6. 节日事件引擎 ============ */
 async function viewFestival(v){
-  v.appendChild(el(`<div class="card" id="festCard"><div class="muted">系统�?strong>自动识别</strong>今天的节�?/ 你的生日 / 你们的纪念日，并触发专属剧情、礼物与场景图�?/div>
+  v.appendChild(el(`<div class="card" id="festCard"><div class="muted">系统�?strong>自动识别</strong>今天的节�?/ 你的生日 / 你们的纪念日，并触发专属剧情、礼物与场景图�?/div>
     <div class="row" style="margin-top:14px"><button class="btn" id="genFest">🎉 生成本日专属事件</button></div>
     <div id="festOut"></div></div>`));
   const out=document.getElementById('festOut');
   let d;try{d=await api('GET','/api/festival/today');}catch(e){}
   if(d){
     if(d.events&&d.events.length){
-      out.appendChild(el(`<div class="sec-title"><span class="em">📌</span>今日识别�?/div>`));
+      out.appendChild(el(`<div class="sec-title"><span class="em">📌</span>今日识别�?/div>`));
       d.events.forEach(e=>out.appendChild(el(`<div class="item"><div class="em">${e.emoji}</div><div><b>${esc(e.name)}</b> <span class="badge">${esc(e.cat)}</span><div class="muted" style="font-size:12px">${esc(e.desc)}</div></div></div>`)));
       if(d.generated)renderFest(out,d.generated);
     }else{
-      out.appendChild(el(`<div class="muted" style="margin-top:10px">今天没有自动识别到特殊日子，但你可以强制生成一份小小惊�?🎁</div>`));
+      out.appendChild(el(`<div class="muted" style="margin-top:10px">今天没有自动识别到特殊日子，但你可以强制生成一份小小惊�?🎁</div>`));
     }
   }
-  document.getElementById('genFest').onclick=async(b)=>{b.disabled=true;b.textContent='生成中�?;try{const r=await api('POST','/api/festival/generate',{force:true});renderFest(out,r.generated,r.event);toast('专属事件已生�?🎉');}catch(e){}finally{b.disabled=false;b.textContent='🎉 生成本日专属事件';}};
+  document.getElementById('genFest').onclick=async(b)=>{b.disabled=true;b.textContent='生成中�?;try{const r=await api('POST','/api/festival/generate',{force:true});renderFest(out,r.generated,r.event);toast('专属事件已生�?🎉');}catch(e){}finally{b.disabled=false;b.textContent='🎉 生成本日专属事件';}};
   // history
-  try{const h=await api('GET','/api/festival/history');if(h.history&&h.history.length){out.appendChild(el(`<div class="sec-title"><span class="em">📜</span>往期事�?/div>`));const g=el(`<div class="grid cols-2"></div>`);out.appendChild(g);h.history.slice(0,8).forEach(r=>{g.appendChild(el(`<div class="item"><div class="em">${r.event?r.event.emoji:'🎉'}</div><div style="flex:1"><b>${esc(r.event?r.event.name:'事件')}</b><div class="muted" style="font-size:12px">${esc(r.date)}</div></div></div>`));});}}catch(e){}
+  try{const h=await api('GET','/api/festival/history');if(h.history&&h.history.length){out.appendChild(el(`<div class="sec-title"><span class="em">📜</span>往期事�?/div>`));const g=el(`<div class="grid cols-2"></div>`);out.appendChild(g);h.history.slice(0,8).forEach(r=>{g.appendChild(el(`<div class="item"><div class="em">${r.event?r.event.emoji:'🎉'}</div><div style="flex:1"><b>${esc(r.event?r.event.name:'事件')}</b><div class="muted" style="font-size:12px">${esc(r.date)}</div></div></div>`));});}}catch(e){}
 }
 function renderFest(out,rec,ev){
   out.appendChild(el(`<div class="memo-card" style="margin-top:14px">
@@ -484,7 +491,7 @@ buildNav();render();
   var IMG_KEY = 'lucien_bg_img_' + key;
   var OP_KEY = 'lucien_bg_op_' + key;
 
-  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
   if (!layer) {
     layer = document.createElement('div');
     layer.id = 'bgLayer';
@@ -506,19 +513,19 @@ buildNav();render();
   fab.type = 'button';
   fab.title = '换背景图';
   fab.setAttribute('aria-label', '换背景图');
-  fab.textContent = '🖼�?;
+  fab.textContent = '🖼�?;
 
   var panel = document.createElement('div');
   panel.className = 'lucien-bg-panel';
   panel.innerHTML =
     '<h4>页面背景</h4>' +
-    '<div class="lbg-row"><label>透明�?/label>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
     '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
     '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
     '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
     '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
     '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
-    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
 
   document.body.appendChild(fab);
   document.body.appendChild(panel);
@@ -565,7 +572,7 @@ buildNav();render();
         c.getContext('2d').drawImage(img, 0, 0, w, h);
         var dataUrl;
         try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
-        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
         try { localStorage.setItem(IMG_KEY, dataUrl); }
         catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
         applyImg(dataUrl);
@@ -577,7 +584,7 @@ buildNav();render();
     e.target.value = '';
   });
 
-  // 初始�?  try {
+  // 初始�?  try {
     var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
     if (isNaN(savedOp)) savedOp = 22;
     opInput.value = savedOp;
