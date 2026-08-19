@@ -11,10 +11,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from role_data import RolePath
 
 BASE_DIR = Path(__file__).parent
 STATIC_DIR = BASE_DIR / "static"
-TOGETHER_DIR = STATIC_DIR / "together_img"
+TOGETHER_DIR = RolePath("static", "together_img")
 
 router = APIRouter()
 
@@ -30,7 +31,6 @@ LIFELINE_FILE = "lifeline.json"
 # 公共小工具（与 wonder_apps.py 同构）
 # ===========================================================================
 def _load(path: str, default):
-    from role_data import RolePath
     p = RolePath(path)
     if p.exists():
         try:

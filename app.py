@@ -303,8 +303,8 @@ _COOKIE_SECURE = _HTTPS_ENABLED
 # 让图片/语音等耗时生成在「后台」进行：即使离开当前页面、切到别的子应用，甚至关闭
 # 浏览器标签页，生成仍会在服务端跑完；完成后任务落盘到 gen_notify.json，由前端立绘
 # 轮询取出并弹出提醒卡片（关闭标签页后回来也会补弹）。
-GEN_NOTIFY_PATH = BASE_DIR / "gen_notify.json"
-GEN_JOBS: "dict[str, dict]" = {}
+GEN_NOTIFY_PATH = None  # 在 RolePath 导入后初始化；每个账号各自一份
+GEN_JOBS_BY_SCOPE: "dict[str, dict[str, dict]]" = {}
 # 必须用 RLock：_gen_trim / _gen_persist 内部也会再次获取同一把锁，
 # 若用普通 Lock 会在 submit_gen_job / gen_ack 等外层已持锁处死锁，
 # 导致后台生成任务（图生图/化身/语音收藏等）永久卡在 running 并耗尽线程池。
@@ -353,7 +353,7 @@ def _gen_now_iso() -> str:
 def _gen_persist() -> None:
     try:
         with _GEN_LOCK:
-            data = list(GEN_JOBS.values())
+            data = list(_gen_jobs_for_scope().values())
         atomic_json(GEN_NOTIFY_PATH, data)
     except Exception:
         pass
@@ -361,25 +361,38 @@ def _gen_persist() -> None:
 
 def _gen_trim() -> None:
     with _GEN_LOCK:
-        if len(GEN_JOBS) > GEN_KEEP_MAX:
+        jobs = _gen_jobs_for_scope()
+        if len(jobs) > GEN_KEEP_MAX:
             items = sorted(
-                GEN_JOBS.values(),
+                jobs.values(),
                 key=lambda j: j.get("finished_at") or j.get("created_at") or "",
             )
-            GEN_JOBS.clear()
+            jobs.clear()
             for j in items[-GEN_KEEP_MAX:]:
-                GEN_JOBS[j["id"]] = j
+                jobs[j["id"]] = j
 
 
 def _gen_load() -> None:
+    scope = _role_ctx.get()
+    if scope in GEN_JOBS_BY_SCOPE:
+        return
+    GEN_JOBS_BY_SCOPE[scope] = {}
     try:
         if GEN_NOTIFY_PATH.exists():
             data = json.loads(GEN_NOTIFY_PATH.read_text(encoding="utf-8"))
             with _GEN_LOCK:
                 for j in data:
-                    GEN_JOBS[j["id"]] = j
+                    GEN_JOBS_BY_SCOPE[scope][j["id"]] = j
     except Exception:
         pass
+
+
+def _gen_jobs_for_scope() -> dict:
+    """返回当前账号的任务表；首次访问时只加载该账号的本地文件。"""
+    scope = _role_ctx.get()
+    if scope not in GEN_JOBS_BY_SCOPE:
+        _gen_load()
+    return GEN_JOBS_BY_SCOPE[scope]
 
 
 def _gen_notify_from_result(kind: str, res) -> dict:
@@ -432,7 +445,7 @@ async def submit_gen_job(kind: str, coro_factory) -> dict:
         "seen": False,
     }
     with _GEN_LOCK:
-        GEN_JOBS[job_id] = job
+        _gen_jobs_for_scope()[job_id] = job
         _gen_trim()
         _gen_persist()
 
@@ -463,8 +476,6 @@ async def submit_gen_job(kind: str, coro_factory) -> dict:
     return job
 
 
-# 启动时加载已持久化任务（关闭标签页后回来可补弹提醒）
-_gen_load()
 STATIC_DIR = BASE_DIR / "static"
 
 
@@ -474,7 +485,7 @@ async def gen_jobs(after: str = ""):
     """返回生成任务列表。after 传入上次轮询的 server_time，只回传此后变化的任务；
     用于前端立绘在「离开页面 / 关闭标签页」后补弹提醒。"""
     with _GEN_LOCK:
-        jobs = list(GEN_JOBS.values())
+        jobs = list(_gen_jobs_for_scope().values())
     jobs.sort(key=lambda j: j.get("finished_at") or j.get("created_at") or "")
     if after:
         jobs = [j for j in jobs if (j.get("finished_at") or j.get("created_at") or "") > after]
@@ -491,8 +502,9 @@ async def gen_ack(req: Request):
     ids = data.get("ids") or []
     with _GEN_LOCK:
         for jid in ids:
-            if jid in GEN_JOBS:
-                GEN_JOBS[jid]["seen"] = True
+            jobs = _gen_jobs_for_scope()
+            if jid in jobs:
+                jobs[jid]["seen"] = True
         _gen_persist()
     return {"ok": True}
 
@@ -501,13 +513,14 @@ async def gen_ack(req: Request):
 async def gen_unseen():
     with _GEN_LOCK:
         n = sum(
-            1 for j in GEN_JOBS.values()
+            1 for j in _gen_jobs_for_scope().values()
             if not j.get("seen") and j.get("status") in ("done", "failed")
         )
     return {"count": n}
 
 # 角色数据隔离（owner → 项目根；注册用户 → users_data/<user>/）
-from role_data import RolePath, _role_ctx, role_root, BASE_DIR, USERS_DATA_DIR  # noqa: E402
+from role_data import RolePath, _role_ctx, role_file, role_root, BASE_DIR, USERS_DATA_DIR  # noqa: E402
+GEN_NOTIFY_PATH = RolePath("gen_notify.json")
 from users import (  # noqa: E402
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -1043,7 +1056,6 @@ _PUBLIC_PATHS = {
 # 公开路径前缀（含路径参数的端点，如头像 /api/auth/avatar/<username>，
 # 许墨云资料库代理 /api/xcloud/ —— 数据来自公开来源，无需登录即可读）
 _PUBLIC_PREFIXES = (
-    "/api/auth/avatar/",
     "/api/xcloud/",
 )
 
@@ -1067,6 +1079,21 @@ def _resolve_scope(request: Request) -> str | None:
     return None
 
 
+def _scope_owns_legacy_media(scope: str, url_path: str) -> bool:
+    """旧版本把媒体放在共享 static 下；仅当该账号 JSON 明确引用时才允许迁移。"""
+    root = USERS_DATA_DIR / scope
+    if not root.is_dir():
+        return False
+    needle = url_path.split("?", 1)[0]
+    for data_file in root.glob("*.json"):
+        try:
+            if needle in data_file.read_text(encoding="utf-8"):
+                return True
+        except (OSError, UnicodeDecodeError):
+            continue
+    return False
+
+
 @app.middleware("http")
 async def access_gate(request: Request, call_next):
     path = request.url.path
@@ -1084,15 +1111,18 @@ async def access_gate(request: Request, call_next):
             )
         return JSONResponse({"detail": "未授权，请先登录"}, status_code=401)
     # 注入作用域：后续所有数据读写按此路由（注册用户 → users_data/<user>/）
-    _role_ctx.set(scope)
-    is_admin_user = scope != "owner" and scope is not None and is_admin(scope)
-    if scope != "owner" and not is_admin_user and request.method in ("POST", "PUT"):
-        if any(p.match(path) for p in _OWNER_ONLY_PATTERNS):
-            return JSONResponse(
-                {"detail": "该功能仅主人口令或管理员可用"},
-                status_code=403,
-            )
-    return await call_next(request)
+    token = _role_ctx.set(scope)
+    try:
+        is_admin_user = scope != "owner" and is_admin(scope)
+        if scope != "owner" and not is_admin_user and request.method in ("POST", "PUT"):
+            if any(p.match(path) for p in _OWNER_ONLY_PATTERNS):
+                return JSONResponse(
+                    {"detail": "该功能仅主人口令或管理员可用"},
+                    status_code=403,
+                )
+        return await call_next(request)
+    finally:
+        _role_ctx.reset(token)
 
 
 @app.get("/api/verify")
@@ -1348,9 +1378,13 @@ async def auth_logout_all(req: Request):
 
 
 @app.get("/api/auth/avatar/{username}")
-async def auth_avatar(username: str):
-    """流式返回该用户的头像文件。公开访问（图片本身不含敏感信息）。"""
+async def auth_avatar(username: str, request: Request):
+    """返回头像；仅本人、管理员或 owner 可读，避免跨账号枚举。"""
     from fastapi.responses import FileResponse
+    current = _current_username(request)
+    scope = _resolve_scope(request)
+    if current != username and scope != "owner" and not (current and is_admin(current)):
+        return Response(status_code=403)
     p = get_avatar_path(username)
     if not p or not p.exists():
         return Response(status_code=404)
@@ -1378,6 +1412,21 @@ _LONG_CACHE_PREFIXES = (
     "/static/fonts/", "/static/libs/", "/uploads/videos/", "/uploads/music/",
 )
 
+# 这些目录只包含用户上传/生成内容。注册用户写入
+# users_data/<user>/static/<dir>；请求同一路径时也只从自己的目录读取。
+_SCOPED_STATIC_DIRS = {
+    "memory_img", "moment_img", "quote_img", "xumo_avatar", "charimg",
+    "models3d", "tts_log", "call_rec", "voice", "img2img", "global_ref",
+    "avatarify", "world_places", "world_interiors", "npc_img",
+    "world_pulse_img", "timebox_img", "date_photos", "date_img",
+    "weather_img", "voicemail", "cobook_img", "wardrobe", "recap_voice",
+    "video_output", "video_temp", "growth_video", "dream_video",
+    "memory_theater", "time_travel", "shared_album", "virtual_date",
+    "dream_img", "pverse_img", "astro_img", "bsfile_img", "ifline_img",
+    "story_img", "nightstory_img", "festival_img",
+    "together_img", "radio_img", "lab_img", "letter_img",
+}
+
 # HTTPS 相关：证书存在则启用 HTTP -> HTTPS 强跳转与 HSTS
 
 
@@ -1399,6 +1448,42 @@ async def _static_no_cache(request: Request, call_next):
         if request.url.query:
             target += "?" + request.url.query
         return RedirectResponse(target, status_code=308)
+
+    path = request.url.path
+    if path.startswith("/static/"):
+        rel = path[len("/static/"):]
+        top = rel.split("/", 1)[0]
+        scope = _resolve_scope(request)
+        if top in _SCOPED_STATIC_DIRS and scope not in (None, "owner"):
+            root = (USERS_DATA_DIR / scope / "static").resolve()
+            candidate = (root / rel).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                return Response(status_code=404)
+            if not candidate.is_file():
+                # 一次性兼容旧版共享目录：必须由当前账号自己的 JSON 明确引用才迁移；
+                # 不能仅按文件名回退，否则会读到 owner/其他账号的同名媒体。
+                legacy = (STATIC_DIR / rel).resolve()
+                static_root = STATIC_DIR.resolve()
+                try:
+                    legacy.relative_to(static_root)
+                except ValueError:
+                    return Response(status_code=404)
+                if legacy.is_file() and _scope_owns_legacy_media(scope, path):
+                    candidate.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(legacy, candidate)
+                else:
+                    return Response(status_code=404)
+            return FileResponse(
+                candidate,
+                headers={
+                    "Cache-Control": "private, no-cache, must-revalidate",
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": "SAMEORIGIN",
+                    "Referrer-Policy": "same-origin",
+                },
+            )
 
     resp = await call_next(request)
 
@@ -1807,14 +1892,18 @@ def _iter_scope_files():
     虽落在项目根，也不会把 .py / .env / .secret 等混入。
     """
     root = role_root()
+    # owner 的 static 是应用资源，不能打包；注册用户的 static 则只含该账号媒体，
+    # 属于用户数据，必须进入本地快照和全量导出。
+    deny_dirs = _BACKUP_DENY_DIRS if _role_ctx.get() == "owner" else (_BACKUP_DENY_DIRS - {"static", "users_data"})
+    deny_files = _BACKUP_DENY_FILES if _role_ctx.get() == "owner" else {"users.json", ".secret"}
     for p in root.rglob("*"):
         if not p.is_file():
             continue
         rel = p.relative_to(root)
         parts = set(rel.parts)
-        if parts & _BACKUP_DENY_DIRS:
+        if parts & deny_dirs:
             continue
-        if p.name in _BACKUP_DENY_FILES:
+        if p.name in deny_files:
             continue
         if p.suffix.lower() in _BACKUP_SKIP_EXT:
             continue
@@ -2334,7 +2423,7 @@ async def memory_delete(mid: str):
 
 
 # --- 记忆手账 · AI 配图（为一条记忆生成氛围场景插画） ---
-MEMORY_IMG_DIR = STATIC_DIR / "memory_img"
+MEMORY_IMG_DIR = RolePath("static", "memory_img")
 
 
 @app.post("/api/memory/{mid}/image")
@@ -3557,7 +3646,7 @@ async def _generate_moment_image(image_prompt: str, name: str) -> str | None:
                     item = (resp.json().get("data") or resp.json().get("images") or [None])[0]
                     if item is None:
                         continue
-                    img_dir = STATIC_DIR / "moment_img"
+                    img_dir = RolePath("static", "moment_img")
                     img_dir.mkdir(parents=True, exist_ok=True)
                     path = img_dir / f"{name}.png"
                     if item.get("b64_json"):
@@ -3650,7 +3739,7 @@ def _save_moment_upload_image(data_url: str, name: str) -> str | None:
         return None
     if not raw or len(raw) > 8 * 1024 * 1024 or not raw.startswith(_ME_MAGIC[ext]):
         return None
-    img_dir = STATIC_DIR / "moment_img"
+    img_dir = RolePath("static", "moment_img")
     img_dir.mkdir(parents=True, exist_ok=True)
     (img_dir / f"{name}.{ext}").write_bytes(raw)
     return f"/static/moment_img/{name}.{ext}"
@@ -4089,23 +4178,6 @@ def _load_life() -> dict:
                 return data
         except (json.JSONDecodeError, OSError):
             pass
-    # 回退：当前 scope（注册用户/guest）无 life_state.json 时，只读读取 owner 根目录数据
-    # life engine 仅在 owner scope 持续写入，其它 scope 无数据时共享 owner 的生活流
-    if _role_ctx.get() != "owner":
-        try:
-            from role_data import BASE_DIR
-            owner_file = BASE_DIR / "life_state.json"
-            if owner_file.exists():
-                data = json.loads(owner_file.read_text(encoding="utf-8-sig"))
-                if isinstance(data, dict):
-                    return {
-                        "state": data.get("state"),
-                        "timeline": list(data.get("timeline", [])),
-                        "next_moment_ts": data.get("next_moment_ts", 0),
-                        "next_sms_ts": data.get("next_sms_ts", 0),
-                    }
-        except (json.JSONDecodeError, OSError, Exception):
-            pass
     return {"state": None, "timeline": [], "next_moment_ts": 0, "next_sms_ts": 0}
 
 
@@ -4423,6 +4495,10 @@ async def lucien_status():
         "weekday": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()],
     }
     st = _load_life().get("state")
+    if not st:
+        # 每个账号首次访问时初始化自己的生活状态，不再读取 owner 的共享时间线。
+        await _life_tick()
+        st = _load_life().get("state")
     # 生活引擎状态可能因 lifespan 未启动等原因过期：超过 2 小时视为失效，
     # 回退到按时段推算的静态表，避免在早上还显示昨天中午的旧场景。
     if st and (_time.time() - st.get("since_ts", 0)) <= 2 * 3600:
@@ -5394,7 +5470,7 @@ async def refresh_daily_quote():
     }
     # 签语卡配图：氛围场景插画（无人像），与签语意境呼应
     try:
-        quote_img_dir = STATIC_DIR / "quote_img"
+        quote_img_dir = RolePath("static", "quote_img")
         img_url, _ = await _llm_image_for_text(
             f"【今日签语】{content}\n日期：{today}\n请构思一张与签语意境呼应的氛围配图："
             "安静克制、低饱和紫调，像许墨随手拍下或摆在案头的一帧画面。",
@@ -5412,7 +5488,7 @@ async def refresh_daily_quote():
 
 # ================= 许墨形象（可更换的头像） =================
 XUMO_AVATAR_FILE = RolePath("xumo_avatar.json")
-XUMO_AVATAR_UPLOADS_DIR = STATIC_DIR / "xumo_avatar"
+XUMO_AVATAR_UPLOADS_DIR = RolePath("static", "xumo_avatar")
 
 # 默认头像：内嵌在 static/ 目录里（"官方设定"卡面），作为回退
 DEFAULT_AVATAR_CANDIDATES = ("avatar.jpeg", "avatar.jpg", "avatar.png", "avatar.webp")
@@ -5477,7 +5553,7 @@ def _find_avatar():
                 gen_url = rec["gen"]
                 # 形如 /static/avatarify/xxxx.png → static/avatarify/xxxx.png
                 if gen_url.startswith("/static/"):
-                    p = STATIC_DIR / gen_url[len("/static/"):]
+                    p = role_file(gen_url.lstrip("/"))
                     if p.exists():
                         return p
         else:
@@ -5688,7 +5764,7 @@ async def xumo_avatar_delete(item_id: str):
 # ================= 场景立绘（每个场景可独立替换的全身立绘图） =================
 # 与头像（avatar）系统分离：头像用于聊天列表 / 头像气泡；立绘用于桌面 / 通话 / 沉浸场景的全身图。
 XUMO_CHARIMG_FILE = RolePath("xumo_charimg.json")
-XUMO_CHARIMG_DIR = STATIC_DIR / "charimg"
+XUMO_CHARIMG_DIR = RolePath("static", "charimg")
 
 # 默认立绘：内嵌在 static/home_xumo/ 的官方立绘
 DEFAULT_CHARIMG_PATH = STATIC_DIR / "home_xumo" / "home_cutout.png"
@@ -5945,7 +6021,7 @@ async def charimg_delete(item_id: str):
 
 # ================= 世界 3D 形象（可上传的 GLB / GLTF 模型） =================
 MODELS3D_FILE = RolePath("models3d.json")
-MODELS3D_DIR = STATIC_DIR / "models3d"
+MODELS3D_DIR = RolePath("static", "models3d")
 MODELS3D_MAX = 40 * 1024 * 1024  # 40MB
 
 
@@ -6859,7 +6935,7 @@ async def tts_stream(req: Request):
 # 语音生成记录：所有经 GPT-SoVITS 合成的语音自动存档（wav 文件 + 元数据）
 # ---------------------------------------------------------------------------
 TTS_LOG_JSON = RolePath("tts_log.json")
-TTS_LOG_DIR = STATIC_DIR / "tts_log"
+TTS_LOG_DIR = RolePath("static", "tts_log")
 TTS_LOG_MAX = int(os.getenv("TTS_LOG_MAX", "300"))
 
 
@@ -6963,7 +7039,7 @@ async def tts_log_delete(rec_id: str):
 # 语音通话录制：实时通话开启录制后，逐句保存双方音频 + 文字，并合成整通混合录音
 # ---------------------------------------------------------------------------
 CALL_REC_JSON = RolePath("call_rec.json")
-CALL_REC_DIR = STATIC_DIR / "call_rec"
+CALL_REC_DIR = RolePath("static", "call_rec")
 
 
 def _load_call_rec() -> dict:
@@ -7166,7 +7242,7 @@ async def asr(req: Request):
 # ---------------------------------------------------------------------------
 # 语音收藏：合成并保存许墨的语音，可在语录 App 中回放
 # ---------------------------------------------------------------------------
-VOICE_DIR = STATIC_DIR / "voice"
+VOICE_DIR = RolePath("static", "voice")
 VOICE_JSON = RolePath("voice.json")
 
 
@@ -7272,7 +7348,7 @@ async def delete_voice(voice_id: str):
 # 画境 · 图生图（上传图片 → 视觉理解 → 融合许墨游戏卡面风格 → AI 重绘）
 # ---------------------------------------------------------------------------
 IMG2IMG_FILE = RolePath("img2img.json")
-IMG2IMG_DIR = STATIC_DIR / "img2img"
+IMG2IMG_DIR = RolePath("static", "img2img")
 
 # 许墨视觉锚点：来自《恋与制作人》官方设定的核心形象要素（英文，直接进绘图提示词）
 XUMO_VISUAL_ANCHOR = (
@@ -8340,7 +8416,7 @@ def _parse_data_url(data_url: str) -> tuple[str, bytes]:
 
 # ================= 全局生图参考图（img2img / txt2img / 化身等所有生图共用） =================
 GLOBAL_REF_FILE = RolePath("global_ref.json")
-GLOBAL_REF_DIR = STATIC_DIR / "global_ref"
+GLOBAL_REF_DIR = RolePath("static", "global_ref")
 
 # 默认全局参考图：项目根目录 许墨1.png ~ 许墨4.png（多角度形象参考，生图时一并附加）
 GLOBAL_REF_DEFAULT_PATHS = [BASE_DIR / f"许墨{i}.png" for i in (1, 2, 3, 4)]
@@ -9267,7 +9343,7 @@ async def img2img_delete(record_id: str):
         if r.get("id") == record_id:
             for key in ("src", "gen", "card"):
                 try:
-                    (BASE_DIR / r[key].lstrip("/")).unlink(missing_ok=True)
+                    role_file(r[key].lstrip("/")).unlink(missing_ok=True)
                 except Exception:
                     pass
     return {"ok": True}
@@ -9354,7 +9430,7 @@ async def img2img_make_card(record_id: str, req: Request):
     gen_path = rec.get("gen", "").lstrip("/")
     if not gen_path:
         return JSONResponse({"error": "作品图片不存在"}, status_code=404)
-    img_path = BASE_DIR / gen_path
+    img_path = role_file(gen_path)
     if not img_path.exists():
         return JSONResponse({"error": "作品图片文件已丢失"}, status_code=404)
 
@@ -9591,7 +9667,7 @@ async def global_ref_reset():
 
 # ================= 化身：真人照片 → 恋与制作人风格卡通形象 =================
 AVATARIFY_FILE = RolePath("avatarify.json")
-AVATARIFY_DIR = STATIC_DIR / "avatarify"
+AVATARIFY_DIR = RolePath("static", "avatarify")
 
 AVATARIFY_THEMES = {
     "campus": {
@@ -9856,7 +9932,7 @@ async def avatarify_delete(record_id: str):
         if r.get("id") == record_id:
             for key in ("src", "gen"):
                 try:
-                    (BASE_DIR / r[key].lstrip("/")).unlink(missing_ok=True)
+                    role_file(r[key].lstrip("/")).unlink(missing_ok=True)
                 except Exception:
                     pass
     return {"ok": True}
@@ -9864,7 +9940,7 @@ async def avatarify_delete(record_id: str):
 
 # ================= 世界·恋语市：自定义地点（含图生图配图） =================
 WORLD_PLACES_FILE = RolePath("world_places.json")
-WORLD_PLACES_DIR = STATIC_DIR / "world_places"
+WORLD_PLACES_DIR = RolePath("static", "world_places")
 
 WORLD_PLACE_PROMPT = """你是《恋与制作人》恋语市的地图绘制师。玩家要在开放世界地图上新建一个自定义地点，并为其绘制一张场景配图。你的任务：根据地点名称与描述（若有参考图请先看懂图），输出地点简介与可直接用于 AI 绘图的英文提示词。
 
@@ -10025,7 +10101,7 @@ async def world_place_delete(place_id: str):
     for p in places:
         if p.get("id") == place_id and p.get("img"):
             try:
-                (BASE_DIR / p["img"].lstrip("/")).unlink(missing_ok=True)
+                role_file(p["img"].lstrip("/")).unlink(missing_ok=True)
             except Exception:
                 pass
     return {"ok": True}
@@ -10034,7 +10110,7 @@ async def world_place_delete(place_id: str):
 # ================= 世界·恋语市：建筑入内（室内场景 AI 插画） =================
 # 玩家进入 POI 建筑 → 切换到全屏室内视图（AI 生成的室内插图作背景 + HTML 热点叠加）
 WORLD_INTERIORS_FILE = RolePath("world_interiors.json")
-WORLD_INTERIORS_DIR = STATIC_DIR / "world_interiors"
+WORLD_INTERIORS_DIR = RolePath("static", "world_interiors")
 
 WORLD_INTERIOR_PROMPT = """你是《恋与制作人》恋语市的室内场景绘制师。玩家要进入一个建筑的室内，请根据建筑名与玩家描述，输出室内简介与可直接用于 AI 绘图的英文提示词。
 
@@ -10141,7 +10217,7 @@ async def world_interior_delete(place_id: str):
         _save_world_interiors(interiors)
         if img:
             try:
-                (BASE_DIR / img.lstrip("/")).unlink(missing_ok=True)
+                role_file(img.lstrip("/")).unlink(missing_ok=True)
             except Exception:
                 pass
     return {"ok": True}
@@ -10706,7 +10782,7 @@ async def world_npc_delete(npc_id: str):
 
 
 # --- 自定义居民 · AI 肖像（为一位居民生成恋语市画风立绘） ---
-NPC_IMG_DIR = STATIC_DIR / "npc_img"
+NPC_IMG_DIR = RolePath("static", "npc_img")
 
 NPC_PORTRAIT_PROMPT = """你是《恋与制作人》开放世界「恋语市」的居民立绘绘制助手。下面给出一位自定义居民的设定，请据此构思一幅 TA 的半身/全身立绘，并输出一段可直接用于 AI 绘图的英文提示词。
 
@@ -11408,7 +11484,7 @@ async def world_pulse_event_done(ev_id: str):
     return JSONResponse({"error": "事件不存在"}, status_code=404)
 
 
-WORLD_PULSE_IMG_DIR = STATIC_DIR / "world_pulse_img"
+WORLD_PULSE_IMG_DIR = RolePath("static", "world_pulse_img")
 
 
 @app.post("/api/world/pulse/event/{ev_id}/image")
@@ -12591,7 +12667,7 @@ async def timebox_plan_delete(item_id: str):
 
 # --- 时光盒 · AI 配图（回忆卡 / 约会企划 / 纪念日 / 胶囊回信） -----------------
 
-TIMEBOX_IMG_DIR = STATIC_DIR / "timebox_img"
+TIMEBOX_IMG_DIR = RolePath("static", "timebox_img")
 TIMEBOX_IMG_PREFIX = "/static/timebox_img"
 TIMEBOX_IMG_SIZES = {
     "relic": "1152x896",    # 回忆卡 · 横幅
@@ -12742,7 +12818,7 @@ async def timebox_image_generate(req: Request):
 # 约会手账 · 一起去过哪里（约会记录 / 足迹地图）
 # ---------------------------------------------------------------------------
 DATELOG_FILE = RolePath("date_log.json")
-DATE_PHOTOS_DIR = STATIC_DIR / "date_photos"
+DATE_PHOTOS_DIR = RolePath("static", "date_photos")
 _date_log_lock = asyncio.Lock()
 
 DATE_LOG_MAX = 200  # 约会记录上限
@@ -12937,7 +13013,7 @@ async def datelog_memory_regen(item_id: str):
 
 
 # --- 约会手账 · AI 配图（为一条约会记录生成双人场景插画） ---
-DATE_IMG_DIR = STATIC_DIR / "date_img"
+DATE_IMG_DIR = RolePath("static", "date_img")
 
 
 @app.post("/api/dates/{item_id}/image")

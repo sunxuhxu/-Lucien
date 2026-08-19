@@ -74,7 +74,7 @@ def _wardrobe_dir():
     global WARDROBE_DIR
     if WARDROBE_DIR is None:
         from app import STATIC_DIR
-        WARDROBE_DIR = STATIC_DIR / "wardrobe"
+        WARDROBE_DIR = RolePath("static", "wardrobe")
     return WARDROBE_DIR
 
 

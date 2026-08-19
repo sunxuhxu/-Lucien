@@ -315,8 +315,19 @@ let generatedConfig = null;
 
 // 页面加载时获取扩展列表
 document.addEventListener('DOMContentLoaded', () => {
-  loadExtensions();
-  updateFormFields();
+  // 未登录时返回主页面，避免编辑器在无权限状态下继续操作。
+  fetch('/api/extensions').then(res => {
+    if(res.status === 401){
+      alert('请先在主页面登录后再使用扩展编辑器');
+      window.location.href = '/';
+      return;
+    }
+    loadExtensions();
+    updateFormFields();
+  }).catch(() => {
+    loadExtensions();
+    updateFormFields();
+  });
   
   // 监听输入变化更新预览
   document.querySelectorAll('input, textarea, select').forEach(el => {
@@ -328,8 +339,17 @@ function switchTab(tabName) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('[id$="-panel"]').forEach(p => p.style.display = 'none');
   
-  event.target.classList.add('active');
-  document.getElementById(`${tabName}-panel`).style.display = 'block';
+  const labels = {
+    'smart-gen': '智能生成',
+    'ai-builder': 'AI对话',
+    'nl-generate': '自然语言',
+    'visual': '可视化'
+  };
+  document.querySelectorAll('.tab').forEach(tab => {
+    if(tab.textContent.includes(labels[tabName] || tabName)) tab.classList.add('active');
+  });
+  const panel = document.getElementById(`${tabName}-panel`);
+  if(panel) panel.style.display = 'block';
 }
 
 function loadExtensions() {

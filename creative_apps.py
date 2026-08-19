@@ -145,7 +145,7 @@ async def _gen_image(material: str, sub_dir: str, name: str, ratio: str = "lands
     - with_xumo: 是否注入许墨形象锚点（双人/角色场景用 True，纯场景用 False）。
     """
     from app import _llm_image_for_text, STATIC_DIR, IMG2IMG_SIZES
-    out_dir = STATIC_DIR / sub_dir
+    out_dir = RolePath("static", sub_dir)
     size = IMG2IMG_SIZES.get(ratio, "1024x1024")
     img_url, _ = await _llm_image_for_text(
         material, out_dir, f"/static/{sub_dir}", name, size,
@@ -788,7 +788,7 @@ async def ifline_card(lid: str):
         return {"card": item["card"], "cached": True}
     try:
         from app import _openai_generate_image, STATIC_DIR
-        out_dir = STATIC_DIR / IFLINE_DIR_NAME
+        out_dir = RolePath("static", IFLINE_DIR_NAME)
         out_dir.mkdir(parents=True, exist_ok=True)
         prompt = IFLINE_CARD_PROMPT.format(scene_en=_scene_en(item.get("theme_key", "")))
         url = await _openai_generate_image(prompt, out_dir, f"/static/{IFLINE_DIR_NAME}",

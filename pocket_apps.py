@@ -149,8 +149,8 @@ async def _llm_json(messages: list, max_tokens: int = None):
 async def _gen_image(material: str, sub_dir: str, name: str, ratio: str = "landscape",
                      with_xumo: bool = True, system_prompt: str = None) -> str:
     """调用 app._llm_image_for_text 生成配图，返回带时间戳的可访问 URL；失败返回空串。"""
-    from app import _llm_image_for_text, STATIC_DIR, IMG2IMG_SIZES
-    out_dir = STATIC_DIR / sub_dir
+    from app import _llm_image_for_text, IMG2IMG_SIZES
+    out_dir = RolePath("static", sub_dir)
     size = IMG2IMG_SIZES.get(ratio, "1024x1024")
     img_url, _ = await _llm_image_for_text(
         material, out_dir, f"/static/{sub_dir}", name, size,

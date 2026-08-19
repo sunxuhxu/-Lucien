@@ -42,7 +42,7 @@ async def _gen_image(material: str, sub_dir: str, name: str,
                      ratio: str = "landscape", with_xumo: bool = True) -> str:
     """复用 app 的文生图，返回可访问 URL；失败返回空串。"""
     from app import _openai_generate_image, IMG2IMG_SIZES
-    out_dir = STATIC_DIR / sub_dir
+    out_dir = RolePath("static", sub_dir)
     size = IMG2IMG_SIZES.get(ratio, "1024x1024")
     try:
         url = await _openai_generate_image(material, out_dir, f"/static/{sub_dir}",

@@ -1,5 +1,22 @@
 {
-  "extensions": [],
+  "extensions": [
+    {
+      "id": "2fdc6b3dc624",
+      "name": "深夜温柔",
+      "type": "prompt_template",
+      "description": "当用户说晚安时AI用更温柔的低沉语气回复",
+      "enabled": true,
+      "priority": 10,
+      "config": {
+        "trigger": "keyword",
+        "trigger_pattern": "晚安",
+        "inject_position": "system_suffix",
+        "content": "请用温柔、体贴的语气回应，多用简短的关心语句"
+      },
+      "created_at": "2026-08-19 10:57:34",
+      "updated_at": "2026-08-19 10:57:34"
+    }
+  ],
   "order": [
     "1a5517a2-3233-4b73-8321-97939523658d"
   ]

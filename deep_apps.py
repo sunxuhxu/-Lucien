@@ -16,6 +16,7 @@ from store_common import atomic_json, file_lock
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from role_data import RolePath
 
 BASE_DIR = Path(__file__).parent
 STATIC_DIR = BASE_DIR / "static"
@@ -24,7 +25,6 @@ router = APIRouter()
 
 
 def _load(path: str, default):
-    from role_data import RolePath
     p = RolePath(path)
     if p.exists():
         try:
@@ -35,7 +35,6 @@ def _load(path: str, default):
 
 
 def _save(path: str, data):
-    from role_data import RolePath
     atomic_json(RolePath(path), data)
 
 
@@ -540,7 +539,7 @@ async def classroom_answer(lid: str, req: Request):
 # 4. 情绪天气联动：你的城市的天气，决定他的心情与场景
 # ===========================================================================
 WEATHER_FILE = "weatherlink.json"
-WEATHER_DIR = STATIC_DIR / "weather_img"
+WEATHER_DIR = RolePath("static", "weather_img")
 
 WEATHER_PROMPT = (
     "你是许墨。她所在的城市今天天气是「{weather}」（{city}，{temp}）。"
@@ -759,7 +758,7 @@ async def rehearsal_delete(rid: str):
 # 9. 声音信箱：他随时可能留一条语音给你
 # ===========================================================================
 MAILBOX_FILE = "voicemail.json"
-MAILBOX_DIR = STATIC_DIR / "voicemail"
+MAILBOX_DIR = RolePath("static", "voicemail")
 
 MAILBOX_THEMES = [
     "他看到一只蝴蝶落在实验室窗台上，想起你",
@@ -881,7 +880,7 @@ async def mailbox_readall():
 # 7. 合著的书：你一句，他一句，写一本只属于你们的书
 # ===========================================================================
 COBOOK_FILE = "cobook.json"
-COBOOK_DIR = STATIC_DIR / "cobook_img"
+COBOOK_DIR = RolePath("static", "cobook_img")
 
 COBOOK_OPEN_PROMPT = (
     "你是许墨。你们决定合著一本书，书名《{title}》，题材：{genre}。"

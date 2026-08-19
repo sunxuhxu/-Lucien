@@ -1561,6 +1561,16 @@ fetch('/api/verify').then(function(r){return r.json()}).then(function(d){if(d&&!
             <button class="app-icon" data-app="wager"><span class="glyph"><img src="/static/img/icons/t/t_wager.png?v=3" alt=""></span><span class="label">命运赌局</span></button>
             <button class="app-icon" data-app="relic"><span class="glyph"><img src="/static/img/icons/t/t_relic.png?v=3" alt=""></span><span class="label">回忆修复工坊</span></button>
             <button class="app-icon" data-app="symbiote"><span class="glyph"><img src="/static/img/icons/t/t_symbiote.png?v=3" alt=""></span><span class="label">共生体演化</span></button>
+            <button class="app-icon" data-app="dreamloom"><span class="glyph"><img src="/static/img/icons/t/t_dreamloom.png?v=3" alt=""></span><span class="label">梦境织机</span></button>
+            <button class="app-icon" data-app="emoweather"><span class="glyph"><img src="/static/img/icons/t/t_emoweather.png?v=3" alt=""></span><span class="label">情绪气象台</span></button>
+            <button class="app-icon" data-app="parallel"><span class="glyph"><img src="/static/img/icons/t/t_parallel.png?v=3" alt=""></span><span class="label">平行宇宙</span></button>
+            <button class="app-icon" data-app="puzzle"><span class="glyph"><img src="/static/img/icons/t/t_puzzle.png?v=3" alt=""></span><span class="label">记忆拼图</span></button>
+            <button class="app-icon" data-app="dradio"><span class="glyph"><img src="/static/img/icons/t/t_radio.png?v=3" alt=""></span><span class="label">共鸣电台</span></button>
+            <button class="app-icon" data-app="garden"><span class="glyph"><img src="/static/img/icons/t/t_garden.png?v=3" alt=""></span><span class="label">胶囊花园</span></button>
+            <button class="app-icon" data-app="mirror"><span class="glyph"><img src="/static/img/icons/t/t_mirror.png?v=3" alt=""></span><span class="label">灵魂镜像</span></button>
+            <button class="app-icon" data-app="weaver"><span class="glyph"><img src="/static/img/icons/t/t_weaver.png?v=3" alt=""></span><span class="label">命运编织者</span></button>
+            <button class="app-icon" data-app="alchemy"><span class="glyph"><img src="/static/img/icons/t/t_alchemy.png?v=3" alt=""></span><span class="label">情感化学</span></button>
+            <button class="app-icon" data-app="compass"><span class="glyph"><img src="/static/img/icons/t/t_compass.png?v=3" alt=""></span><span class="label">星际罗盘</span></button>
             <button class="app-icon" data-app="extensions"><span class="glyph"><img src="/static/img/icons/t/t_extensions.png?v=3" alt=""></span><span class="label">AI扩展</span></button>
           </div>
           <div class="dock">
@@ -4352,6 +4362,162 @@ fetch('/api/verify').then(function(r){return r.json()}).then(function(d){if(d&&!
             <div class="sec-title">演化日志</div><div id="symLog" class="dm-list" style="padding:0 16px 20px"></div>
           </div>
         </div>
+        <!-- 11. 梦境织机 -->
+        <div class="app-view" id="app-dreamloom">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🌙 梦境织机</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.1))">
+              <div class="dm-head">把梦境讲给他，他帮你解读</div>
+              <div class="dm-sub" style="margin-top:4px">描述你的梦境，许墨会分析象征、编织共同梦境。</div>
+              <textarea id="dloomInput" rows="4" maxlength="300" placeholder="描述你的梦境…" style="margin-top:8px;width:100%;box-sizing:border-box"></textarea>
+              <button class="dm-go" id="dloomGo" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">让许墨织梦</button>
+            </div>
+            <div id="dloomResult"></div>
+            <div class="sec-title">梦境档案</div><div id="dloomHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 12. 情绪气象台 -->
+        <div class="app-view" id="app-emoweather">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🌦️ 情绪气象台</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(14,165,233,.1),rgba(56,189,248,.1))">
+              <div class="dm-head">你的心情，今天的天气</div>
+              <div class="dm-sub" style="margin-top:4px">基于近期心情数据，生成你的情绪天气预报。</div>
+              <button class="dm-go" id="ewGo" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8)">查看今日天气</button>
+            </div>
+            <div id="ewResult"></div>
+            <div class="sec-title">历史天气</div><div id="ewHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 13. 平行宇宙探测器 -->
+        <div class="app-view" id="app-parallel">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🌀 平行宇宙探测器</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(168,85,247,.1),rgba(192,132,252,.1))">
+              <div class="dm-head">假设走了另一条路</div>
+              <div class="dm-sub" style="margin-top:4px">描述一个人生分歧点，探测平行宇宙中的另一个你们。</div>
+              <textarea id="plInput" rows="3" maxlength="200" placeholder="假如当时我没有来到恋语市…" style="margin-top:8px;width:100%;box-sizing:border-box"></textarea>
+              <button class="dm-go" id="plGo" style="background:linear-gradient(135deg,#a855f7,#c084fc)">启动探测器</button>
+            </div>
+            <div id="plResult"></div>
+            <div class="sec-title">探测记录</div><div id="plHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 14. 记忆拼图 -->
+        <div class="app-view" id="app-puzzle">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🧩 记忆拼图</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(245,158,11,.1),rgba(251,191,36,.1))">
+              <div class="dm-head">零碎的记忆，拼成完整的故事</div>
+              <div class="dm-sub" style="margin-top:4px">提供几个记忆碎片，许墨帮你拼合成连贯叙事。</div>
+              <textarea id="pzInput" rows="4" maxlength="500" placeholder="每行一个记忆碎片，如：&#10;那天下午在图书馆&#10;他递给我一杯热可可&#10;窗外下着小雨" style="margin-top:8px;width:100%;box-sizing:border-box"></textarea>
+              <button class="dm-go" id="pzGo" style="background:linear-gradient(135deg,#f59e0b,#fbbf24)">开始拼图</button>
+            </div>
+            <div id="pzResult"></div>
+            <div class="sec-title">拼图档案</div><div id="pzHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 15. 心灵共鸣电台 -->
+        <div class="app-view" id="app-dradio">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">📻 心灵共鸣电台</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(236,72,153,.1),rgba(244,114,182,.1))">
+              <div class="dm-head">此刻，和你同频的内容</div>
+              <div class="dm-sub" style="margin-top:4px">基于你近期的情绪和对话，生成一段共鸣内容。</div>
+              <button class="dm-go" id="drGo" style="background:linear-gradient(135deg,#ec4899,#f472b6)">调频收听</button>
+            </div>
+            <div id="drResult"></div>
+            <div class="sec-title">收听记录</div><div id="drHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 16. 时间胶囊花园 -->
+        <div class="app-view" id="app-garden">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🌿 时间胶囊花园</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(52,211,153,.1))">
+              <div class="dm-head">种下一个想法，等它开花</div>
+              <div class="dm-sub" style="margin-top:4px">把当下的想法种进花园，许墨会陪它生长，直到开花那天。</div>
+              <textarea id="gdInput" rows="3" maxlength="200" placeholder="写下此刻的想法…" style="margin-top:8px;width:100%;box-sizing:border-box"></textarea>
+              <div class="cap-row" style="margin-top:6px;display:flex;align-items:center;gap:8px">
+                <span style="font-size:11px;color:var(--color-text-faint)">开花天数</span>
+                <select id="gdDays" style="flex:1">
+                  <option value="1">1 天</option><option value="3">3 天</option>
+                  <option value="7" selected>7 天</option><option value="14">14 天</option>
+                  <option value="30">30 天</option>
+                </select>
+              </div>
+              <button class="dm-go" id="gdGo" style="background:linear-gradient(135deg,#10b981,#34d399)">种下想法</button>
+            </div>
+            <div id="gdResult"></div>
+            <div class="sec-title">我的花园</div><div id="gdPlants" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 17. 灵魂镜像室 -->
+        <div class="app-view" id="app-mirror">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🪞 灵魂镜像室</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(129,140,248,.1))">
+              <div class="dm-head">深层心理镜像分析</div>
+              <div class="dm-sub" style="margin-top:4px">输入一个主题，许墨帮你照见表层、深层与阴影。</div>
+              <input id="mrInput" maxlength="60" placeholder="输入想分析的主题…" style="margin-top:8px;width:calc(100% - 32px);box-sizing:border-box">
+              <button class="dm-go" id="mrGo" style="background:linear-gradient(135deg,#6366f1,#818cf8)">照见镜像</button>
+            </div>
+            <div id="mrResult"></div>
+            <div class="sec-title">镜像记录</div><div id="mrHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 18. 命运编织者 -->
+        <div class="app-view" id="app-weaver">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🕸️ 命运编织者</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(167,139,250,.1))">
+              <div class="dm-head">编织一段只属于你们的命运</div>
+              <div class="dm-sub" style="margin-top:4px">给出故事前提，许墨开始编织，在每个岔路口由你选择走向。</div>
+              <textarea id="wvInput" rows="3" maxlength="200" placeholder="故事前提，如：某天我在旧书店翻开一本无字书…" style="margin-top:8px;width:100%;box-sizing:border-box"></textarea>
+              <button class="dm-go" id="wvGo" style="background:linear-gradient(135deg,#8b5cf6,#a78bfa)">开始编织</button>
+            </div>
+            <div id="wvResult"></div>
+            <div id="wvChoice" style="display:none;padding:0 16px"></div>
+            <div class="sec-title">编织档案</div><div id="wvHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 19. 情感化学反应 -->
+        <div class="app-view" id="app-alchemy">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">⚗️ 情感化学反应</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(251,146,60,.1))">
+              <div class="dm-head">把情感当元素，混合看看</div>
+              <div class="dm-sub" style="margin-top:4px">选 2-4 种情感元素，看它们混合后的化学反应。</div>
+              <div id="alElements" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+              <button class="dm-go" id="alGo" style="background:linear-gradient(135deg,#f97316,#fb923c)">混合反应</button>
+            </div>
+            <div id="alResult"></div>
+            <div class="sec-title">实验记录</div><div id="alHistory" class="dm-list"></div>
+          </div>
+        </div>
+
+        <!-- 20. 星际罗盘 -->
+        <div class="app-view" id="app-compass">
+          <div class="app-nav"><button class="nav-back" data-home aria-label="返回桌面">‹</button><span class="nav-title">🧭 星际罗盘</span></div>
+          <div class="scroll">
+            <div class="mind-card" style="background:linear-gradient(135deg,rgba(6,182,212,.1),rgba(34,211,238,.1))">
+              <div class="dm-head">在星海中找到你的方向</div>
+              <div class="dm-sub" style="margin-top:4px">基于当前状态生成星际导航建议，帮你做出决定。</div>
+              <button class="dm-go" id="cpGo" style="background:linear-gradient(135deg,#06b6d4,#22d3ee)">启动罗盘</button>
+            </div>
+            <div id="cpResult"></div>
+            <div class="sec-title">导航记录</div><div id="cpHistory" class="dm-list"></div>
+          </div>
+        </div>
+
         <div class="app-view" id="app-world" aria-label="世界·恋语市"></div>
 
         <div class="homebar" id="homebar" title="返回桌面" role="button" aria-label="返回桌面"></div>
@@ -21918,13 +22084,463 @@ body.mode-a .xa-vignette{opacity:1}
     }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(symEvolve, false); });
   });
 
+  // 11. 梦境织机
+  // ===========================================================================
+  function loadDreamloom(){
+    dApi('/api/disrupt/dreamloom').then(function(d){
+      var box = dGet('dloomHistory'); if(!box) return;
+      var items = d.items || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#a78bfa">'+dEsc(it.ts)+'</span>'+
+          '</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-faint);margin-top:4px">梦境：'+dEsc(it.dream_input)+'</div>'+
+          '<div style="font-size:12px;margin-top:4px;color:#818cf8">'+(it.symbols||[]).map(function(s){return '🔮 '+dEsc(s);}).join('  ')+'</div>'+
+          '<div style="white-space:pre-wrap;font-size:13px;line-height:1.8;margin-top:6px;color:var(--color-text)">'+dEsc(it.interpretation)+'</div>'+
+          '<div style="font-size:12px;color:#c084fc;margin-top:6px;white-space:pre-wrap">🌙 '+dEsc(it.shared_dream)+'</div>'+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有梦境档案</div>';
+      box.querySelectorAll('.dm-item').forEach(function(el){
+        var id = el.dataset.id;
+        var btn = dDelBtn(id, function(iid){ dDel('/api/disrupt/dreamloom/'+iid).then(function(){ dToast('已删除'); loadDreamloom(); }).catch(function(e){ dToast(e.message); }); }, '删除');
+        el.querySelector('div > span').appendChild(btn);
+      });
+    }).catch(function(e){ dToast('加载失败：'+e.message); });
+  }
+  var dloomGo = dGet('dloomGo');
+  if(dloomGo) dloomGo.addEventListener('click', function(){
+    var t = (dGet('dloomInput').value||'').trim();
+    if(!t || t.length < 10){ dToast('梦境描述至少10个字'); return; }
+    dBusy(dloomGo, true);
+    dPost('/api/disrupt/dreamloom/weave', {dream:t}).then(function(it){
+      dGet('dloomResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(99,102,241,.16),rgba(139,92,246,.16));margin:10px 14px">'+
+        '<div class="dm-head">🌙 梦境解读</div>'+
+        '<div style="font-size:12px;margin-top:4px;color:#818cf8">'+(it.symbols||[]).map(function(s){return '🔮 '+dEsc(s);}).join('  ')+'</div>'+
+        '<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.85;margin-top:8px;color:var(--color-text)">'+dEsc(it.interpretation)+'</div>'+
+        '<div style="font-size:12px;color:#c084fc;margin-top:8px;white-space:pre-wrap">🌙 共同梦境：'+dEsc(it.shared_dream)+'</div>'+
+      '</div>';
+      dGet('dloomInput').value=''; loadDreamloom();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(dloomGo, false); });
+  });
+
+  // ===========================================================================
+  // 12. 情绪气象台
+  // ===========================================================================
+  function loadEmoweather(){
+    dApi('/api/disrupt/emoweather/history').then(function(d){
+      var box = dGet('ewHistory'); if(!box) return;
+      var items = d.history || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="font-size:11px;color:#38bdf8">'+dEsc(it.ts)+' · '+dEsc(it.weather)+' '+it.temp+'°C</div>'+
+          '<div style="font-size:12.5px;color:var(--color-text);margin-top:4px;white-space:pre-wrap">'+dEsc(it.forecast)+'</div>'+
+          (it.advice ? '<div style="font-size:12px;color:#0ea5e9;margin-top:4px">许墨：'+dEsc(it.advice)+'</div>' : '')+
+        '</div>';
+      }).join('') : '<div class="empty-tip">暂无天气记录</div>';
+    }).catch(function(){});
+  }
+  var ewGo = dGet('ewGo');
+  if(ewGo) ewGo.addEventListener('click', function(){
+    dBusy(ewGo, true);
+    dApi('/api/disrupt/emoweather').then(function(it){
+      var wIcon = {'晴':'☀️','多云':'⛅','小雨':'🌧️','雷阵雨':'⛈️','雪':'❄️'}[it.weather] || '🌤️';
+      dGet('ewResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(14,165,233,.16),rgba(56,189,248,.16));margin:10px 14px">'+
+        '<div class="dm-head">'+wIcon+' '+dEsc(it.weather)+' '+it.temp+'°C</div>'+
+        '<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.85;margin-top:8px;color:var(--color-text)">'+dEsc(it.forecast)+'</div>'+
+        (it.advice ? '<div style="font-size:12px;color:#0ea5e9;margin-top:8px">许墨：'+dEsc(it.advice)+'</div>' : '')+
+      '</div>';
+      loadEmoweather();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(ewGo, false); });
+  });
+
+  // ===========================================================================
+  // 13. 平行宇宙探测器
+  // ===========================================================================
+  function loadParallel(){
+    dApi('/api/disrupt/parallel').then(function(d){
+      var box = dGet('plHistory'); if(!box) return;
+      var items = d.items || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#c084fc">'+dEsc(it.universe_id)+' · '+dEsc(it.ts)+'</span>'+
+          '</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-faint);margin-top:4px">分歧点：'+dEsc(it.divergence)+'</div>'+
+          '<div style="font-size:12.5px;color:var(--color-text);margin-top:4px">许墨：'+dEsc(it.xumo_state)+'</div>'+
+          '<div style="font-size:12px;color:var(--color-text-dim);margin-top:2px">她：'+dEsc(it.her_life)+'</div>'+
+          '<div style="font-size:11px;color:#a855f7;margin-top:2px">色调：'+dEsc(it.atmosphere)+' | 故障：'+dEsc(it.glitch)+'</div>'+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有探测记录</div>';
+      box.querySelectorAll('.dm-item').forEach(function(el){
+        var id = el.dataset.id;
+        var btn = dDelBtn(id, function(iid){ dDel('/api/disrupt/parallel/'+iid).then(function(){ dToast('已删除'); loadParallel(); }).catch(function(e){ dToast(e.message); }); }, '删除');
+        el.querySelector('div > span').appendChild(btn);
+      });
+    }).catch(function(){});
+  }
+  var plGo = dGet('plGo');
+  if(plGo) plGo.addEventListener('click', function(){
+    var t = (dGet('plInput').value||'').trim();
+    if(!t || t.length < 5){ dToast('分歧点描述至少5个字'); return; }
+    dBusy(plGo, true);
+    dPost('/api/disrupt/parallel/detect', {divergence:t}).then(function(it){
+      dGet('plResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(168,85,247,.16),rgba(192,132,252,.16));margin:10px 14px">'+
+        '<div class="dm-head">🌀 '+dEsc(it.universe_id)+'</div>'+
+        '<div style="font-size:12.5px;color:var(--color-text);margin-top:6px">许墨的状态：'+dEsc(it.xumo_state)+'</div>'+
+        '<div style="font-size:12.5px;color:var(--color-text-dim);margin-top:4px">她的生活：'+dEsc(it.her_life)+'</div>'+
+        '<div style="font-size:11.5px;color:#a855f7;margin-top:4px">宇宙色调：'+dEsc(it.atmosphere)+'</div>'+
+        '<div style="font-size:11.5px;color:#c084fc;margin-top:2px">现实故障：'+dEsc(it.glitch)+'</div>'+
+      '</div>';
+      dGet('plInput').value=''; loadParallel();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(plGo, false); });
+  });
+
+  // ===========================================================================
+  // 14. 记忆拼图
+  // ===========================================================================
+  function loadPuzzle(){
+    dApi('/api/disrupt/puzzle').then(function(d){
+      var box = dGet('pzHistory'); if(!box) return;
+      var items = d.items || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#fbbf24">'+dEsc(it.ts)+'</span>'+
+          '</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-faint);margin-top:4px">碎片：'+(it.fragments||[]).map(dEsc).join(' / ')+'</div>'+
+          '<div style="white-space:pre-wrap;font-size:13px;line-height:1.8;margin-top:6px;color:var(--color-text)">'+dEsc(it.narrative)+'</div>'+
+          (it.timeline ? '<div style="font-size:11.5px;color:#f59e0b;margin-top:4px">时间线：'+dEsc(it.timeline)+'</div>' : '')+
+          (it.xumo_comment ? '<div style="font-size:12px;color:#d97706;margin-top:4px">许墨：'+dEsc(it.xumo_comment)+'</div>' : '')+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有拼图档案</div>';
+      box.querySelectorAll('.dm-item').forEach(function(el){
+        var id = el.dataset.id;
+        var btn = dDelBtn(id, function(iid){ dDel('/api/disrupt/puzzle/'+iid).then(function(){ dToast('已删除'); loadPuzzle(); }).catch(function(e){ dToast(e.message); }); }, '删除');
+        el.querySelector('div > span').appendChild(btn);
+      });
+    }).catch(function(){});
+  }
+  var pzGo = dGet('pzGo');
+  if(pzGo) pzGo.addEventListener('click', function(){
+    var raw = (dGet('pzInput').value||'').trim();
+    var frags = raw.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(frags.length < 2){ dToast('至少提供2行记忆碎片'); return; }
+    dBusy(pzGo, true);
+    dPost('/api/disrupt/puzzle/assemble', {fragments:frags}).then(function(it){
+      dGet('pzResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(251,191,36,.16));margin:10px 14px">'+
+        '<div class="dm-head">🧩 记忆拼合</div>'+
+        '<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.85;margin-top:8px;color:var(--color-text)">'+dEsc(it.narrative)+'</div>'+
+        (it.timeline ? '<div style="font-size:12px;color:#f59e0b;margin-top:6px">时间线：'+dEsc(it.timeline)+'</div>' : '')+
+        (it.missing_pieces ? '<div style="font-size:11.5px;color:var(--color-text-dim);margin-top:4px">可能缺失：'+it.missing_pieces.map(dEsc).join('、')+'</div>' : '')+
+        (it.xumo_comment ? '<div style="font-size:12px;color:#d97706;margin-top:4px">许墨：'+dEsc(it.xumo_comment)+'</div>' : '')+
+      '</div>';
+      dGet('pzInput').value=''; loadPuzzle();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(pzGo, false); });
+  });
+
+  // ===========================================================================
+  // 15. 心灵共鸣电台
+  // ===========================================================================
+  function loadDradio(){
+    dApi('/api/disrupt/radio/history').then(function(d){
+      var box = dGet('drHistory'); if(!box) return;
+      var items = d.history || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="font-size:11px;color:#f472b6">'+dEsc(it.format)+' · 频率 '+it.frequency+' · '+dEsc(it.ts)+'</div>'+
+          '<div style="white-space:pre-wrap;font-size:13px;line-height:1.8;margin-top:6px;color:var(--color-text)">'+dEsc(it.content)+'</div>'+
+          (it.resonance ? '<div style="font-size:11.5px;color:#ec4899;margin-top:4px">共鸣：'+dEsc(it.resonance)+'</div>' : '')+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有收听记录</div>';
+    }).catch(function(){});
+  }
+  var drGo = dGet('drGo');
+  if(drGo) drGo.addEventListener('click', function(){
+    dBusy(drGo, true);
+    dApi('/api/disrupt/radio').then(function(it){
+      dGet('drResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(236,72,153,.16),rgba(244,114,182,.16));margin:10px 14px">'+
+        '<div class="dm-head">📻 '+dEsc(it.format)+' · 频率 '+it.frequency+'</div>'+
+        '<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.85;margin-top:8px;color:var(--color-text)">'+dEsc(it.content)+'</div>'+
+        (it.resonance ? '<div style="font-size:12px;color:#ec4899;margin-top:6px">共鸣：'+dEsc(it.resonance)+'</div>' : '')+
+      '</div>';
+      loadDradio();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(drGo, false); });
+  });
+
+  // ===========================================================================
+  // 16. 时间胶囊花园
+  // ===========================================================================
+  function loadGarden(){
+    dApi('/api/disrupt/garden').then(function(d){
+      var box = dGet('gdPlants'); if(!box) return;
+      var plants = d.plants || [];
+      box.innerHTML = plants.length ? plants.map(function(it){
+        var statusLabel = it.status === 'bloomed' ? '🌸 已开花' : '🌱 生长中';
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#34d399">'+statusLabel+' · '+dEsc(it.plant_type)+'</span>'+
+          '</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-faint);margin-top:4px">想法：'+dEsc(it.thought)+'</div>'+
+          '<div style="font-size:11px;color:#10b981;margin-top:2px">种下：'+dEsc(it.planted_at)+' | 花期：'+dEsc(it.bloom_at)+'</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-dim);margin-top:2px">'+dEsc(it.meaning)+'</div>'+
+          (it.status !== 'bloomed' ? '<button class="dm-go" style="font-size:11px;padding:4px 10px;margin-top:4px;background:linear-gradient(135deg,#10b981,#34d399)" data-water="'+it.id+'">💧 浇水</button>' : '')+
+        '</div>';
+      }).join('') : '<div class="empty-tip">花园里还没有植物</div>';
+      // 绑定浇水按钮
+      box.querySelectorAll('[data-water]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var pid = btn.dataset.water;
+          dPost('/api/disrupt/garden/'+pid+'/water', {}).then(function(r){
+            dToast('🌱 '+r.current_stage+' ('+r.progress+'%)');
+            loadGarden();
+          }).catch(function(e){ dToast(e.message); });
+        });
+      });
+      // 绑定删除按钮
+      box.querySelectorAll('.dm-item').forEach(function(el){
+        var id = el.dataset.id;
+        var btn = dDelBtn(id, function(iid){ dDel('/api/disrupt/garden/'+iid).then(function(){ dToast('已移除'); loadGarden(); }).catch(function(e){ dToast(e.message); }); }, '移除');
+        el.querySelector('div > span').appendChild(btn);
+      });
+    }).catch(function(){});
+  }
+  var gdGo = dGet('gdGo');
+  if(gdGo) gdGo.addEventListener('click', function(){
+    var t = (dGet('gdInput').value||'').trim();
+    var days = parseInt(dGet('gdDays').value, 10) || 7;
+    if(!t || t.length < 5){ dToast('想法至少5个字'); return; }
+    dBusy(gdGo, true);
+    dPost('/api/disrupt/garden/plant', {thought:t, days:days}).then(function(it){
+      dGet('gdResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(16,185,129,.16),rgba(52,211,153,.16));margin:10px 14px">'+
+        '<div class="dm-head">🌿 '+dEsc(it.plant_type)+'</div>'+
+        '<div style="font-size:12px;color:#10b981;margin-top:4px">花期：'+dEsc(it.bloom_at)+'</div>'+
+        '<div style="font-size:12px;color:var(--color-text-dim);margin-top:4px">'+dEsc(it.meaning)+'</div>'+
+        '<div style="font-size:11.5px;color:var(--color-text);margin-top:6px;white-space:pre-wrap">开花时：'+dEsc(it.bloom_description)+'</div>'+
+      '</div>';
+      dGet('gdInput').value=''; loadGarden();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(gdGo, false); });
+  });
+
+  // ===========================================================================
+  // 17. 灵魂镜像室
+  // ===========================================================================
+  function loadMirror(){
+    dApi('/api/disrupt/mirror').then(function(d){
+      var box = dGet('mrHistory'); if(!box) return;
+      var items = d.reflections || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#818cf8">'+dEsc(it.topic)+' · '+dEsc(it.ts)+'</span>'+
+          '</div>'+
+          '<div style="font-size:12px;color:var(--color-text);margin-top:4px">表层：'+dEsc(it.surface)+'</div>'+
+          '<div style="font-size:12px;color:#6366f1;margin-top:2px">深层：'+dEsc(it.depth)+'</div>'+
+          '<div style="font-size:12px;color:#4f46e5;margin-top:2px">阴影：'+dEsc(it.shadow)+'</div>'+
+          '<div style="font-size:12px;color:#818cf8;margin-top:2px">许墨：'+dEsc(it.integration)+'</div>'+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有镜像记录</div>';
+      box.querySelectorAll('.dm-item').forEach(function(el){
+        var id = el.dataset.id;
+        var btn = dDelBtn(id, function(iid){ dDel('/api/disrupt/mirror/'+iid).then(function(){ dToast('已删除'); loadMirror(); }).catch(function(e){ dToast(e.message); }); }, '删除');
+        el.querySelector('div > span').appendChild(btn);
+      });
+    }).catch(function(){});
+  }
+  var mrGo = dGet('mrGo');
+  if(mrGo) mrGo.addEventListener('click', function(){
+    var t = (dGet('mrInput').value||'').trim();
+    if(!t || t.length < 3){ dToast('主题至少3个字'); return; }
+    dBusy(mrGo, true);
+    dPost('/api/disrupt/mirror/reflect', {topic:t}).then(function(it){
+      dGet('mrResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(99,102,241,.16),rgba(129,140,248,.16));margin:10px 14px">'+
+        '<div class="dm-head">🪞 '+dEsc(it.topic)+'</div>'+
+        '<div style="font-size:12.5px;color:var(--color-text);margin-top:6px">表层：'+dEsc(it.surface)+'</div>'+
+        '<div style="font-size:12.5px;color:#6366f1;margin-top:4px">深层：'+dEsc(it.depth)+'</div>'+
+        '<div style="font-size:12.5px;color:#4f46e5;margin-top:4px">阴影：'+dEsc(it.shadow)+'</div>'+
+        '<div style="font-size:12.5px;color:#818cf8;margin-top:4px">许墨：'+dEsc(it.integration)+'</div>'+
+      '</div>';
+      dGet('mrInput').value=''; loadMirror();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(mrGo, false); });
+  });
+
+  // ===========================================================================
+  // 18. 命运编织者
+  // ===========================================================================
+  var _weaverId = null;
+  function loadWeaver(){
+    dApi('/api/disrupt/weaver').then(function(d){
+      var box = dGet('wvHistory'); if(!box) return;
+      var items = d.stories || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#a78bfa">'+dEsc(it.theme)+' · '+dEsc(it.ts)+'</span>'+
+          '</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-faint);margin-top:4px">前提：'+dEsc(it.premise)+'</div>'+
+          '<div style="font-size:12.5px;color:var(--color-text);margin-top:4px;white-space:pre-wrap">'+dEsc(it.opening)+'</div>'+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有编织档案</div>';
+      box.querySelectorAll('.dm-item').forEach(function(el){
+        var id = el.dataset.id;
+        var btn = dDelBtn(id, function(iid){ dDel('/api/disrupt/weaver/'+iid).then(function(){ dToast('已删除'); loadWeaver(); }).catch(function(e){ dToast(e.message); }); }, '删除');
+        el.querySelector('div > span').appendChild(btn);
+      });
+    }).catch(function(){});
+  }
+  function renderWeaverChoice(wid, choice, options){
+    var box = dGet('wvChoice');
+    if(!box || !options || !options.length) return;
+    box.style.display = 'block';
+    box.innerHTML = '<div style="margin:8px 0;font-size:12px;color:var(--color-text-dim)">'+dEsc(choice)+'</div>'+
+      options.map(function(opt, idx){
+        return '<button class="dm-go" style="font-size:12px;padding:6px 14px;margin:4px 4px 4px 0;background:linear-gradient(135deg,#8b5cf6,#a78bfa)" data-wopt="'+idx+'" data-wid="'+wid+'">'+dEsc(opt)+'</button>';
+      }).join('');
+    box.querySelectorAll('[data-wopt]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var oidx = parseInt(btn.dataset.wopt, 10);
+        var swid = btn.dataset.wid;
+        btn.disabled = true;
+        dPost('/api/disrupt/weaver/'+swid+'/choose', {option:oidx}).then(function(r){
+          dGet('wvResult').innerHTML += '<div style="margin-top:10px;padding:8px 12px;background:rgba(139,92,246,.08);border-radius:8px">'+
+            '<div style="white-space:pre-wrap;font-size:13px;line-height:1.8;color:var(--color-text)">'+dEsc(r.scene)+'</div>'+
+          '</div>';
+          if(r.options && r.options.length){
+            renderWeaverChoice(swid, r.next_choice, r.options);
+          } else {
+            dGet('wvChoice').style.display = 'none';
+            dToast('故事已到达终点');
+          }
+        }).catch(function(e){ dToast(e.message); btn.disabled = false; });
+      });
+    });
+  }
+  var wvGo = dGet('wvGo');
+  if(wvGo) wvGo.addEventListener('click', function(){
+    var t = (dGet('wvInput').value||'').trim();
+    if(!t || t.length < 8){ dToast('故事前提至少8个字'); return; }
+    dBusy(wvGo, true);
+    dPost('/api/disrupt/weaver/spin', {premise:t}).then(function(it){
+      _weaverId = it.id;
+      dGet('wvResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(167,139,250,.16));margin:10px 14px">'+
+        '<div class="dm-head">🕸️ '+dEsc(it.theme)+'</div>'+
+        '<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.85;margin-top:8px;color:var(--color-text)">'+dEsc(it.opening)+'</div>'+
+      '</div>';
+      renderWeaverChoice(it.id, it.first_choice, it.options);
+      dGet('wvInput').value=''; loadWeaver();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(wvGo, false); });
+  });
+
+  // ===========================================================================
+  // 19. 情感化学反应
+  // ===========================================================================
+  var _alchemySelected = [];
+  function loadAlchemy(){
+    dApi('/api/disrupt/alchemy/elements').then(function(d){
+      var box = dGet('alElements'); if(!box) return;
+      var elems = d.elements || {};
+      box.innerHTML = Object.keys(elems).map(function(k){
+        var e = elems[k];
+        return '<button class="al-elem" data-key="'+k+'" style="display:inline-flex;flex-direction:column;align-items:center;padding:6px 10px;border-radius:8px;border:1px solid '+e.color+'30;background:'+e.color+'10;cursor:pointer;font-size:11px;transition:all .2s">'+
+          '<span style="font-size:14px;color:'+e.color+';font-weight:600">'+dEsc(e.name)+'</span>'+
+          '<span style="font-size:9px;color:var(--color-text-faint);margin-top:2px">'+dEsc(e.desc)+'</span>'+
+        '</button>';
+      }).join('');
+      box.querySelectorAll('.al-elem').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var k = btn.dataset.key;
+          var idx = _alchemySelected.indexOf(k);
+          if(idx >= 0){ _alchemySelected.splice(idx, 1); btn.style.outline='none'; btn.style.outlineOffset='0'; }
+          else if(_alchemySelected.length < 4){ _alchemySelected.push(k); btn.style.outline='2px solid '+btn.style.borderColor; btn.style.outlineOffset='1px'; }
+          else { dToast('最多选择4种元素'); }
+        });
+      });
+    }).catch(function(){});
+    dApi('/api/disrupt/alchemy/history').then(function(d){
+      var box = dGet('alHistory'); if(!box) return;
+      var items = d.compounds || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="font-size:11px;color:#fb923c">'+dEsc(it.compound_name)+' · 稳定性 '+it.stability+'/10 · '+dEsc(it.ts)+'</div>'+
+          '<div style="font-size:11.5px;color:var(--color-text-faint);margin-top:4px">元素：'+dEsc(it.element_names)+'</div>'+
+          '<div style="font-size:12.5px;color:var(--color-text);margin-top:4px">'+dEsc(it.effect)+'</div>'+
+          '<div style="font-size:12px;color:#f97316;margin-top:2px">许墨：'+dEsc(it.xumo_reaction)+'</div>'+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有实验记录</div>';
+    }).catch(function(){});
+  }
+  var alGo = dGet('alGo');
+  if(alGo) alGo.addEventListener('click', function(){
+    if(_alchemySelected.length < 2){ dToast('至少选择2种情感元素'); return; }
+    dBusy(alGo, true);
+    dPost('/api/disrupt/alchemy/mix', {elements:_alchemySelected}).then(function(it){
+      dGet('alResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(249,115,22,.16),rgba(251,146,60,.16));margin:10px 14px">'+
+        '<div class="dm-head">⚗️ '+dEsc(it.compound_name)+'</div>'+
+        '<div style="font-size:11.5px;color:#f97316;margin-top:4px">元素：'+dEsc(it.element_names)+' | 稳定性 '+it.stability+'/10</div>'+
+        '<div style="font-size:13px;color:var(--color-text);margin-top:6px">'+dEsc(it.effect)+'</div>'+
+        '<div style="font-size:12px;color:#fb923c;margin-top:4px">许墨：'+dEsc(it.xumo_reaction)+'</div>'+
+      '</div>';
+      _alchemySelected = [];
+      loadAlchemy();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(alGo, false); });
+  });
+
+  // ===========================================================================
+  // 20. 星际罗盘
+  // ===========================================================================
+  function loadCompass(){
+    dApi('/api/disrupt/compass/history').then(function(d){
+      var box = dGet('cpHistory'); if(!box) return;
+      var items = d.logs || [];
+      box.innerHTML = items.length ? items.map(function(it){
+        return '<div class="dm-item" data-id="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--color-border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<span style="font-size:11px;color:#22d3ee">'+dEsc(it.constellation)+' · '+dEsc(it.star)+' · '+dEsc(it.ts)+'</span>'+
+          '</div>'+
+          '<div style="font-size:12.5px;color:var(--color-text);margin-top:4px">'+dEsc(it.course)+'</div>'+
+          '<div style="font-size:12px;color:#06b6d4;margin-top:2px">🌌 '+dEsc(it.cosmic_message)+'</div>'+
+        '</div>';
+      }).join('') : '<div class="empty-tip">还没有导航记录</div>';
+    }).catch(function(){});
+  }
+  var cpGo = dGet('cpGo');
+  if(cpGo) cpGo.addEventListener('click', function(){
+    dBusy(cpGo, true);
+    dApi('/api/disrupt/compass').then(function(it){
+      dGet('cpResult').innerHTML = '<div class="mind-card" style="background:linear-gradient(135deg,rgba(6,182,212,.16),rgba(34,211,238,.16));margin:10px 14px">'+
+        '<div class="dm-head">🧭 '+dEsc(it.constellation)+' · '+dEsc(it.star)+'</div>'+
+        '<div style="font-size:13px;color:var(--color-text);margin-top:6px">'+dEsc(it.course)+'</div>'+
+        '<div style="font-size:12px;color:#06b6d4;margin-top:6px">🌌 '+dEsc(it.cosmic_message)+'</div>'+
+        '<div style="margin-top:8px"><input id="cpDecision" placeholder="描述你的决定…" style="width:calc(100% - 32px);box-sizing:border-box;font-size:12px">'+
+        '<button class="dm-go" id="cpNavigate" style="font-size:12px;padding:6px 14px;background:linear-gradient(135deg,#06b6d4,#22d3ee)" data-cid="'+it.id+'">导航反馈</button></div>'+
+      '</div>';
+      var cpNav = dGet('cpNavigate');
+      if(cpNav) cpNav.addEventListener('click', function(){
+        var dec = (dGet('cpDecision').value||'').trim();
+        var cid = cpNav.dataset.cid;
+        if(!dec){ dToast('请描述你的决定'); return; }
+        dBusy(cpNav, true);
+        dPost('/api/disrupt/compass/'+cid+'/navigate', {decision:dec}).then(function(r){
+          dToast('契合度 '+r.alignment+'/100 · '+dEsc(r.xumo_feedback));
+          loadCompass();
+        }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(cpNav, false); });
+      });
+      loadCompass();
+    }).catch(function(e){ dToast(e.message); }).finally(function(){ dBusy(cpGo, false); });
+  });
+
+  // ===========================================================================
+
   // ===========================================================================
   // 入口分发：监听 app-icon 点击 + 进入时加载数据
   // ===========================================================================
   var LOADER = {
     'rtm': loadRtm, 'fusion': loadFusion, 'theater': loadTheater, 'fateecho': feInit,
     'vault': loadVault, 'pulselab': loadPulse, 'rift': loadRift, 'wager': function(){ dealWager(); loadWager(); },
-    'relic': loadRelic, 'symbiote': loadSym
+    'relic': loadRelic, 'symbiote': loadSym,
+    'dreamloom': loadDreamloom, 'emoweather': loadEmoweather, 'parallel': loadParallel,
+    'puzzle': loadPuzzle, 'dradio': loadDradio, 'garden': loadGarden,
+    'mirror': loadMirror, 'weaver': loadWeaver, 'alchemy': loadAlchemy, 'compass': loadCompass
   };
   // 监听 icon-grid / dock 上的新 app-icon 点击
   function bindIcons(){
@@ -23770,6 +24386,16 @@ var FEATS = [
  {i:'🎰',n:'命运赌局',app:'wager',d:'和他赌一局，赌注是心动。'},
  {i:'🛠',n:'回忆修复工坊',app:'relic',d:'把褪色的回忆一点点修复如初。'},
  {i:'🌱',n:'共生体演化',app:'symbiote',d:'共同养育一段会随你们成长的关系生命体。'},
+ {i:'🌙',n:'梦境织机',app:'dreamloom',d:'把梦境讲给他，他帮你解读象征、编织共同梦境。'},
+ {i:'🌦️',n:'情绪气象台',app:'emoweather',d:'基于近期心情生成情绪天气预报。'},
+ {i:'🌀',n:'平行宇宙探测器',app:'parallel',d:'描述人生分歧点，探测另一个宇宙中的你们。'},
+ {i:'🧩',n:'记忆拼图',app:'puzzle',d:'零碎记忆碎片拼成完整故事。'},
+ {i:'📻',n:'心灵共鸣电台',app:'dradio',d:'基于当前情绪生成共鸣内容。'},
+ {i:'🌿',n:'时间胶囊花园',app:'garden',d:'种下想法，等它开花。'},
+ {i:'🪞',n:'灵魂镜像室',app:'mirror',d:'深层心理镜像分析。'},
+ {i:'🕸️',n:'命运编织者',app:'weaver',d:'互动分支故事，你选择命运走向。'},
+ {i:'⚗️',n:'情感化学反应',app:'alchemy',d:'混合情感元素，看化学反应。'},
+ {i:'🧭',n:'星际罗盘',app:'compass',d:'基于当前状态生成星际导航建议。'},
  {i:'🧩',n:'梦境解码器',app:'dreamlab',d:'把你的梦讲给他，他帮你解码潜意识的信号。'}
 ]},
 {name:'世界与页面', items:[
@@ -24046,9 +24672,12 @@ window.closeTutorial = closeTutorial;
 </script>
 
 <!-- ===== 聊天窗口拖拽缩放：所有聊天窗口可拖动、拉角放大缩小（双击 ⠿ 或 ⟲ 还原，Esc 全部还原） ===== -->
+<link rel="stylesheet" href="/static/premium-ui.css?v=2">
+<script src="/static/premium-ui.js?v=2" defer></script>
 <script src="/static/chat-window-kit.js"></script>
 <script>
 ChatWinKit.attachAll(['.chat-panel', '#smsPage', '#caChat', '#wkChat', '#lsChat', '#svChat', '#rdcChat']);
 </script>
+<script src="/static/coze-restore.js"></script>
 </body>
 </html>

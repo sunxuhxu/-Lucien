@@ -306,3 +306,8 @@ me_profile.json
 pay_qr.png
 xumo5.png
 _window_crop.png
+
+# ===== Local import / Coze recovery artifacts =====
+_bak_extract/
+project_*.tar.gz
+user_behavior.json

@@ -28,8 +28,8 @@ BASE_DIR = Path(__file__).parent
 STATIC_DIR = BASE_DIR / "static"
 
 VIDEO_CONFIG = {
-    "output_dir": STATIC_DIR / "video_output",
-    "temp_dir": STATIC_DIR / "video_temp", 
+    "output_dir": RolePath("static", "video_output"),
+    "temp_dir": RolePath("static", "video_temp"),
     "max_duration": 300,        # 最大视频时长（秒）
     "default_fps": 24,
     "default_resolution": "1920x1080",
@@ -165,7 +165,7 @@ async def _llm_image_for_text(
 # 1. 成长记录时光机 - 聚合关系数据，生成年度回顾视频
 # ===========================================================================
 GROWTH_TIMELINE_FILE = RolePath("growth_timeline.json")
-GROWTH_VIDEO_DIR = STATIC_DIR / "growth_video"
+GROWTH_VIDEO_DIR = RolePath("static", "growth_video")
 GROWTH_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 # 关系成长阶段定义
@@ -759,7 +759,7 @@ async def start_growth_video_generation(review_id: str):
 # 2. 梦境可视化播放器 - 将清梦功能中的梦境转化为动态视频
 # ===========================================================================
 DREAM_VIDEO_FILE = RolePath("dream_video.json")
-DREAM_VIDEO_DIR = STATIC_DIR / "dream_video"
+DREAM_VIDEO_DIR = RolePath("static", "dream_video")
 
 # 梦境风格视觉映射
 DREAM_STYLE_VISUALS = {
@@ -1053,7 +1053,7 @@ async def _extract_dream_scenes(dream_text: str, style_info: dict) -> list:
 # 3. 记忆回放剧场 - 将记忆手账转化为许墨旁白的视频故事
 # ===========================================================================
 MEMORY_THEATER_FILE = RolePath("memory_theater.json")
-MEMORY_THEATER_DIR = STATIC_DIR / "memory_theater"
+MEMORY_THEATER_DIR = RolePath("static", "memory_theater")
 
 # 记忆剧场主题风格
 MEMORY_THEATER_THEMES = {
@@ -1379,7 +1379,7 @@ async def _generate_memory_scenes(theater: dict) -> list:
 # 4. 时空旅行日记 - 结合逆向时光机，生成许墨在不同时空的视频日记
 # ===========================================================================
 TIME_TRAVEL_FILE = RolePath("time_travel.json")
-TIME_TRAVEL_DIR = STATIC_DIR / "time_travel"
+TIME_TRAVEL_DIR = RolePath("static", "time_travel")
 
 # 时空形象设计
 TIME_TRAVEL_PROFILES = {
@@ -1757,7 +1757,7 @@ async def _extract_time_scenes(diary_content: str, profile: dict) -> list:
 # 5. 共同时刻相册 - 用户照片与许墨角色合成，生成互动视频相册
 # ===========================================================================
 SHARED_ALBUM_FILE = RolePath("shared_album.json")
-SHARED_ALBUM_DIR = STATIC_DIR / "shared_album"
+SHARED_ALBUM_DIR = RolePath("static", "shared_album")
 
 # 照片合成模式
 PHOTO_COMPOSITION_MODES = {
@@ -2075,7 +2075,7 @@ async def _generate_album_composites(album: dict) -> list:
 # 6. 虚拟约会场景生成 - 支持高度互动的虚拟约会视频体验
 # ===========================================================================
 VIRTUAL_DATE_FILE = RolePath("virtual_date.json")
-VIRTUAL_DATE_DIR = STATIC_DIR / "virtual_date"
+VIRTUAL_DATE_DIR = RolePath("static", "virtual_date")
 
 # 约会场景设计
 VIRTUAL_DATE_SCENES = {

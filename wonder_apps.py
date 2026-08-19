@@ -13,6 +13,7 @@ from store_common import atomic_json, file_lock
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
+from role_data import RolePath
 
 BASE_DIR = Path(__file__).parent
 STATIC_DIR = BASE_DIR / "static"
@@ -30,7 +31,6 @@ MUSEUM_FILE = "museum.json"
 
 
 def _load(path: str, default):
-    from role_data import RolePath
     p = RolePath(path)
     if p.exists():
         try:
@@ -41,7 +41,6 @@ def _load(path: str, default):
 
 
 def _save(path: str, data):
-    from role_data import RolePath
     atomic_json(RolePath(path), data)
 
 
@@ -1080,7 +1079,7 @@ async def habit_encourage(req: Request):
 # ===========================================================================
 # 7. 晚间语音回顾：每晚生成许墨声音的今日回顾播报
 # ===========================================================================
-RECAP_VOICE_DIR = STATIC_DIR / "recap_voice"
+RECAP_VOICE_DIR = RolePath("static", "recap_voice")
 
 
 def _load_recap() -> dict:
