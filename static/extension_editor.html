@@ -9,8 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&family=Ma+Shan+Zheng&family=Long+Cang&display=swap" rel="stylesheet">
 <style>
-  @font-face{font-family:"LXGW WenKai";src:url("/static/fonts/LXGWWenKai-Regular.ttf?v=2") format("truetype");font-weight:400;font-display:swap}
-  @font-face{font-family:"LXGW WenKai";src:url("/static/fonts/LXGWWenKai-Medium.ttf?v=2") format("truetype");font-weight:500;font-display:swap}
+  @font-face{font-family:"LXGW WenKai";src:url("/static/fonts/LXGWWenKai-Regular.ttf?v=3") format("truetype");font-weight:400;font-display:swap}
+  @font-face{font-family:"LXGW WenKai";src:url("/static/fonts/LXGWWenKai-Medium.ttf?v=3") format("truetype");font-weight:500;font-display:swap}
   :root{
     --color-bg:#f3eefb;--color-elev:#ffffff;--color-card:#faf7fe;
     --color-primary:#7c3aed;--color-primary-soft:#6d28d9;--color-primary-dim:#5b21b6;
@@ -103,6 +103,20 @@
   .chat-message{margin-bottom:12px;padding:12px;border-radius:var(--radius-sm);background:var(--color-elev)}
   .chat-message.user{background:var(--color-primary);color:white;margin-left:40px}
   .chat-message.ai{margin-right:40px}
+
+  /* ---- 智能生成：主题灵感卡片 ---- */
+  .smart-row{display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+  .smart-row input{flex:1;min-width:160px;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-family:var(--font-sans)}
+  .smart-row select{padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-family:var(--font-sans);background:var(--color-elev)}
+  .smart-source{margin-left:auto;font-size:12px;color:var(--color-text-faint)}
+  .theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:14px 0}
+  .theme-card{background:var(--color-elev);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px;cursor:pointer;transition:all var(--dur-normal) var(--ease-out)}
+  .theme-card:hover{border-color:var(--color-primary);transform:translateY(-3px);box-shadow:var(--shadow-md)}
+  .theme-card.selected{border-color:var(--color-primary);background:rgba(124,58,237,.07);box-shadow:0 0 0 2px rgba(124,58,237,.25)}
+  .theme-card h4{font-size:14px;color:var(--color-primary);margin-bottom:6px}
+  .theme-card p{font-size:12px;color:var(--color-text-dim);line-height:1.6;margin-bottom:8px}
+  .theme-card .tt{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;background:var(--color-bg);color:var(--color-text-dim);margin-right:4px}
+  .smart-loading{padding:24px;text-align:center;color:var(--color-text-faint);font-size:13px}
   
   .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center}
   .modal.active{display:flex}
@@ -115,6 +129,23 @@
     .editor-layout{grid-template-columns:1fr}
     .extension-list{max-height:200px}
   }
+
+  /* ---- 内置教程导览（前缀 et） ---- */
+  .et-spot{position:fixed;z-index:9990;border-radius:12px;box-shadow:0 0 0 9999px rgba(43,33,64,.72),0 0 0 3px rgba(255,255,255,.65);pointer-events:none;transition:all .3s ease}
+  .et-tip{position:fixed;z-index:9991;width:min(320px,88vw);background:#fff;border-radius:14px;box-shadow:0 16px 44px rgba(76,29,149,.35);padding:14px 16px 12px}
+  .et-tip.center{top:50%;left:50%;transform:translate(-50%,-50%);width:min(380px,90vw)}
+  .et-tip-step{font-size:11px;color:var(--color-primary);font-weight:700;letter-spacing:1px;margin-bottom:5px}
+  .et-tip-title{font-size:15px;font-weight:700;color:var(--color-text);margin-bottom:6px}
+  .et-tip-text{font-size:12.5px;line-height:1.7;color:var(--color-text-dim)}
+  .et-tip-bar{display:flex;align-items:center;gap:8px;margin-top:12px}
+  .et-tip-skip{border:none;background:none;color:var(--color-text-faint);font-size:12px;cursor:pointer;font-family:inherit;padding:4px 0}
+  .et-tip-skip:hover{color:var(--color-offline)}
+  .et-tip-dots{flex:1;display:flex;gap:4px;justify-content:center}
+  .et-tip-dots i{width:6px;height:6px;border-radius:50%;background:#e5e7eb;display:block}
+  .et-tip-dots i.on{background:var(--color-primary)}
+  .et-tip-btn{border:none;border-radius:9px;padding:6px 14px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .et-tip-prev{background:#f3f4f6;color:var(--color-text)}
+  .et-tip-next{background:linear-gradient(135deg,var(--color-primary),var(--color-pink));color:#fff}
 </style>
 </head>
 <body>
@@ -122,6 +153,7 @@
   <div class="header">
     <h1>🦋 扩展编辑器</h1>
     <div class="btn-group">
+      <button class="btn btn-secondary" onclick="window.startEditorTour && startEditorTour()">❓ 教程</button>
       <button class="btn btn-secondary" onclick="showImportExport()">导入/导出</button>
       <button class="btn btn-primary" onclick="createNewExtension()">+ 新建扩展</button>
     </div>
@@ -131,6 +163,7 @@
     <button class="tab active" onclick="switchTab('editor')">可视化编辑</button>
     <button class="tab" onclick="switchTab('ai-builder')">AI对话构建</button>
     <button class="tab" onclick="switchTab('nl-generate')">自然语言生成</button>
+    <button class="tab" onclick="switchTab('smart-gen')">✨ 智能生成</button>
   </div>
   
   <div class="editor-layout">
@@ -218,6 +251,43 @@
           <div class="btn-group">
             <button class="btn btn-secondary" onclick="editNLConfig()">编辑</button>
             <button class="btn btn-success" onclick="saveNLConfig()">保存</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 智能生成：主题灵感 + 一键生成功能配置 -->
+      <div id="smart-gen-panel" style="display:none">
+        <div class="ai-builder">
+          <h3>✨ 智能生成扩展</h3>
+          <p style="margin-bottom:12px;color:var(--color-text-dim)">第 1 步：输入关键词或方向，AI 推荐扩展主题灵感；第 2 步：点击主题卡片，一键生成完整扩展功能配置</p>
+          <div class="smart-row">
+            <input type="text" id="smartKeyword" placeholder="关键词（可选），例如：温柔、天气、晚安、学习…">
+            <select id="smartDirection">
+              <option value="auto">类型不限</option>
+              <option value="prompt_template">提示词模板</option>
+              <option value="tool_chain">工具链</option>
+              <option value="workflow">工作流</option>
+            </select>
+            <button class="btn btn-primary" id="smartThemeBtn" onclick="generateSmartThemes()">🎨 生成主题灵感</button>
+            <span class="smart-source" id="smartSource"></span>
+          </div>
+          <div id="themeGrid" class="theme-grid"></div>
+          <button class="btn btn-primary" id="smartGenBtn" onclick="generateFromSmartTheme()" disabled>⚡ 用选中主题生成扩展功能</button>
+          <div class="smart-row" style="margin-top:12px;margin-bottom:0">
+            <input type="text" id="smartCustomDesc" placeholder="或直接输入一句话需求，例如：深夜时语气更温柔，偶尔说一句晚安诗">
+            <button class="btn btn-secondary" onclick="generateSmartCustom()">直接生成</button>
+          </div>
+        </div>
+        
+        <div id="smartResult" style="display:none;margin-top:16px">
+          <div class="config-editor">
+            <h4>生成的扩展功能配置 <span class="smart-source" id="smartGenSource"></span></h4>
+            <pre id="smartConfigPreview"></pre>
+          </div>
+          <div id="smartSuggestions" style="margin-top:12px"></div>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="editSmartConfig()">编辑</button>
+            <button class="btn btn-success" onclick="saveSmartConfig()">保存</button>
           </div>
         </div>
       </div>
@@ -612,14 +682,20 @@ function generateFromNL() {
   })
   .then(res => res.json())
   .then(data => {
+    if (data.error || !data.config) {
+      alert('生成失败：' + (data.error || data.detail || '未知错误'));
+      return;
+    }
     generatedConfig = data.config;
     document.getElementById('nlConfigPreview').textContent = JSON.stringify(data.config, null, 2);
     
-    const suggestionsHtml = data.suggestions.map(s => `<p>• ${s}</p>`).join('');
-    document.getElementById('nlSuggestions').innerHTML = `<h4>建议</h4>${suggestionsHtml}`;
+    const suggestions = data.suggestions || [];
+    const suggestionsHtml = suggestions.map(s => `<p>• ${s}</p>`).join('');
+    document.getElementById('nlSuggestions').innerHTML = suggestionsHtml ? `<h4>建议</h4>${suggestionsHtml}` : '';
     
     document.getElementById('nlResult').style.display = 'block';
-  });
+  })
+  .catch(err => alert('生成失败：' + err.message));
 }
 
 function editNLConfig() {
@@ -627,6 +703,124 @@ function editNLConfig() {
 }
 
 function saveNLConfig() {
+  saveAIConfig();
+}
+
+// ============ 智能生成：主题灵感 + 一键生成功能配置 ============
+let smartSelectedTheme = null;
+const TYPE_LABELS = { prompt_template: '提示词模板', tool_chain: '工具链', workflow: '工作流' };
+
+function generateSmartThemes() {
+  const keyword = document.getElementById('smartKeyword').value.trim();
+  const direction = document.getElementById('smartDirection').value;
+  const grid = document.getElementById('themeGrid');
+  const btn = document.getElementById('smartThemeBtn');
+  
+  btn.disabled = true;
+  grid.innerHTML = '<div class="smart-loading">✨ AI 正在构思扩展主题灵感…</div>';
+  document.getElementById('smartSource').textContent = '';
+  smartSelectedTheme = null;
+  document.getElementById('smartGenBtn').disabled = true;
+  
+  fetch('/api/extensions/smart/themes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keyword, direction, count: 6 })
+  })
+  .then(res => res.json())
+  .then(data => {
+    btn.disabled = false;
+    const themes = data.themes || [];
+    if (!themes.length) {
+      grid.innerHTML = '<div class="smart-loading">暂时没有灵感，换个关键词试试~</div>';
+      return;
+    }
+    document.getElementById('smartSource').textContent = data.source === 'ai' ? '🤖 AI 生成' : '📦 本地灵感库';
+    grid.innerHTML = '';
+    themes.forEach(theme => {
+      const card = document.createElement('div');
+      card.className = 'theme-card';
+      const tagsHtml = (theme.tags || []).map(t => `<span class="tt">${t}</span>`).join('');
+      card.innerHTML = `
+        <h4>${theme.name}</h4>
+        <p>${theme.description}</p>
+        <div><span class="tt">${TYPE_LABELS[theme.type] || theme.type}</span>${tagsHtml}</div>
+      `;
+      card.onclick = () => selectSmartTheme(card, theme);
+      grid.appendChild(card);
+    });
+  })
+  .catch(err => {
+    btn.disabled = false;
+    grid.innerHTML = '<div class="smart-loading">生成失败：' + err.message + '</div>';
+  });
+}
+
+function selectSmartTheme(card, theme) {
+  document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  smartSelectedTheme = theme;
+  document.getElementById('smartGenBtn').disabled = false;
+}
+
+function generateFromSmartTheme() {
+  if (!smartSelectedTheme) {
+    alert('请先选择一个主题卡片');
+    return;
+  }
+  doSmartGenerate(smartSelectedTheme.description, smartSelectedTheme.name);
+}
+
+function generateSmartCustom() {
+  const desc = document.getElementById('smartCustomDesc').value.trim();
+  if (!desc) {
+    alert('请输入一句话需求');
+    return;
+  }
+  doSmartGenerate(desc, '');
+}
+
+function doSmartGenerate(description, theme) {
+  const btn = document.getElementById('smartGenBtn');
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = '⏳ AI 正在生成扩展功能…';
+  
+  fetch('/api/extensions/smart/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description, theme, user_id: 'owner' })
+  })
+  .then(res => res.json())
+  .then(data => {
+    btn.disabled = false;
+    btn.textContent = oldText;
+    if (data.error || !data.config) {
+      alert('生成失败：' + (data.error || '未知错误'));
+      return;
+    }
+    generatedConfig = data.config;
+    document.getElementById('smartConfigPreview').textContent = JSON.stringify(data.config, null, 2);
+    document.getElementById('smartGenSource').textContent = data.source === 'ai' ? '🤖 AI 生成' : '🧩 规则生成';
+    
+    const suggestions = data.suggestions || [];
+    const html = suggestions.map(s => `<p>• ${s}</p>`).join('');
+    document.getElementById('smartSuggestions').innerHTML = html ? `<h4>建议</h4>${html}` : '';
+    document.getElementById('smartResult').style.display = 'block';
+    document.getElementById('smartResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  })
+  .catch(err => {
+    btn.disabled = false;
+    btn.textContent = oldText;
+    alert('生成失败：' + err.message);
+  });
+}
+
+function editSmartConfig() {
+  loadAIConfigToEditor();
+}
+
+function saveSmartConfig() {
   saveAIConfig();
 }
 
@@ -687,6 +881,138 @@ document.getElementById('chatInput').addEventListener('keypress', function(e) {
     sendChatMessage();
   }
 });
+</script>
+
+<!-- 内置教程导览：首次进入自动触发，头部「❓ 教程」可随时重看 -->
+<div class="et-spot" id="etSpot" style="display:none" aria-hidden="true"></div>
+<div class="et-tip" id="etTip" style="display:none" role="dialog" aria-label="扩展编辑器教程">
+  <div class="et-tip-step" id="etTipStep"></div>
+  <div class="et-tip-title" id="etTipTitle"></div>
+  <div class="et-tip-text" id="etTipText"></div>
+  <div class="et-tip-bar">
+    <button class="et-tip-skip" id="etSkip" type="button">跳过教程</button>
+    <div class="et-tip-dots" id="etDots"></div>
+    <button class="et-tip-btn et-tip-prev" id="etPrev" type="button">上一步</button>
+    <button class="et-tip-btn et-tip-next" id="etNext" type="button">下一步</button>
+  </div>
+</div>
+
+<script>
+/* ===== 扩展编辑器内置教程引导（自包含，前缀 et，风格同主页 fg 导览） ===== */
+(function(){
+'use strict';
+function $(id){ return document.getElementById(id); }
+var LS_KEY = 'ext_editor_tour_v1';
+
+/* s:高亮选择器 c:居中展示 p:提示框方位(left/right/top/bottom) */
+var STEPS = [
+  {c:true, t:'欢迎来到扩展编辑器', x:'在这里你可以为许墨定制专属扩展——自定义提示词模板、工具链和工作流。全程 1 分钟，教你三种创建方式。'},
+  {s:'.tabs', t:'三种创建方式', x:'「可视化编辑」逐项填表单；「AI对话构建」和许墨聊天，他帮你问清需求；「自然语言生成」一句话直接出配置。新手推荐先从自然语言生成试起。', p:'bottom'},
+  {s:'#editor-panel .form-group', t:'可视化表单', x:'填写扩展名称、选择类型（提示词模板 / 工具链 / 工作流）、写上描述。切换类型时，下方会自动出现对应的专属字段，比如触发关键词、提示词内容等。', p:'bottom'},
+  {s:'#editor-panel .btn-group', t:'先测试，再保存', x:'「测试」会把当前配置发给后端试跑，直接返回触发效果；确认没问题再点「保存」，扩展立即生效。', p:'top'},
+  {s:'.config-editor', t:'配置实时预览', x:'你填的每一项都会实时编译成 JSON 显示在这里，保存的就是这份配置。', p:'top'},
+  {s:'.sidebar', t:'我的扩展', x:'左侧列出你已创建的全部扩展，点击即可载入修改；✓ 表示已启用。右上角「+ 新建扩展」随时清空表单从头创建。', p:'right'},
+  {s:'.header .btn-group', t:'导入与导出', x:'「导入/导出」可以把所有扩展备份成 JSON 文件，换设备时一键还原。', p:'bottom'},
+  {c:true, t:'一切就绪', x:'去「自然语言生成」页签试试输入一句话，比如「深夜时语气更温柔」，看看 AI 生成的扩展吧。之后随时可点右上角「❓ 教程」重看本指南。'}
+];
+var idx = 0, active = false, timer = null;
+
+function stepRect(st){
+  if(st.c) return null;
+  var el = document.querySelector(st.s);
+  if(!el || el.offsetParent===null || el.getClientRects().length===0) return null;
+  try{ el.scrollIntoView({block:'center'}); }catch(e){}
+  var r = el.getBoundingClientRect();
+  return {left:r.left, top:r.top, width:r.width, height:r.height};
+}
+
+function renderStep(){
+  var st = STEPS[idx];
+  var tip = $('etTip'), spot = $('etSpot');
+  $('etTipStep').textContent = '使用教程 '+(idx+1)+' / '+STEPS.length;
+  $('etTipTitle').textContent = st.t;
+  $('etTipText').textContent = st.x;
+  $('etPrev').style.visibility = idx===0 ? 'hidden' : 'visible';
+  $('etNext').textContent = idx===STEPS.length-1 ? '开始创建 ✨' : '下一步';
+  var dots = '';
+  STEPS.forEach(function(_, i){ dots += '<i class="'+(i===idx?'on':'')+'"></i>'; });
+  $('etDots').innerHTML = dots;
+  var rc = stepRect(st);
+  if(rc){
+    spot.style.display = 'block';
+    spot.style.left = Math.max(2, rc.left-8)+'px';
+    spot.style.top = Math.max(2, rc.top-8)+'px';
+    spot.style.width = Math.max(10, rc.width+16)+'px';
+    spot.style.height = Math.max(10, rc.height+16)+'px';
+  } else {
+    spot.style.display = 'none';
+  }
+  tip.style.display = 'block';
+  tip.classList.toggle('center', !rc);
+  if(rc){
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var tw = Math.min(320, vw*0.88), th = tip.offsetHeight || 170;
+    var left, top;
+    var place = st.p;
+    if(place==='left' && rc.left-tw-26 < 12) place = 'right';
+    if(place==='right' && rc.left+rc.width+tw+26 > vw-12) place = 'left';
+    if(place==='top' && rc.top-th-22 < 12) place = 'bottom';
+    if(place==='bottom' && rc.top+rc.height+th+22 > vh-12) place = 'top';
+    if(place==='left'){ left = rc.left-tw-18; top = rc.top+rc.height/2-th/2; }
+    else if(place==='right'){ left = rc.left+rc.width+18; top = rc.top+rc.height/2-th/2; }
+    else if(place==='top'){ left = rc.left+rc.width/2-tw/2; top = rc.top-th-16; }
+    else{ left = rc.left+rc.width/2-tw/2; top = rc.top+rc.height+16; }
+    left = Math.min(Math.max(10, left), vw-tw-10);
+    top = Math.min(Math.max(10, top), vh-th-10);
+    tip.style.left = left+'px'; tip.style.top = top+'px';
+  } else {
+    tip.style.left = ''; tip.style.top = '';
+  }
+}
+
+function startTour(){
+  if(active) return;
+  active = true; idx = 0;
+  renderStep();
+}
+function endTour(done){
+  active = false;
+  $('etTip').style.display = 'none';
+  $('etSpot').style.display = 'none';
+  if(done){ try{ localStorage.setItem(LS_KEY, '1'); }catch(e){} }
+}
+
+$('etNext').addEventListener('click', function(){
+  if(idx >= STEPS.length-1) endTour(true);
+  else{ idx++; renderStep(); }
+});
+$('etPrev').addEventListener('click', function(){ if(idx>0){ idx--; renderStep(); } });
+$('etSkip').addEventListener('click', function(){ endTour(true); });
+document.addEventListener('keydown', function(e){
+  if(!active) return;
+  if(e.key==='Escape') endTour(true);
+  else if(e.key==='ArrowRight' || e.key==='Enter') $('etNext').click();
+  else if(e.key==='ArrowLeft') $('etPrev').click();
+}, true);
+window.addEventListener('resize', function(){
+  if(active){ clearTimeout(timer); timer = setTimeout(renderStep, 120); }
+});
+
+window.startEditorTour = startTour;
+
+/* 首次进入自动触发教程 */
+document.addEventListener('DOMContentLoaded', function(){
+  var seen = false;
+  try{ seen = localStorage.getItem(LS_KEY)==='1'; }catch(e){}
+  if(!seen) setTimeout(startTour, 800);
+});
+})();
+</script>
+
+<!-- 聊天窗口拖拽缩放：AI 对话区可拖动、拉角放大缩小 -->
+<script src="/static/chat-window-kit.js"></script>
+<script>
+if (window.ChatWinKit) ChatWinKit.attachAll(['#chatInterface']);
 </script>
 </body>
 </html>

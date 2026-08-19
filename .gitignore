@@ -280,6 +280,17 @@ _try_closers.js
 _verify_fix*.js
 _vm_check.js
 
+# ===== Tool-generated / debug leftovers =====
+.qoder/
+.kit_test/
+.check_kit.ps1
+.watch_index.ps1
+.verify_req.json
+.jar.txt
+.idx_check.html
+_tmp_head_deep.html
+deploy_xumo.tar.gz
+
 # ===== Additional temp files =====
 启动器.bat
 启动器.py

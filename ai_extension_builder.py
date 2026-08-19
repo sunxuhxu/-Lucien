@@ -349,34 +349,36 @@ class ExtensionBuilder:
         }
     
     def save_extension(self) -> Dict:
-        """保存扩展到文件"""
+        """保存扩展到文件（按当前请求会话的角色隔离，与 extensions_apps 同目录约定）。"""
         if not self.state["draft_config"]:
             raise ValueError("没有可保存的配置")
-        
+
         config = self.state["draft_config"]
-        ext_file = self.role_path.resolve("extensions.json", enforce_user_scope=True)
-        
+        ext_file = RolePath("extensions.json")
+
         # 读取现有扩展
         try:
-            with file_lock(ext_file, "r"):
-                existing_data = atomic_json(ext_file)
-        except:
+            existing_data = json.loads(Path(ext_file).read_text(encoding="utf-8"))
+            if not isinstance(existing_data, dict) or not isinstance(existing_data.get("extensions"), list):
+                existing_data = {"extensions": [], "order": []}
+        except Exception:
             existing_data = {"extensions": [], "order": []}
-        
+        existing_data.setdefault("order", [])
+
         # 生成唯一ID
         ext_id = str(uuid.uuid4())
         config["id"] = ext_id
         config["created_at"] = datetime.now().isoformat()
         config["updated_at"] = datetime.now().isoformat()
-        
+
         # 添加到扩展列表
         existing_data["extensions"].append(config)
         existing_data["order"].append(ext_id)
-        
-        # 保存
-        with file_lock(ext_file, "w"):
+
+        # 保存（原子写 + 文件锁，与 store_common 约定一致）
+        with file_lock(ext_file):
             atomic_json(ext_file, existing_data)
-        
+
         return config
     
     def reset(self):

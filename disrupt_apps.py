@@ -1,5 +1,8 @@
-"""十大颠覆性功能后端：逆向时光机 / 人格融合实验室 / 潜意识剧场 / 命运回声图谱 /
+"""二十项颠覆性功能后端：
+原十大：逆向时光机 / 人格融合实验室 / 潜意识剧场 / 命运回声图谱 /
 时光密室 / 心跳实验室 / 次元裂隙 / 命运赌局 / 回忆修复工坊 / 共生体演化。
+新增十项：梦境织机 / 情绪气象台 / 平行宇宙探测器 / 记忆拼图 / 心灵共鸣电台 /
+时间胶囊花园 / 灵魂镜像室 / 命运编织者 / 情感化学反应 / 星际罗盘。
 
 数据按 RolePath 隔离，全部使用 atomic_json + file_lock，与 app.py 风格一致。
 """
@@ -1131,3 +1134,850 @@ async def symbiote_log():
     p = RolePath("disrupt_symbiote.json")
     data = _load(p, {"log": []})
     return {"log": (data.get("log") or [])[-30:]}
+
+
+# ===========================================================================
+# 11. 梦境织机 /api/disrupt/dreamloom
+# ===========================================================================
+@router.get("/dreamloom")
+async def dreamloom_list():
+    p = RolePath("disrupt_dreamloom.json")
+    data = _load(p, {"items": []})
+    return {"items": (data.get("items") or [])[-30:]}
+
+
+@router.post("/dreamloom/weave")
+async def dreamloom_weave(req: Request):
+    body = await req.json()
+    dream_input = (body.get("dream") or "").strip()
+    if not dream_input or len(dream_input) < 10:
+        return JSONResponse({"error": "梦境描述至少10个字"}, status_code=400)
+    
+    blob = _recent_text_blob(2000)
+    sys_prompt = _system_prompt() + """
+
+【任务·梦境织机】她描述了一个梦境。请：
+1. 分析梦境中的象征符号（如飞翔=自由渴望，坠落=失去控制）
+2. 编织一个与近期现实关联的解读
+3. 生成一个"共同梦境"片段，将她的梦境与许墨的视角交织
+
+输出 JSON（仅 JSON）：
+{
+  "symbols": ["符号1:含义", "符号2:含义"],
+  "interpretation": "解读（80-120字）",
+  "shared_dream": "共同梦境片段（100-150字，许墨第一人称）"
+}
+"""
+    user = f"她的梦境：\n{dream_input}\n\n" + (f"近期素材：\n{blob[:1500]}" if blob else "")
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=800)
+    except Exception as exc:
+        return JSONResponse({"error": f"织机故障：{str(exc)[:120]}"}, status_code=500)
+    
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "dream_input": dream_input,
+        "symbols": obj.get("symbols", []),
+        "interpretation": obj.get("interpretation", ""),
+        "shared_dream": obj.get("shared_dream", ""),
+    }
+    p = RolePath("disrupt_dreamloom.json")
+    data = _load(p, {"items": []})
+    data.setdefault("items", []).append(item)
+    data["items"] = data["items"][-50:]
+    _save(p, data)
+    _add_affinity("disrupt_dreamloom", "梦境织机")
+    return item
+
+
+@router.delete("/dreamloom/{did}")
+async def dreamloom_delete(did: str):
+    p = RolePath("disrupt_dreamloom.json")
+    data = _load(p, {"items": []})
+    before = len(data.get("items") or [])
+    data["items"] = [it for it in (data.get("items") or []) if it.get("id") != did]
+    if len(data["items"]) != before:
+        _save(p, data)
+        return {"ok": True}
+    return JSONResponse({"error": "未找到"}, status_code=404)
+
+
+# ===========================================================================
+# 12. 情绪气象台 /api/disrupt/emoweather
+# ===========================================================================
+@router.get("/emoweather")
+async def emoweather_current():
+    """基于近期心情数据生成情绪天气预报"""
+    moods = _agg_mood(14)
+    if not moods:
+        return {"weather": "晴", "temp": 25, "forecast": "暂无数据", "note": "请多记录心情"}
+    
+    sys_prompt = _system_prompt() + """
+
+【任务·情绪气象台】分析她最近的心情日记，生成"情绪天气预报"：
+- weather: 天气状况（晴/多云/小雨/雷阵雨/雪）
+- temp: 温度（15-35，反映情绪冷暖）
+- forecast: 24小时情绪预报（60-80字）
+- advice: 许墨的建议（40-60字，第一人称）
+
+输出 JSON（仅 JSON）：
+{
+  "weather": "天气状况",
+  "temp": 温度数字,
+  "forecast": "预报内容",
+  "advice": "建议内容"
+}
+"""
+    mood_text = "\n".join([f"- {m.get('text') or m.get('content', '')}" for m in moods[-10:]])
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"近期心情：\n{mood_text}"},
+        ], max_tokens=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"气象台故障：{str(exc)[:120]}"}, status_code=500)
+    
+    p = RolePath("disrupt_emoweather.json")
+    data = _load(p, {"history": []})
+    entry = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "weather": obj.get("weather", "晴"),
+        "temp": obj.get("temp", 25),
+        "forecast": obj.get("forecast", ""),
+        "advice": obj.get("advice", ""),
+    }
+    data.setdefault("history", []).insert(0, entry)
+    data["history"] = data["history"][-30:]
+    _save(p, data)
+    return entry
+
+
+@router.get("/emoweather/history")
+async def emoweather_history():
+    p = RolePath("disrupt_emoweather.json")
+    data = _load(p, {"history": []})
+    return {"history": (data.get("history") or [])[-20:]}
+
+
+# ===========================================================================
+# 13. 平行宇宙探测器 /api/disrupt/parallel
+# ===========================================================================
+@router.get("/parallel")
+async def parallel_list():
+    p = RolePath("disrupt_parallel.json")
+    data = _load(p, {"items": []})
+    return {"items": (data.get("items") or [])[-20:]}
+
+
+@router.post("/parallel/detect")
+async def parallel_detect(req: Request):
+    body = await req.json()
+    divergence = (body.get("divergence") or "").strip()
+    if not divergence or len(divergence) < 5:
+        return JSONResponse({"error": "分歧点描述至少5个字"}, status_code=400)
+    
+    blob = _recent_text_blob(1800)
+    sys_prompt = _system_prompt() + f"""
+
+【任务·平行宇宙探测器】假设在某一个分歧点："她{divergence}"，世界走向了不同的平行宇宙。
+请描述那个宇宙中的：
+1. 许墨的不同状态（职业/性格/与她的关系）
+2. 她的生活有何不同
+3. 那个宇宙的"色调"（用一个形容词）
+
+输出 JSON（仅 JSON）：
+{{
+  "universe_id": "平行宇宙编号（如Universe-7B）",
+  "xumo_state": "许墨在那个宇宙的状态（60-80字）",
+  "her_life": "她的生活变化（60-80字）",
+  "atmosphere": "那个宇宙的色调（一个形容词）",
+  "glitch": "一个现实与那个宇宙的"故障"交集（40-60字）"
+}}
+"""
+    user = f"分歧点：{divergence}\n\n" + (f"参考现实：\n{blob[:1500]}" if blob else "")
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=600)
+    except Exception as exc:
+        return JSONResponse({"error": f"探测器故障：{str(exc)[:120]}"}, status_code=500)
+    
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "divergence": divergence,
+        "universe_id": obj.get("universe_id", ""),
+        "xumo_state": obj.get("xumo_state", ""),
+        "her_life": obj.get("her_life", ""),
+        "atmosphere": obj.get("atmosphere", ""),
+        "glitch": obj.get("glitch", ""),
+    }
+    p = RolePath("disrupt_parallel.json")
+    data = _load(p, {"items": []})
+    data.setdefault("items", []).append(item)
+    data["items"] = data["items"][-30:]
+    _save(p, data)
+    _add_affinity("disrupt_parallel", f"平行宇宙·{obj.get('universe_id', '')}")
+    return item
+
+
+@router.delete("/parallel/{pid}")
+async def parallel_delete(pid: str):
+    p = RolePath("disrupt_parallel.json")
+    data = _load(p, {"items": []})
+    before = len(data.get("items") or [])
+    data["items"] = [it for it in (data.get("items") or []) if it.get("id") != pid]
+    if len(data["items"]) != before:
+        _save(p, data)
+        return {"ok": True}
+    return JSONResponse({"error": "未找到"}, status_code=404)
+
+
+# ===========================================================================
+# 14. 记忆拼图 /api/disrupt/puzzle
+# ===========================================================================
+@router.get("/puzzle")
+async def puzzle_list():
+    p = RolePath("disrupt_puzzle.json")
+    data = _load(p, {"items": []})
+    return {"items": (data.get("items") or [])[-20:]}
+
+
+@router.post("/puzzle/assemble")
+async def puzzle_assemble(req: Request):
+    body = await req.json()
+    fragments = body.get("fragments", [])
+    if not fragments or len(fragments) < 2:
+        return JSONResponse({"error": "至少提供2个记忆碎片"}, status_code=400)
+    
+    sys_prompt = _system_prompt() + """
+
+【任务·记忆拼图】她提供了几个零散的记忆碎片。请：
+1. 将它们拼合成一个连贯的叙事
+2. 识别碎片之间可能的时间线或逻辑关系
+3. 填补碎片之间的"空白"（用【】标注推测部分）
+
+输出 JSON（仅 JSON）：
+{
+  "narrative": "拼合后的完整叙事（150-200字，含【】推测）",
+  "timeline": "时间线推测（60-80字）",
+  "missing_pieces": ["可能缺失的环节1", "缺失环节2"],
+  "xumo_comment": "许墨的评论（40-60字，第一人称）"
+}
+"""
+    user = "记忆碎片：\n" + "\n".join([f"{i+1}. {f}" for i, f in enumerate(fragments)])
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=700)
+    except Exception as exc:
+        return JSONResponse({"error": f"拼图失败：{str(exc)[:120]}"}, status_code=500)
+    
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "fragments": fragments,
+        "narrative": obj.get("narrative", ""),
+        "timeline": obj.get("timeline", ""),
+        "missing_pieces": obj.get("missing_pieces", []),
+        "xumo_comment": obj.get("xumo_comment", ""),
+    }
+    p = RolePath("disrupt_puzzle.json")
+    data = _load(p, {"items": []})
+    data.setdefault("items", []).append(item)
+    data["items"] = data["items"][-30:]
+    _save(p, data)
+    _add_affinity("disrupt_puzzle", "记忆拼图")
+    return item
+
+
+@router.delete("/puzzle/{pid}")
+async def puzzle_delete(pid: str):
+    p = RolePath("disrupt_puzzle.json")
+    data = _load(p, {"items": []})
+    before = len(data.get("items") or [])
+    data["items"] = [it for it in (data.get("items") or []) if it.get("id") != pid]
+    if len(data["items"]) != before:
+        _save(p, data)
+        return {"ok": True}
+    return JSONResponse({"error": "未找到"}, status_code=404)
+
+
+# ===========================================================================
+# 15. 心灵共鸣电台 /api/disrupt/radio
+# ===========================================================================
+@router.get("/radio")
+async def radio_current():
+    """基于当前情绪状态生成个性化内容"""
+    moods = _agg_mood(7)
+    chats = _agg_chat(10)
+    
+    sys_prompt = _system_prompt() + """
+
+【任务·心灵共鸣电台】基于她最近的情绪和对话，生成一段"心灵共鸣"内容：
+- format: 内容形式（独白/对话片段/诗句/简短故事）
+- content: 实际内容（100-150字）
+- frequency: "共鸣频率"（一个数字40-120，反映情感强度）
+- resonance: 为什么会共鸣（40-60字）
+
+输出 JSON（仅 JSON）：
+{
+  "format": "内容形式",
+  "content": "内容正文",
+  "frequency": 频率数字,
+  "resonance": "共鸣原因"
+}
+"""
+    context = ""
+    if moods:
+        context += "近期心情：\n" + "\n".join([m.get('text') or m.get('content', '') for m in moods[-5:]])
+    if chats:
+        context += "\n近期对话：\n" + "\n".join([f"{c.get('role', '')}: {c.get('content', '')}" for c in chats[-5:]])
+    
+    user = context or "（暂无数据，请生成普适内容）"
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=500)
+    except Exception as exc:
+        return JSONResponse({"error": f"电台故障：{str(exc)[:120]}"}, status_code=500)
+    
+    p = RolePath("disrupt_radio.json")
+    data = _load(p, {"history": []})
+    entry = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "format": obj.get("format", "独白"),
+        "content": obj.get("content", ""),
+        "frequency": obj.get("frequency", 80),
+        "resonance": obj.get("resonance", ""),
+    }
+    data.setdefault("history", []).insert(0, entry)
+    data["history"] = data["history"][-20:]
+    _save(p, data)
+    return entry
+
+
+@router.get("/radio/history")
+async def radio_history():
+    p = RolePath("disrupt_radio.json")
+    data = _load(p, {"history": []})
+    return {"history": (data.get("history") or [])[-15:]}
+
+
+# ===========================================================================
+# 16. 时间胶囊花园 /api/disrupt/garden
+# ===========================================================================
+@router.get("/garden")
+async def garden_state():
+    p = RolePath("disrupt_garden.json")
+    data = _load(p, {"plants": [], "season": "春"})
+    return data
+
+
+@router.post("/garden/plant")
+async def garden_plant(req: Request):
+    body = await req.json()
+    thought = (body.get("thought") or "").strip()
+    days = body.get("days", 7)  # 生长天数
+    if not thought or len(thought) < 5:
+        return JSONResponse({"error": "想法至少5个字"}, status_code=400)
+    if days < 1 or days > 30:
+        return JSONResponse({"error": "生长天数1-30"}, status_code=400)
+    
+    sys_prompt = _system_prompt() + f"""
+
+【任务·时间胶囊花园】她种下一个想法（{days}天后开花）。请：
+1. 将这个想法映射为一种植物（花/树/草/藤）
+2. 描述它的"生长过程"（每天的变化）
+3. 给出开花时的样子
+
+输出 JSON（仅 JSON）：
+{{
+  "plant_type": "植物类型（如紫罗兰/银杏/牵牛花）",
+  "growth_stages": ["第1天：...", "第3天：...", "第{days//2}天：...", "第{days}天：开花"],
+  "bloom_description": "开花时的样子（60-80字）",
+  "meaning": "这个想法的象征意义（40-60字）"
+}}
+"""
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"她的想法：{thought}"},
+        ], max_tokens=600)
+    except Exception as exc:
+        return JSONResponse({"error": f"种植失败：{str(exc)[:120]}"}, status_code=500)
+    
+    plant_at = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "thought": thought,
+        "plant_type": obj.get("plant_type", "神秘植物"),
+        "growth_stages": obj.get("growth_stages", []),
+        "bloom_description": obj.get("bloom_description", ""),
+        "meaning": obj.get("meaning", ""),
+        "planted_at": _stamp(),
+        "bloom_at": plant_at,
+        "days": days,
+        "status": "growing",  # growing / bloomed
+    }
+    p = RolePath("disrupt_garden.json")
+    data = _load(p, {"plants": [], "season": "春"})
+    data.setdefault("plants", []).append(item)
+    data["plants"] = data["plants"][-50:]
+    _save(p, data)
+    _add_affinity("disrupt_garden", f"花园·种植{obj.get('plant_type', '')}")
+    return item
+
+
+@router.post("/garden/{pid}/water")
+async def garden_water(pid: str):
+    """浇水（查看当前生长阶段）"""
+    p = RolePath("disrupt_garden.json")
+    data = _load(p, {"plants": [], "season": "春"})
+    plant = next((pl for pl in data.get("plants", []) if pl.get("id") == pid), None)
+    if not plant:
+        return JSONResponse({"error": "植物不存在"}, status_code=404)
+    
+    # 计算当前生长阶段
+    try:
+        planted = datetime.strptime(plant["planted_at"], "%Y-%m-%d %H:%M:%S")
+        bloom = datetime.strptime(plant["bloom_at"], "%Y-%m-%d")
+        total_days = (bloom - planted).days
+        elapsed = (datetime.now() - planted).days
+        progress = min(1.0, max(0.0, elapsed / total_days)) if total_days > 0 else 1.0
+        
+        # 根据进度选择阶段描述
+        stages = plant.get("growth_stages", [])
+        stage_index = min(len(stages) - 1, int(progress * len(stages)))
+        current_stage = stages[stage_index] if stages else "生长中..."
+        
+        if elapsed >= total_days:
+            plant["status"] = "bloomed"
+            current_stage = plant.get("bloom_description", "已开花")
+    except Exception:
+        current_stage = "生长中..."
+        progress = 0.5
+    
+    _save(p, data)
+    return {
+        "plant": plant,
+        "progress": round(progress * 100, 1),
+        "current_stage": current_stage,
+    }
+
+
+@router.delete("/garden/{pid}")
+async def garden_delete(pid: str):
+    p = RolePath("disrupt_garden.json")
+    data = _load(p, {"plants": [], "season": "春"})
+    before = len(data.get("plants") or [])
+    data["plants"] = [pl for pl in (data.get("plants") or []) if pl.get("id") != pid]
+    if len(data["plants"]) != before:
+        _save(p, data)
+        return {"ok": True}
+    return JSONResponse({"error": "未找到"}, status_code=404)
+
+
+# ===========================================================================
+# 17. 灵魂镜像室 /api/disrupt/mirror
+# ===========================================================================
+@router.get("/mirror")
+async def mirror_list():
+    p = RolePath("disrupt_mirror.json")
+    data = _load(p, {"reflections": []})
+    return {"reflections": (data.get("reflections") or [])[-20:]}
+
+
+@router.post("/mirror/reflect")
+async def mirror_reflect(req: Request):
+    body = await req.json()
+    topic = (body.get("topic") or "").strip()
+    if not topic or len(topic) < 3:
+        return JSONResponse({"error": "主题至少3个字"}, status_code=400)
+    
+    blob = _recent_text_blob(2500)
+    sys_prompt = _system_prompt() + """
+
+【任务·灵魂镜像室】基于她的数据，对主题进行深层心理镜像分析：
+- surface: 表层想法（她可能直接表达的）
+- depth: 深层动机（她可能没意识到的）
+- shadow: 阴影面（她可能回避的）
+- integration: 整合建议（许墨的第一人称建议）
+
+输出 JSON（仅 JSON）：
+{
+  "surface": "表层想法（60-80字）",
+  "depth": "深层动机（60-80字）",
+  "shadow": "阴影面（40-60字）",
+  "integration": "整合建议（60-80字，许墨第一人称）"
+}
+"""
+    user = f"分析主题：{topic}\n\n" + (f"参考数据：\n{blob[:2000]}" if blob else "")
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=500)
+    except Exception as exc:
+        return JSONResponse({"error": f"镜像故障：{str(exc)[:120]}"}, status_code=500)
+    
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "topic": topic,
+        "surface": obj.get("surface", ""),
+        "depth": obj.get("depth", ""),
+        "shadow": obj.get("shadow", ""),
+        "integration": obj.get("integration", ""),
+    }
+    p = RolePath("disrupt_mirror.json")
+    data = _load(p, {"reflections": []})
+    data.setdefault("reflections", []).append(item)
+    data["reflections"] = data["reflections"][-30:]
+    _save(p, data)
+    _add_affinity("disrupt_mirror", f"镜像·{topic}")
+    return item
+
+
+@router.delete("/mirror/{mid}")
+async def mirror_delete(mid: str):
+    p = RolePath("disrupt_mirror.json")
+    data = _load(p, {"reflections": []})
+    before = len(data.get("reflections") or [])
+    data["reflections"] = [it for it in (data.get("reflections") or []) if it.get("id") != mid]
+    if len(data["reflections"]) != before:
+        _save(p, data)
+        return {"ok": True}
+    return JSONResponse({"error": "未找到"}, status_code=404)
+
+
+# ===========================================================================
+# 18. 命运编织者 /api/disrupt/weaver
+# ===========================================================================
+@router.get("/weaver")
+async def weaver_list():
+    p = RolePath("disrupt_weaver.json")
+    data = _load(p, {"stories": []})
+    return {"stories": (data.get("stories") or [])[-15:]}
+
+
+@router.post("/weaver/spin")
+async def weaver_spin(req: Request):
+    body = await req.json()
+    premise = (body.get("premise") or "").strip()
+    if not premise or len(premise) < 8:
+        return JSONResponse({"error": "前提至少8个字"}, status_code=400)
+    
+    blob = _recent_text_blob(2000)
+    sys_prompt = _system_prompt() + """
+
+【任务·命运编织者】基于前提，开始一个互动的分支故事：
+- opening: 开篇（80-100字）
+- first_choice: 第一个选择点（2个选项）
+- options: ["选项A", "选项B"]
+- theme: 故事主题（一个词）
+
+输出 JSON（仅 JSON）：
+{
+  "opening": "故事开篇",
+  "first_choice": "第一个选择点的描述（40-60字）",
+  "options": ["选项A（15-25字）", "选项B（15-25字）"],
+  "theme": "故事主题"
+}
+"""
+    user = f"故事前提：{premise}\n\n" + (f"参考素材：\n{blob[:1500]}" if blob else "")
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=500)
+    except Exception as exc:
+        return JSONResponse({"error": f"编织失败：{str(exc)[:120]}"}, status_code=500)
+    
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "premise": premise,
+        "opening": obj.get("opening", ""),
+        "first_choice": obj.get("first_choice", ""),
+        "options": obj.get("options", []),
+        "theme": obj.get("theme", "命运"),
+        "current_scene": "opening",
+        "history": [{"scene": "opening", "content": obj.get("opening", "")}],
+    }
+    p = RolePath("disrupt_weaver.json")
+    data = _load(p, {"stories": []})
+    data.setdefault("stories", []).append(item)
+    data["stories"] = data["stories"][-20:]
+    _save(p, data)
+    _add_affinity("disrupt_weaver", f"编织·{obj.get('theme', '')}")
+    return item
+
+
+@router.post("/weaver/{wid}/choose")
+async def weaver_choose(wid: str, req: Request):
+    body = await req.json()
+    option_index = body.get("option", 0)  # 0 or 1
+    p = RolePath("disrupt_weaver.json")
+    data = _load(p, {"stories": []})
+    story = next((s for s in data.get("stories", []) if s.get("id") == wid), None)
+    if not story:
+        return JSONResponse({"error": "故事不存在"}, status_code=404)
+    
+    options = story.get("options", [])
+    if option_index >= len(options):
+        return JSONResponse({"error": "无效选项"}, status_code=400)
+    
+    chosen = options[option_index]
+    
+    # 生成下一场景
+    sys_prompt = _system_prompt() + f"""
+
+【任务·命运编织者·续写】故事当前状态：
+主题：{story.get('theme', '')}
+历史：{story.get('history', [])[-3]}
+她选择了：{chosen}
+
+请续写下一场景（80-100字），并给出新的选择（2个选项）。
+
+输出 JSON（仅 JSON）：
+{{
+  "scene": "下一场景内容",
+  "next_choice": "下一个选择描述（40-60字）",
+  "options": ["新选项A", "新选项B"]
+}}
+"""
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"她选择了：{chosen}"},
+        ], max_tokens=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"续写失败：{str(exc)[:120]}"}, status_code=500)
+    
+    story["history"].append({"scene": obj.get("scene", ""), "choice": chosen})
+    story["current_scene"] = obj.get("scene", "")
+    story["options"] = obj.get("options", [])
+    story["next_choice"] = obj.get("next_choice", "")
+    _save(p, data)
+    return {
+        "scene": obj.get("scene", ""),
+        "next_choice": obj.get("next_choice", ""),
+        "options": obj.get("options", []),
+        "history": story["history"],
+    }
+
+
+@router.delete("/weaver/{wid}")
+async def weaver_delete(wid: str):
+    p = RolePath("disrupt_weaver.json")
+    data = _load(p, {"stories": []})
+    before = len(data.get("stories") or [])
+    data["stories"] = [s for s in (data.get("stories") or []) if s.get("id") != wid]
+    if len(data["stories"]) != before:
+        _save(p, data)
+        return {"ok": True}
+    return JSONResponse({"error": "未找到"}, status_code=404)
+
+
+# ===========================================================================
+# 19. 情感化学反应 /api/disrupt/alchemy
+# ===========================================================================
+_EMOCTION_ELEMENTS = {
+    "joy": {"name": "喜悦", "color": "#FFD700", "desc": "轻松、愉快、满足"},
+    "sadness": {"name": "悲伤", "color": "#4169E1", "desc": "失落、哀伤、思念"},
+    "anger": {"name": "愤怒", "color": "#DC143C", "desc": "不满、冲动、热血"},
+    "fear": {"name": "恐惧", "color": "#8B008B", "desc": "焦虑、不安、谨慎"},
+    "calm": {"name": "平静", "color": "#2E8B57", "desc": "安宁、理性、稳重"},
+    "hope": {"name": "希望", "color": "#FF69B4", "desc": "期待、憧憬、动力"},
+}
+
+
+@router.get("/alchemy/elements")
+async def alchemy_elements():
+    return {"elements": _EMOCTION_ELEMENTS}
+
+
+@router.post("/alchemy/mix")
+async def alchemy_mix(req: Request):
+    body = await req.json()
+    elements = body.get("elements", [])  # ["joy", "sadness", ...]
+    if not elements or len(elements) < 2:
+        return JSONResponse({"error": "至少选择2种情感元素"}, status_code=400)
+    if len(elements) > 4:
+        return JSONResponse({"error": "最多4种情感元素"}, status_code=400)
+    
+    invalid = [e for e in elements if e not in _EMOCTION_ELEMENTS]
+    if invalid:
+        return JSONResponse({"error": f"无效元素：{invalid}"}, status_code=400)
+    
+    element_names = " + ".join([_EMOCTION_ELEMENTS[e]["name"] for e in elements])
+    
+    sys_prompt = _system_prompt() + f"""
+
+【任务·情感化学反应】将以下情感元素混合：{element_names}
+请分析这种"情感化合物"的：
+- compound_name: 化合物名称（4-6字，如"苦涩的温暖"）
+- effect: 对人的心理影响（60-80字）
+- xumo_reaction: 许墨的反应（40-60字，第一人称）
+- stability: 稳定性（1-10，10最稳定）
+
+输出 JSON（仅 JSON）：
+{{
+  "compound_name": "化合物名称",
+  "effect": "心理影响",
+  "xumo_reaction": "许墨的反应",
+  "stability": 稳定性数字
+}}
+"""
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"混合：{element_names}"},
+        ], max_tokens=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"反应失败：{str(exc)[:120]}"}, status_code=500)
+    
+    item = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "elements": elements,
+        "element_names": element_names,
+        "compound_name": obj.get("compound_name", "未知化合物"),
+        "effect": obj.get("effect", ""),
+        "xumo_reaction": obj.get("xumo_reaction", ""),
+        "stability": obj.get("stability", 5),
+    }
+    p = RolePath("disrupt_alchemy.json")
+    data = _load(p, {"compounds": []})
+    data.setdefault("compounds", []).append(item)
+    data["compounds"] = data["compounds"][-40:]
+    _save(p, data)
+    _add_affinity("disrupt_alchemy", f"炼金术·{obj.get('compound_name', '')}")
+    return item
+
+
+@router.get("/alchemy/history")
+async def alchemy_history():
+    p = RolePath("disrupt_alchemy.json")
+    data = _load(p, {"compounds": []})
+    return {"compounds": (data.get("compounds") or [])[-25:]}
+
+
+# ===========================================================================
+# 20. 星际罗盘 /api/disrupt/compass
+# ===========================================================================
+@router.get("/compass")
+async def compass_current():
+    """基于当前状态生成星际导航建议"""
+    blob = _recent_text_blob(2000)
+    
+    sys_prompt = _system_prompt() + """
+
+【任务·星际罗盘】将她的生活状态映射为星际导航：
+- constellation: 当前对应的星座（如"天鹅座"）
+- star: 指引星（一颗星的名字）
+- course: 航向建议（60-80字）
+- cosmic_message: 宇宙信息（40-60字，诗意）
+
+输出 JSON（仅 JSON）：
+{
+  "constellation": "星座名称",
+  "star": "指引星",
+  "course": "航向建议",
+  "cosmic_message": "宇宙信息"
+}
+"""
+    user = blob[:1800] or "（暂无数据，请生成普适导航）"
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user},
+        ], max_tokens=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"罗盘故障：{str(exc)[:120]}"}, status_code=500)
+    
+    p = RolePath("disrupt_compass.json")
+    data = _load(p, {"logs": []})
+    entry = {
+        "id": _uid(),
+        "ts": _stamp(),
+        "constellation": obj.get("constellation", "未知星座"),
+        "star": obj.get("star", "北极星"),
+        "course": obj.get("course", ""),
+        "cosmic_message": obj.get("cosmic_message", ""),
+    }
+    data.setdefault("logs", []).insert(0, entry)
+    data["logs"] = data["logs"][-20:]
+    _save(p, data)
+    return entry
+
+
+@router.get("/compass/history")
+async def compass_history():
+    p = RolePath("disrupt_compass.json")
+    data = _load(p, {"logs": []})
+    return {"logs": (data.get("logs") or [])[-15:]}
+
+
+@router.post("/compass/{cid}/navigate")
+async def compass_navigate(cid: str, req: Request):
+    """基于罗盘建议进行决策"""
+    body = await req.json()
+    decision = (body.get("decision") or "").strip()
+    if not decision:
+        return JSONResponse({"error": "请描述你的决定"}, status_code=400)
+    
+    p = RolePath("disrupt_compass.json")
+    data = _load(p, {"logs": []})
+    log_entry = next((l for l in data.get("logs", []) if l.get("id") == cid), None)
+    if not log_entry:
+        return JSONResponse({"error": "罗盘记录不存在"}, status_code=404)
+    
+    sys_prompt = _system_prompt() + f"""
+
+【任务·星际罗盘·反馈】
+原始导航：
+星座：{log_entry.get('constellation', '')}
+指引星：{log_entry.get('star', '')}
+航向：{log_entry.get('course', '')}
+
+她的决定：{decision}
+
+请给出：
+- alignment: 决定与原航向的契合度（0-100）
+- xumo_feedback: 许墨的反馈（40-60字，第一人称）
+- adjustment: 如需调整的建议（40-60字）
+
+输出 JSON（仅 JSON）：
+{{
+  "alignment": 契合度数字,
+  "xumo_feedback": "许墨反馈",
+  "adjustment": "调整建议"
+}}
+"""
+    try:
+        obj = await _llm_json([
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"她的决定：{decision}"},
+        ], max_tokens=300)
+    except Exception as exc:
+        return JSONResponse({"error": f"导航失败：{str(exc)[:120]}"}, status_code=500)
+    
+    log_entry["decision"] = decision
+    log_entry["alignment"] = obj.get("alignment", 50)
+    log_entry["xumo_feedback"] = obj.get("xumo_feedback", "")
+    log_entry["adjustment"] = obj.get("adjustment", "")
+    log_entry["resolved_at"] = _stamp()
+    _save(p, data)
+    return log_entry

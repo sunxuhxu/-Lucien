@@ -1422,6 +1422,24 @@ async def extension_editor_page():
     return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
 
 
+@app.get("/tutorial.html")
+async def tutorial_page():
+    """使用教程页面：完整功能指南。"""
+    p = STATIC_DIR / "tutorial.html"
+    if not p.exists():
+        return JSONResponse({"error": "tutorial.html 不存在"}, status_code=404)
+    return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
+
+
+@app.get("/tutorial_novoice.html")
+async def tutorial_novoice_page():
+    """使用教程页面（无语音版）：完整功能指南。"""
+    p = STATIC_DIR / "tutorial_novoice.html"
+    if not p.exists():
+        return JSONResponse({"error": "tutorial_novoice.html 不存在"}, status_code=404)
+    return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
+
+
 # ---------------------------------------------------------------------------
 # 聊天记录持久化
 # ---------------------------------------------------------------------------
@@ -10880,8 +10898,11 @@ from xumocloud_apps import router as xcloud_router  # noqa: E402
 
 app.include_router(xcloud_router)
 
-# 十大颠覆性功能路由（disrupt_apps.py）：逆向时光机 / 人格融合实验室 / 潜意识剧场 /
-# 命运回声图谱 / 时光密室 / 心跳实验室 / 次元裂隙 / 命运赌局 / 回忆修复工坊 / 共生体演化
+# 二十项颠覆性功能路由（disrupt_apps.py）：
+# 原十大：逆向时光机 / 人格融合实验室 / 潜意识剧场 / 命运回声图谱 /
+# 时光密室 / 心跳实验室 / 次元裂隙 / 命运赌局 / 回忆修复工坊 / 共生体演化
+# 新增十项：梦境织机 / 情绪气象台 / 平行宇宙探测器 / 记忆拼图 / 心灵共鸣电台 /
+# 时间胶囊花园 / 灵魂镜像室 / 命运编织者 / 情感化学反应 / 星际罗盘
 from disrupt_apps import router as disrupt_router  # noqa: E402
 
 app.include_router(disrupt_router)

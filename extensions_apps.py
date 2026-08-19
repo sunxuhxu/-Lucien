@@ -681,44 +681,8 @@ async def create_extension(req: Request):
     return _public_view(ext)
 
 
-@router.get("/api/extensions/{ext_id}")
-async def get_extension(ext_id: str):
-    data = _load_extensions()
-    for ext in data.get("extensions", []):
-        if ext.get("id") == ext_id:
-            return _public_view(ext)
-    return JSONResponse({"error": "扩展不存在"}, status_code=404)
-
-
-@router.put("/api/extensions/{ext_id}")
-async def update_extension(ext_id: str, req: Request):
-    try:
-        body = await req.json()
-    except Exception:
-        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
-    if not isinstance(body, dict):
-        return JSONResponse({"error": "请求体必须是对象"}, status_code=400)
-
-    data = _load_extensions()
-    target = None
-    for ext in data.get("extensions", []):
-        if ext.get("id") == ext_id:
-            target = ext
-            break
-    if target is None:
-        return JSONResponse({"error": "扩展不存在"}, status_code=404)
-
-    # 仅允许更新这些字段
-    for k in ("name", "description", "type", "enabled", "priority", "config"):
-        if k in body:
-            target[k] = body[k]
-    target["updated_at"] = _now()
-
-    err = _validate_extension(target)
-    if err:
-        return JSONResponse({"error": err}, status_code=400)
-    _save_extensions(data)
-    return _public_view(target)
+# 注意：GET/PUT /api/extensions/{ext_id} 动态路由注册在文件末尾，
+# 避免遮蔽 templates / tools / export / marketplace / order 等固定路径路由。
 
 
 @router.delete("/api/extensions/{ext_id}")
@@ -780,6 +744,59 @@ async def reorder_extensions(req: Request):
     return {"extensions": [_public_view(e) for e in exts]}
 
 
+async def _run_extension_test(ext: Dict, user_input: str):
+    """按扩展类型执行测试，返回响应对象。供已保存扩展与草稿配置共用。"""
+    etype = ext.get("type")
+    try:
+        if etype == "prompt_template":
+            injection = build_prompt_injection(user_input)
+            return {
+                "ok": True,
+                "type": "prompt_template",
+                "injection": injection,
+                "note": "以下是会注入到 SYSTEM_PROMPT 的内容（已合并所有启用的同类扩展）",
+            }
+        if etype == "tool_chain":
+            # 测试时无视 enabled 状态
+            result = await run_tool_chain_async(ext, user_input)
+            return {"ok": True, "type": "tool_chain", "result": result, "user_input": user_input}
+        if etype == "workflow":
+            result = await _run_workflow(ext, user_input)
+            return {"ok": True, "type": "workflow", "result": result, "user_input": user_input}
+        return JSONResponse({"error": f"未知扩展类型：{etype}"}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@router.post("/api/extensions/test")
+async def test_draft_extension(req: Request):
+    """测试运行尚未保存的草稿配置（前端「测试运行」按钮直接提交完整扩展对象）。
+
+    请求体：扩展对象 {name, type, config, ...}，可附带 user_input 作为测试输入。
+    """
+    try:
+        body = await req.json() if req.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "请求体必须是对象"}, status_code=400)
+
+    ext = {
+        "name": str(body.get("name", "")).strip(),
+        "type": str(body.get("type", "")).strip(),
+        "description": str(body.get("description", "")).strip(),
+        "enabled": True,
+        "priority": int(body.get("priority", 100) or 100),
+        "config": body.get("config") or {},
+    }
+    err = _validate_extension(ext)
+    if err:
+        return JSONResponse({"ok": False, "error": err}, status_code=400)
+
+    user_input = str(body.get("user_input", ""))[:500]
+    return await _run_extension_test(ext, user_input)
+
+
 @router.post("/api/extensions/{ext_id}/test")
 async def test_extension(ext_id: str, req: Request):
     """测试运行扩展，返回执行结果与 trace。
@@ -803,26 +820,7 @@ async def test_extension(ext_id: str, req: Request):
     if ext is None:
         return JSONResponse({"error": "扩展不存在"}, status_code=404)
 
-    etype = ext.get("type")
-    try:
-        if etype == "prompt_template":
-            injection = build_prompt_injection(user_input)
-            return {
-                "ok": True,
-                "type": "prompt_template",
-                "injection": injection,
-                "note": "以下是会注入到 SYSTEM_PROMPT 的内容（已合并所有启用的同类扩展）",
-            }
-        if etype == "tool_chain":
-            # 测试时无视 enabled 状态
-            result = await run_tool_chain_async(ext, user_input)
-            return {"ok": True, "type": "tool_chain", "result": result, "user_input": user_input}
-        if etype == "workflow":
-            result = await _run_workflow(ext, user_input)
-            return {"ok": True, "type": "workflow", "result": result, "user_input": user_input}
-        return JSONResponse({"error": f"未知扩展类型：{etype}"}, status_code=400)
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    return await _run_extension_test(ext, user_input)
 
 
 @router.get("/api/extensions/templates")
@@ -1046,7 +1044,7 @@ _PRESET_TEMPLATES = [
 # 自然语言生成扩展功能
 # ===========================================================================
 
-@router.post("/generate")
+@router.post("/api/extensions/generate")
 async def generate_extension_from_natural_language(request: Request) -> JSONResponse:
     """通过自然语言描述生成扩展配置"""
     try:
@@ -1345,34 +1343,259 @@ def _get_config_suggestions(config: Dict) -> List[str]:
 
 
 # ===========================================================================
+# 智能生成：扩展主题灵感 & 一句话生成完整扩展（LLM 优先，规则兜底）
+# ===========================================================================
+
+async def _llm_call(messages: list, max_tokens: int = None) -> str:
+    """延迟导入 app._call_llm，避免与 app.py 的循环依赖。"""
+    from app import _call_llm as _impl
+    return await _impl(messages, max_tokens=max_tokens)
+
+
+# 主题灵感兜底池（LLM 不可用/超时时按关键词过滤后随机推荐）
+_SMART_THEME_POOL = [
+    {"name": "深夜温柔模式", "type": "prompt_template", "description": "当对话提到深夜、失眠、晚安时，语气变得更柔软低沉，多用短句陪伴", "tags": ["陪伴", "温柔", "深夜"]},
+    {"name": "情绪气象站", "type": "workflow", "description": "先识别用户消息里的情绪，再选择安慰、鼓励或调侃的回应路径", "tags": ["情绪", "关心", "工作流"]},
+    {"name": "天气关怀助手", "type": "tool_chain", "description": "用户问天气时自动查询天气，并结合气温给出穿衣/带伞建议", "tags": ["天气", "工具", "关怀"]},
+    {"name": "每日灵感语录", "type": "tool_chain", "description": "当用户说「来一句」时随机获取励志语录，并附一句许墨式点评", "tags": ["语录", "灵感", "每日"]},
+    {"name": "学术质感模式", "type": "prompt_template", "description": "讨论专业话题时适当使用脑科学与认知科学术语，保持学术质感", "tags": ["学术", "风格", "专业"]},
+    {"name": "撒娇检测器", "type": "prompt_template", "description": "识别到用户撒娇语气时，回应变得更宠溺、节奏放慢", "tags": ["恋爱", "宠溺", "互动"]},
+    {"name": "心情树洞回应", "type": "workflow", "description": "接收用户倾诉 → 提炼核心情绪 → 生成共情回应与一句安慰", "tags": ["树洞", "共情", "倾诉"]},
+    {"name": "纪念日提醒", "type": "prompt_template", "description": "提到纪念日、生日等关键词时，主动送上定制祝福文案", "tags": ["节日", "祝福", "仪式感"]},
+    {"name": "新闻速递官", "type": "tool_chain", "description": "用户问「今天有什么新闻」时拉取头条并做三句话摘要", "tags": ["新闻", "资讯", "摘要"]},
+    {"name": "晚安故事生成", "type": "prompt_template", "description": "睡前说晚安时，附一段 100 字以内的温柔小故事", "tags": ["晚安", "故事", "睡前"]},
+    {"name": "翻译搭子", "type": "tool_chain", "description": "用户贴出外文时自动翻译，并顺带讲解一个地道表达", "tags": ["翻译", "学习", "工具"]},
+    {"name": "决策小助手", "type": "workflow", "description": "用户纠结时：列出选项利弊 → 给出倾向建议 → 附一句鼓励", "tags": ["决策", "建议", "纠结"]},
+]
+
+_SMART_THEME_SYSTEM = (
+    "你是「许墨」智能体平台的扩展创意顾问。用户会给你关键词或方向，"
+    "你需要为其推荐适合自定义扩展的主题灵感。"
+    "扩展只有三种类型：prompt_template(提示词模板，改变AI说话风格)、"
+    "tool_chain(工具链，调用外部API获取数据)、workflow(工作流，多步骤任务编排)。"
+    "只输出一个 JSON 数组，不要输出任何其他文字或 markdown 标记。"
+    "数组元素字段：name(6-10字主题名)、type(三选一)、"
+    "description(一句话说明扩展做什么、何时触发)、tags(2-3个标签)。"
+)
+
+_SMART_GEN_SYSTEM = (
+    "你是「许墨」智能体平台的扩展配置生成器。根据用户的需求描述生成一份可直接使用的扩展配置。\n"
+    "扩展类型三选一：\n"
+    "1. prompt_template：config = {trigger: always|keyword|regex, trigger_pattern: 逗号分隔触发词或正则, "
+    "inject_position: system_suffix, content: 注入给AI的具体提示词(写清语气、句式、行为要求)}\n"
+    "2. tool_chain：config = {trigger: keyword, trigger_pattern: 逗号分隔触发词, output_format: json, "
+    "tools: [{type: http_get, name, params: {url, timeout}}]}（url 必须是真实可访问的公共API，没有就填 https://api.example.com/endpoint 占位）\n"
+    "3. workflow：config = {steps: [{id, type: prompt|output, config: {var, template}, next}]}，"
+    "prompt 步骤用 {{user_input}} 引用用户输入，最后一步必须是 output。\n"
+    "只输出一个 JSON 对象，不要输出任何其他文字或 markdown 标记。"
+    "字段：name(简短有记忆点的名字)、type、description(一句话功能说明)、priority(10/20/30)、"
+    "enabled(true)、config(按上面类型的规范写完整)。"
+)
+
+
+def _smart_extract_json(text: str) -> Any:
+    """从 LLM 回复中提取 JSON（容错 ```json 代码块与前后杂讯）。"""
+    if not text:
+        return None
+    t = text.strip()
+    m = re.search(r"```(?:json)?\s*(.+?)\s*```", t, re.S)
+    if m:
+        t = m.group(1).strip()
+    try:
+        return json.loads(t)
+    except Exception:
+        pass
+    m = re.search(r"[\[{].+[\]}]", t, re.S)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            return None
+    return None
+
+
+def _smart_validate_theme(item: Dict) -> Optional[Dict]:
+    """校验并规整单条主题灵感，非法返回 None。"""
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("name") or "").strip()
+    desc = str(item.get("description") or "").strip()
+    etype = str(item.get("type") or "prompt_template").strip()
+    if etype not in ("prompt_template", "tool_chain", "workflow"):
+        etype = "prompt_template"
+    if not name or not desc:
+        return None
+    tags = item.get("tags") or []
+    if not isinstance(tags, list):
+        tags = []
+    tags = [str(t).strip() for t in tags if str(t).strip()][:4]
+    return {"name": name[:20], "description": desc[:120], "type": etype, "tags": tags}
+
+
+def _smart_validate_config(cfg: Dict) -> Optional[Dict]:
+    """校验 LLM 生成的扩展配置，不合法返回 None（与 /builder/validate 同规则）。"""
+    if not isinstance(cfg, dict):
+        return None
+    etype = str(cfg.get("type") or "").strip()
+    inner = cfg.get("config")
+    if etype not in ("prompt_template", "tool_chain", "workflow"):
+        return None
+    if not str(cfg.get("name") or "").strip():
+        return None
+    if not isinstance(inner, dict):
+        return None
+    if etype == "prompt_template" and not str(inner.get("content") or "").strip():
+        return None
+    if etype == "tool_chain" and not isinstance(inner.get("tools"), list):
+        return None
+    if etype == "workflow" and not isinstance(inner.get("steps"), list):
+        return None
+    try:
+        priority = int(cfg.get("priority", 10))
+    except (TypeError, ValueError):
+        priority = 10
+    return {
+        "name": str(cfg["name"]).strip()[:30],
+        "type": etype,
+        "description": str(cfg.get("description") or "").strip()[:200],
+        "enabled": True,
+        "priority": min(max(priority, 1), 100),
+        "config": inner,
+    }
+
+
+def _smart_theme_fallback(keyword: str, direction: str, count: int) -> List[Dict]:
+    """LLM 不可用时的本地主题灵感：关键词过滤 + 随机抽取。"""
+    import random
+    pool = list(_SMART_THEME_POOL)
+    if direction in ("prompt_template", "tool_chain", "workflow"):
+        matched = [t for t in pool if t["type"] == direction]
+        pool = matched + [t for t in pool if t["type"] != direction]
+    if keyword:
+        hits = [t for t in pool if keyword in t["name"] or keyword in t["description"]
+                or any(keyword in tag for tag in t.get("tags", []))]
+        if hits:
+            pool = hits + [t for t in pool if t not in hits]
+    suffix = random.randint(10, 99)
+    out = []
+    for i, t in enumerate(pool[:count]):
+        item = dict(t)
+        item["name"] = f"{t['name']}·灵感{suffix + i}"
+        out.append(item)
+    return out
+
+
+@router.post("/api/extensions/smart/themes")
+async def smart_generate_themes(request: Request) -> JSONResponse:
+    """智能生成扩展主题灵感：输入关键词/方向，LLM 推荐一批可落地的扩展点子。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    keyword = str(body.get("keyword") or "").strip()[:60]
+    direction = str(body.get("direction") or "auto").strip()
+    try:
+        count = min(max(int(body.get("count") or 6), 1), 8)
+    except (TypeError, ValueError):
+        count = 6
+
+    direction_label = {
+        "prompt_template": "提示词模板（改变说话风格/语气）",
+        "tool_chain": "工具链（调用外部API获取数据）",
+        "workflow": "工作流（多步骤任务编排）",
+    }.get(direction, "")
+    user_prompt = (
+        f"关键词：{keyword or '（不限，自由发挥，围绕恋爱陪伴、情绪关怀、学习工作、生活实用展开）'}\n"
+        f"偏好方向：{direction_label or '不限，三种类型都可以'}\n"
+        f"请推荐 {count} 个主题。"
+    )
+
+    themes: List[Dict] = []
+    source = "ai"
+    try:
+        raw = await _llm_call(
+            [
+                {"role": "system", "content": _SMART_THEME_SYSTEM},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=1200,
+        )
+        data = _smart_extract_json(raw)
+        if isinstance(data, list):
+            themes = [t for t in (_smart_validate_theme(x) for x in data) if t][:count]
+    except Exception:
+        themes = []
+    if not themes:
+        source = "local"
+        themes = _smart_theme_fallback(keyword, direction, count)
+    return JSONResponse({"success": True, "themes": themes, "source": source})
+
+
+@router.post("/api/extensions/smart/generate")
+async def smart_generate_extension(request: Request) -> JSONResponse:
+    """智能生成扩展功能：一句话需求/主题 → LLM 生成完整可用配置（失败回退规则解析）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    description = str(body.get("description") or "").strip()
+    theme = str(body.get("theme") or "").strip()
+    if not description:
+        return JSONResponse({"error": "请描述你想要的扩展功能"}, status_code=400)
+
+    config: Optional[Dict] = None
+    source = "ai"
+    try:
+        user_prompt = f"需求描述：{description[:300]}"
+        if theme:
+            user_prompt += f"\n主题名：{theme[:30]}"
+        raw = await _llm_call(
+            [
+                {"role": "system", "content": _SMART_GEN_SYSTEM},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=1500,
+        )
+        config = _smart_validate_config(_smart_extract_json(raw) or {})
+    except Exception:
+        config = None
+    if not config:
+        # LLM 不可用或输出不合法 → 回退到规则解析
+        source = "local"
+        try:
+            config = _parse_natural_language_description(description[:500])
+        except Exception as e:
+            return JSONResponse({"error": f"生成失败：{e}"}, status_code=500)
+    if theme and theme[:30] not in config.get("name", ""):
+        config["name"] = f"{theme[:20]}·{config.get('name', '扩展')}"[:40]
+
+    return JSONResponse({
+        "success": True,
+        "source": source,
+        "config": config,
+        "suggestions": _get_config_suggestions(config),
+    })
+
+
+# ===========================================================================
 # 扩展导入导出和分享功能
 # ===========================================================================
 
 @router.get("/api/extensions/export")
-async def export_extensions(request: Request) -> JSONResponse:
-    """导出所有扩展为JSON文件"""
+async def export_extensions() -> JSONResponse:
+    """导出当前会话角色的所有扩展为JSON。"""
     try:
-        # 获取当前用户信息
-        user_id = request.query_params.get("user_id", "owner")
-        role_path = RolePath(user_id)
-        ext_file = role_path.resolve("extensions.json", enforce_user_scope=True)
-        
-        # 读取扩展数据
-        try:
-            with file_lock(ext_file, "r"):
-                data = atomic_json(ext_file)
-        except:
-            data = {"extensions": [], "order": []}
-        
-        # 添加导出元数据
+        data = _load_extensions()
         export_data = {
             "version": "1.0",
             "exported_at": datetime.now().isoformat(),
-            "user_id": user_id,
             "extensions": data.get("extensions", []),
             "order": data.get("order", [])
         }
-        
         return JSONResponse(export_data)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1380,47 +1603,39 @@ async def export_extensions(request: Request) -> JSONResponse:
 
 @router.post("/api/extensions/import")
 async def import_extensions(request: Request) -> JSONResponse:
-    """导入扩展JSON文件"""
+    """导入扩展JSON（写入当前会话角色的数据目录）。"""
     try:
         body = await request.json()
         import_data = body.get("data", {})
-        user_id = body.get("user_id", "owner")
-        
+
         # 验证导入数据格式
-        if "extensions" not in import_data:
+        if not isinstance(import_data, dict) or "extensions" not in import_data:
             return JSONResponse({"error": "导入数据格式错误：缺少extensions字段"}, status_code=400)
-        
-        role_path = RolePath(user_id)
-        ext_file = role_path.resolve("extensions.json", enforce_user_scope=True)
-        
-        # 读取现有扩展
-        try:
-            with file_lock(ext_file, "r"):
-                existing_data = atomic_json(ext_file)
-        except:
-            existing_data = {"extensions": [], "order": []}
-        
+
+        existing_data = _load_extensions()
+        existing_data.setdefault("order", [])
+
         # 合并扩展
         imported_count = 0
+        existing_names = {e.get("name") for e in existing_data.get("extensions", [])}
         for ext in import_data.get("extensions", []):
+            if not isinstance(ext, dict):
+                continue
             # 生成新的ID避免冲突
             ext["id"] = str(uuid.uuid4())
             ext["created_at"] = datetime.now().isoformat()
             ext["updated_at"] = datetime.now().isoformat()
-            
+
             # 检查是否已存在同名扩展
-            existing_names = {e["name"] for e in existing_data["extensions"]}
-            if ext["name"] in existing_names:
-                ext["name"] = f"{ext['name']}_imported"
-            
+            if ext.get("name") in existing_names:
+                ext["name"] = f"{ext.get('name')}_imported"
+
             existing_data["extensions"].append(ext)
             existing_data["order"].append(ext["id"])
             imported_count += 1
-        
-        # 保存
-        with file_lock(ext_file, "w"):
-            atomic_json(ext_file, existing_data)
-        
+
+        _save_extensions(existing_data)
+
         return JSONResponse({
             "success": True,
             "imported_count": imported_count,
@@ -1431,17 +1646,11 @@ async def import_extensions(request: Request) -> JSONResponse:
 
 
 @router.get("/api/extensions/{ext_id}/share")
-async def get_extension_share_code(ext_id: str, request: Request) -> JSONResponse:
+async def get_extension_share_code(ext_id: str) -> JSONResponse:
     """生成扩展分享码"""
     try:
-        user_id = request.query_params.get("user_id", "owner")
-        role_path = RolePath(user_id)
-        ext_file = role_path.resolve("extensions.json", enforce_user_scope=True)
-        
-        # 读取扩展数据
-        with file_lock(ext_file, "r"):
-            data = atomic_json(ext_file)
-        
+        data = _load_extensions()
+
         # 查找指定扩展
         extension = None
         for ext in data.get("extensions", []):
@@ -1480,8 +1689,7 @@ async def import_from_share_code(request: Request) -> JSONResponse:
     try:
         body = await request.json()
         share_code = body.get("share_code", "")
-        user_id = body.get("user_id", "owner")
-        
+
         if not share_code:
             return JSONResponse({"error": "分享码不能为空"}, status_code=400)
         
@@ -1499,19 +1707,12 @@ async def import_from_share_code(request: Request) -> JSONResponse:
             if field not in share_data:
                 return JSONResponse({"error": f"分享数据缺少{field}字段"}, status_code=400)
         
-        # 创建扩展
-        role_path = RolePath(user_id)
-        ext_file = role_path.resolve("extensions.json", enforce_user_scope=True)
-        
-        # 读取现有扩展
-        try:
-            with file_lock(ext_file, "r"):
-                existing_data = atomic_json(ext_file)
-        except:
-            existing_data = {"extensions": [], "order": []}
-        
+        # 创建扩展（写入当前会话角色的数据目录）
+        existing_data = _load_extensions()
+        existing_data.setdefault("order", [])
+
         # 检查名称冲突
-        existing_names = {e["name"] for e in existing_data["extensions"]}
+        existing_names = {e.get("name") for e in existing_data.get("extensions", [])}
         base_name = share_data["name"]
         if base_name in existing_names:
             share_data["name"] = f"{base_name}_shared"
@@ -1531,11 +1732,9 @@ async def import_from_share_code(request: Request) -> JSONResponse:
         
         existing_data["extensions"].append(new_extension)
         existing_data["order"].append(new_extension["id"])
-        
-        # 保存
-        with file_lock(ext_file, "w"):
-            atomic_json(ext_file, existing_data)
-        
+
+        _save_extensions(existing_data)
+
         return JSONResponse({
             "success": True,
             "extension": new_extension,
@@ -1613,3 +1812,48 @@ async def get_extension_marketplace(request: Request) -> JSONResponse:
         })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ===========================================================================
+# 动态 ID 路由（必须放在所有固定路径路由之后注册，FastAPI 按注册顺序匹配，
+# 否则 {ext_id} 会吞掉 templates / tools / export / order / marketplace 等路径）
+# ===========================================================================
+
+@router.get("/api/extensions/{ext_id}")
+async def get_extension(ext_id: str):
+    data = _load_extensions()
+    for ext in data.get("extensions", []):
+        if ext.get("id") == ext_id:
+            return _public_view(ext)
+    return JSONResponse({"error": "扩展不存在"}, status_code=404)
+
+
+@router.put("/api/extensions/{ext_id}")
+async def update_extension(ext_id: str, req: Request):
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "请求体必须是对象"}, status_code=400)
+
+    data = _load_extensions()
+    target = None
+    for ext in data.get("extensions", []):
+        if ext.get("id") == ext_id:
+            target = ext
+            break
+    if target is None:
+        return JSONResponse({"error": "扩展不存在"}, status_code=404)
+
+    # 仅允许更新这些字段
+    for k in ("name", "description", "type", "enabled", "priority", "config"):
+        if k in body:
+            target[k] = body[k]
+    target["updated_at"] = _now()
+
+    err = _validate_extension(target)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+    _save_extensions(data)
+    return _public_view(target)

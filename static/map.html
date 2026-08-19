@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>恋语�?· 交互地图</title>
+<title>恋语�?· 交互地图</title>
 <style>
   :root {
     --purple: #7c3aed;
@@ -162,7 +162,7 @@
     background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(219,39,119,.10));
     border: 1px solid rgba(124,58,237,.4);
   }
-  .d-memory::before { content: "�?; position: absolute; left: 12px; top: 6px; font-size: 20px; color: var(--purple-light); opacity: .8; }
+  .d-memory::before { content: "�?; position: absolute; left: 12px; top: 6px; font-size: 20px; color: var(--purple-light); opacity: .8; }
   .d-memory p { font-size: 13px; line-height: 1.85; color: #4a3f68; padding-left: 18px; font-style: italic; }
   .d-memory .src { display: block; text-align: right; font-size: 10px; color: var(--text-dim); margin-top: 8px; font-style: normal; }
   .d-coord { margin-top: 14px; font-size: 10px; color: var(--text-dim); font-family: Consolas, monospace; }
@@ -173,7 +173,7 @@
   }
   .d-goto:hover { filter: brightness(1.15); }
 
-  /* 移动�?*/
+  /* 移动�?*/
   @media (max-width: 860px) {
     body { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
     aside { position: fixed; left: 0; top: 56px; bottom: 0; width: 260px; transform: translateX(-100%); transition: transform .28s; }
@@ -262,15 +262,15 @@
 <header>
   <div class="logo">
     <div class="mark">🦋</div>
-    <h1>恋语�?· 交互地图<small>LIANYU CITY INTERACTIVE MAP</small></h1>
+    <h1>恋语�?· 交互地图<small>LIANYU CITY INTERACTIVE MAP</small></h1>
   </div>
-  <div class="search-box"><input id="search" type="text" placeholder="搜索地点 / 角色 / 标签�?></div>
+  <div class="search-box"><input id="search" type="text" placeholder="搜索地点 / 角色 / 标签�?></div>
   <div class="filters" id="filters"></div>
   <div class="map-tools">
-    <button class="tool-btn menu" id="btnMenu" title="地点列表">�?/button>
-    <button class="tool-btn" id="btnZoomIn" title="放大">�?/button>
-    <button class="tool-btn" id="btnZoomOut" title="缩小">�?/button>
-    <button class="tool-btn" id="btnReset" title="复位">�?/button>
+    <button class="tool-btn menu" id="btnMenu" title="地点列表">�?/button>
+    <button class="tool-btn" id="btnZoomIn" title="放大">�?/button>
+    <button class="tool-btn" id="btnZoomOut" title="缩小">�?/button>
+    <button class="tool-btn" id="btnReset" title="复位">�?/button>
   </div>
 </header>
 
@@ -287,31 +287,31 @@
 (function () {
 'use strict';
 
-/* ===== 数据与常�?===== */
-var MAP_TILES = 144;                       // �?world-data.js 一致的 tile 坐标�?var CHAR_COLOR = { '许墨': '#7c3aed', '李泽言': '#dc2626', '白起': '#2563eb', '周棋�?: '#d97706', '凌肖': '#059669', '女主': '#db2777' };
+/* ===== 数据与常�?===== */
+var MAP_TILES = 144;                       // �?world-data.js 一致的 tile 坐标�?var CHAR_COLOR = { '许墨': '#7c3aed', '李泽言': '#dc2626', '白起': '#2563eb', '周棋�?: '#d97706', '凌肖': '#059669', '女主': '#db2777' };
 var TYPE_NAME = { build: '建筑', area: '区域', mark: '地标', street: '街道' };
 
 var DATA = null, LOCATIONS = [], DISTRICTS = {};
 var activeLoc = null, hoverLoc = null;
-var visibleIds = null;                     // 筛选结果（null = 全部�?var selDistricts = new Set(), selChars = new Set(), keyword = '';
+var visibleIds = null;                     // 筛选结果（null = 全部�?var selDistricts = new Set(), selChars = new Set(), keyword = '';
 
-/* ===== 许墨 · 实时角色�?===== */
+/* ===== 许墨 · 实时角色�?===== */
 var XUMO = {
   name: '许墨', color: '#7c3aed', icon: '🧪',
   schedule: [
     { h: 0,  loc: 'xumo-lab',     act: '深夜 · 研究所的灯还亮着',   mood: '专注' },
-    { h: 5,  loc: 'xumo-home',    act: '清晨 · 在教工公寓小�?,     mood: '平静' },
-    { h: 8,  loc: 'xumo-lab',     act: '上午 · 在实验室做研�?,     mood: '平静' },
-    { h: 12, loc: 'lianyu-univ',  act: '午间 · 在恋语大学授�?,     mood: '从容' },
+    { h: 5,  loc: 'xumo-home',    act: '清晨 · 在教工公寓小�?,     mood: '平静' },
+    { h: 8,  loc: 'xumo-lab',     act: '上午 · 在实验室做研�?,     mood: '平静' },
+    { h: 12, loc: 'lianyu-univ',  act: '午间 · 在恋语大学授�?,     mood: '从容' },
     { h: 14, loc: 'xumo-lab',     act: '下午 · 在实验室整理数据',   mood: '从容' },
     { h: 18, loc: 'chaowen-cafe', act: '傍晚 · 在街角咖啡馆看书',   mood: '温柔' }
   ],
   quotes: [
-    '「咖啡店外带的热美式，和他喝的同款。」——黑咖啡，不加糖不加奶�?,
-    '「没关系，就算我的讲座很催眠，能让你好好睡一觉，也很好。�?,
-    '「还没有（忙完），但偶尔也需要好好休息一下。和你一起，就是最好的休息。�?,
-    '「进去吧，吃的喝的我都买好了。」——你一心只想着爆米花，其实他早就到了�?,
-    '帮迷路的老奶奶指路后，身后传来他的声音：「我倒是觉得刚刚的老奶奶说得很对。�?
+    '「咖啡店外带的热美式，和他喝的同款。」——黑咖啡，不加糖不加奶�?,
+    '「没关系，就算我的讲座很催眠，能让你好好睡一觉，也很好。�?,
+    '「还没有（忙完），但偶尔也需要好好休息一下。和你一起，就是最好的休息。�?,
+    '「进去吧，吃的喝的我都买好了。」——你一心只想着爆米花，其实他早就到了�?,
+    '帮迷路的老奶奶指路后，身后传来他的声音：「我倒是觉得刚刚的老奶奶说得很对。�?
   ]
 };
 var xmAvatar = new Image(), xmAvatarOk = false;
@@ -332,7 +332,7 @@ function xumoAnchor(slot) {
 function xumoPos() {
   var d = new Date(), h = d.getHours() + d.getMinutes() / 60;
   var slot = xumoSlotIdx(h), a = xumoAnchor(slot);
-  if (slot !== xmLast.slot) {           // 日程切换：从原地慢慢走向下一�?    if (xmLast.slot >= 0 && xmLast.x) xmWalk = { x0: xmLast.x, y0: xmLast.y, t0: Date.now() };
+  if (slot !== xmLast.slot) {           // 日程切换：从原地慢慢走向下一�?    if (xmLast.slot >= 0 && xmLast.x) xmWalk = { x0: xmLast.x, y0: xmLast.y, t0: Date.now() };
     xmLast.slot = slot;
   }
   var x = a.x, y = a.y;
@@ -354,10 +354,10 @@ function charDimmed(p) {
   return false;
 }
 
-/* ===== 画布与相�?===== */
+/* ===== 画布与相�?===== */
 var canvas = document.getElementById('map');
 var ctx = canvas.getContext('2d');
-var cam = { x: 0, y: 0, scale: 5 };        // 视口左上角的世界坐标 + �?tile 像素
+var cam = { x: 0, y: 0, scale: 5 };        // 视口左上角的世界坐标 + �?tile 像素
 var dpr = Math.max(1, window.devicePixelRatio || 1);
 
 function resize() {
@@ -377,7 +377,7 @@ function resetView() {
   draw();
 }
 
-/* 世界坐标 �?屏幕坐标 */
+/* 世界坐标 �?屏幕坐标 */
 function wx(x) { return (x - cam.x) * cam.scale; }
 function wy(y) { return (y - cam.y) * cam.scale; }
 
@@ -405,7 +405,7 @@ function draw() {
 
   if (!DATA) { ctx.restore(); return; }
 
-  /* 分区底色块（按该分区全部地点的包围盒外扩�?*/
+  /* 分区底色块（按该分区全部地点的包围盒外扩�?*/
   var distBoxes = {};
   LOCATIONS.forEach(function (L) {
     var d = distBoxes[L.district];
@@ -423,7 +423,7 @@ function draw() {
     ctx.fillStyle = hexA(D.color, 0.05); ctx.fill();
     ctx.setLineDash([6, 6]); ctx.strokeStyle = hexA(D.color, 0.22); ctx.lineWidth = 1.2;
     ctx.stroke(); ctx.setLineDash([]);
-    /* 分区名（大字水印�?*/
+    /* 分区名（大字水印�?*/
     if (cam.scale > 3) {
       ctx.font = '600 ' + Math.max(11, cam.scale * 1.6) + 'px "PingFang SC","Microsoft YaHei",sans-serif';
       ctx.fillStyle = hexA(D.color, 0.3); ctx.textAlign = 'left'; ctx.textBaseline = 'top';
@@ -431,7 +431,7 @@ function draw() {
     }
   });
 
-  /* 地点（先画大�?street/area，再�?build/mark�?*/
+  /* 地点（先画大�?street/area，再�?build/mark�?*/
   var order = { street: 0, area: 1, build: 2, mark: 3 };
   var sorted = LOCATIONS.slice().sort(function (a, b) { return order[a.type] - order[b.type]; });
   sorted.forEach(function (L) { drawLoc(L, false); });
@@ -467,7 +467,7 @@ function drawLoc(L, highlight) {
     ctx.fillStyle = g; ctx.fill();
     ctx.setLineDash([7, 5]); ctx.strokeStyle = hexA(L.color, 0.75); ctx.lineWidth = highlight ? 2.4 : 1.4; ctx.stroke(); ctx.setLineDash([]);
   } else if (L.type === 'build') {
-    if (isXumo && !dimmed) {  /* 许墨相关地点：紫色光�?*/
+    if (isXumo && !dimmed) {  /* 许墨相关地点：紫色光�?*/
       ctx.save(); ctx.shadowColor = 'rgba(124,58,237,.6)'; ctx.shadowBlur = highlight ? 26 : 14;
       roundRect(x, y, pw, ph, 5); ctx.fillStyle = hexA(L.color, .95); ctx.fill(); ctx.restore();
     } else {
@@ -486,7 +486,7 @@ function drawLoc(L, highlight) {
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = hexA(L.color, .92); ctx.fill();
     }
     ctx.strokeStyle = highlight ? '#7c3aed' : 'rgba(255,255,255,.9)'; ctx.lineWidth = highlight ? 2.2 : 1.2; ctx.stroke();
-    /* 涟漪（激活时�?*/
+    /* 涟漪（激活时�?*/
     if (L === activeLoc) {
       var t = (Date.now() % 1600) / 1600;
       ctx.beginPath(); ctx.arc(cx, cy, r + t * 22, 0, 7);
@@ -546,7 +546,7 @@ function drawXumo() {
   ctx.beginPath(); ctx.arc(px, py, r + 3 + t * r * 1.4, 0, 7);
   ctx.strokeStyle = hexA('#7c3aed', (1 - t) * .5); ctx.lineWidth = 2; ctx.stroke();
 
-  /* 头像（失败回退 🧪�?*/
+  /* 头像（失败回退 🧪�?*/
   ctx.beginPath(); ctx.arc(px, py, r, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
   ctx.save(); ctx.beginPath(); ctx.arc(px, py, r - 1.5, 0, 7); ctx.clip();
   if (xmAvatarOk) {
@@ -564,7 +564,7 @@ function drawXumo() {
 
   /* 名牌 */
   if (cam.scale >= 2.6 || xmActive || hoverLoc === CHAR_HIT) {
-    var label = XUMO.name + ' �?' + (p.loc ? p.loc.name : '恋语�?);
+    var label = XUMO.name + ' �?' + (p.loc ? p.loc.name : '恋语�?);
     ctx.font = '600 11px "PingFang SC","Microsoft YaHei",sans-serif';
     var tw = ctx.measureText(label).width, ly = py + r + 15;
     roundRect(px - tw / 2 - 6, ly - 9, tw + 12, 18, 9);
@@ -580,12 +580,12 @@ function drawXumo() {
 /* ===== 命中检测（小图元优先） ===== */
 function hitTest(px, py) {
   var wxp = cam.x + px / cam.scale, wyp = cam.y + py / cam.scale;
-  /* 许墨的角色标记最优先（小图元�?*/
+  /* 许墨的角色标记最优先（小图元�?*/
   if (DATA) {
     var p = xumoPos();
     var rr = Math.max(12 / cam.scale, 1.0), dx = wxp - p.x, dy = wyp - p.y;
     if (dx * dx + dy * dy <= rr * rr) {
-      CHAR_HIT.desc = XUMO.schedule[p.slot].act + '�? + (p.loc ? p.loc.name : '恋语�?) + '�?;
+      CHAR_HIT.desc = XUMO.schedule[p.slot].act + '�? + (p.loc ? p.loc.name : '恋语�?) + '�?;
       return CHAR_HIT;
     }
   }
@@ -603,7 +603,7 @@ function hitTest(px, py) {
   return best;
 }
 
-/* ===== 交互：拖�?/ 缩放 / 悬停 / 点击 ===== */
+/* ===== 交互：拖�?/ 缩放 / 悬停 / 点击 ===== */
 var dragging = false, moved = false, lastX = 0, lastY = 0;
 var pinch = null;
 
@@ -663,15 +663,15 @@ function onUp(e) {
 }
 /* 统一点击入口：挂 document 层，按坐标判定是否落在画布内（兼容各种事件派发方式） */
 document.addEventListener('click', function (e) {
-  if (moved) { moved = false; return; }             /* 刚拖拽完，忽�?*/
+  if (moved) { moved = false; return; }             /* 刚拖拽完，忽�?*/
   if (suppressClick) return;                        /* 触摸已处理，忽略合成 click */
-  /* 覆盖在画布上�?UI 不算画布点击 */
+  /* 覆盖在画布上�?UI 不算画布点击 */
   if (e.target && e.target.closest &&
       (e.target.closest('#detail') || e.target.closest('#legend') || e.target.closest('#tooltip') ||
        e.target.closest('header') || e.target.closest('aside'))) return;
   var r = canvas.getBoundingClientRect();
   var px = e.clientX - r.left, py = e.clientY - r.top;
-  if (px < 0 || py < 0 || px >= r.width || py >= r.height) return;   /* 画布�?*/
+  if (px < 0 || py < 0 || px >= r.width || py >= r.height) return;   /* 画布�?*/
   handleClick(px, py);
 }, false);
 /* Esc 关闭详情 */
@@ -695,7 +695,7 @@ canvas.addEventListener('wheel', function (e) {
   zoomAt(p.x, p.y, cam.scale * (e.deltaY < 0 ? 1.18 : 1 / 1.18));
 }, { passive: false });
 
-/* 渲染循环：涟�?+ 许墨实时位置/脉冲动画（轻量节流） */
+/* 渲染循环：涟�?+ 许墨实时位置/脉冲动画（轻量节流） */
 var lastFrame = 0;
 (function loop(now) {
   if (DATA && now - lastFrame > 60) { lastFrame = now; draw(); }
@@ -705,11 +705,11 @@ var lastFrame = 0;
 /* ===== Tooltip ===== */
 var tipEl = document.getElementById('tooltip');
 function showTip(L, px, py) {
-  var chars = (L.relatedTo || []).map(function (c) { return '<span style="color:' + (CHAR_COLOR[c] || '#fff') + '">' + c + '</span>'; }).join(' / ') || '�?;
+  var chars = (L.relatedTo || []).map(function (c) { return '<span style="color:' + (CHAR_COLOR[c] || '#fff') + '">' + c + '</span>'; }).join(' / ') || '�?;
   tipEl.innerHTML =
     '<div class="t-nm">' + L.icon + ' ' + L.name + '</div>' +
     '<div class="t-ds">' + L.desc + '</div>' +
-    '<div class="t-hint">关联�? + chars + ' · 点击查看详情</div>';
+    '<div class="t-hint">关联�? + chars + ' · 点击查看详情</div>';
   tipEl.style.display = 'block';
   var w = canvas.clientWidth, tw = tipEl.offsetWidth;
   tipEl.style.left = Math.min(px + 16, w - tw - 8) + 'px';
@@ -730,18 +730,18 @@ function openDetail(L) {
   var districtBadge = D.name ? '<span class="badge" style="border-color:' + D.color + ';color:' + D.color + '">' + D.name + '</span>' : '';
   detailEl.innerHTML =
     '<div class="d-head">' +
-    '  <button class="d-close" id="dClose">�?/button>' +
+    '  <button class="d-close" id="dClose">�?/button>' +
     '  <div class="d-icon" style="box-shadow:0 0 24px ' + hexA(L.color, .5) + '">' + L.icon + '</div>' +
     '  <div class="d-name">' + L.name + '</div>' +
     '  <div class="d-badges">' + districtBadge + '<span class="badge">' + (TYPE_NAME[L.type] || L.type) + '</span>' + tagBadges + charBadges + '</div>' +
     '</div>' +
     '<div class="d-body">' +
-    '  <div class="d-sec">�?�?�?�?/div>' +
+    '  <div class="d-sec">�?�?�?�?/div>' +
     '  <div class="d-desc">' + L.desc + '</div>' +
-    (L.memory ? '<div class="d-memory"><p>' + L.memory + '</p><span class="src">—�?恋语�?· 记忆碎片</span></div>' : '') +
+    (L.memory ? '<div class="d-memory"><p>' + L.memory + '</p><span class="src">—�?恋语�?· 记忆碎片</span></div>' : '') +
     '  <div class="d-coord">COORD: (' + L.x + ', ' + L.y + ') · ' + L.w + '×' + L.h + ' tiles</div>' +
     '</div>' +
-    '<button class="d-goto" id="dGoto">�?定位到此地点</button>';
+    '<button class="d-goto" id="dGoto">�?定位到此地点</button>';
   detailEl.classList.add('open');
   document.getElementById('dClose').onclick = closeDetail;
   document.getElementById('dGoto').onclick = function () { flyTo(L); };
@@ -749,10 +749,10 @@ function openDetail(L) {
 }
 function closeDetail() { activeLoc = null; xmActive = false; detailEl.classList.remove('open'); draw(); renderList(); }
 
-/* ===== 许墨 · 实时动态卡�?===== */
+/* ===== 许墨 · 实时动态卡�?===== */
 function openXumoDetail() {
   var p = xumoPos(), slot = XUMO.schedule[p.slot];
-  var locName = p.loc ? p.loc.name : '恋语�?;
+  var locName = p.loc ? p.loc.name : '恋语�?;
   activeLoc = CHAR_HIT; xmActive = true; hoverLoc = null;
   var now = new Date();
   /* 今日行程 */
@@ -763,26 +763,26 @@ function openXumoDetail() {
     rows += '<div style="display:flex;gap:8px;align-items:center;padding:5px 8px;border-radius:8px;margin-bottom:3px;' +
       (cur ? 'background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.45)' : '') + '">' +
       '<span style="font-family:Consolas,monospace;font-size:11px;color:var(--text-dim);min-width:88px">' +
-      ('0' + s.h).slice(-2) + ':00�? + ('0' + h2).slice(-2) + ':00</span>' +
+      ('0' + s.h).slice(-2) + ':00�? + ('0' + h2).slice(-2) + ':00</span>' +
       '<span style="font-size:12px;' + (cur ? 'color:#6d28d9;font-weight:600' : '') + '">' + s.act + (cur ? ' ◀ 现在' : '') + '</span></div>';
   }
   var q = XUMO.quotes[now.getHours() % XUMO.quotes.length];
   detailEl.innerHTML =
     '<div class="d-head">' +
-    '  <button class="d-close" id="dClose">�?/button>' +
+    '  <button class="d-close" id="dClose">�?/button>' +
     '  <div class="d-icon" style="padding:0;overflow:hidden"><img src="/avatar?v=3" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent=\'🧪\'"></div>' +
     '  <div class="d-name">许墨</div>' +
     '  <div class="d-badges"><span class="badge char" style="background:#7c3aed33;border-color:#7c3aed;color:#6d28d9">男主 · 实时位置</span>' +
-    '  <span class="badge">心情�? + slot.mood + '</span><span class="badge">' + locName + '</span></div>' +
+    '  <span class="badge">心情�? + slot.mood + '</span><span class="badge">' + locName + '</span></div>' +
     '</div>' +
     '<div class="d-body">' +
-    '  <div class="d-sec">�?�?�?�?/div>' +
-    '  <div class="d-desc">' + slot.act + '�?br>他就�?<b>' + locName + '</b> 附近——缩小地图找找那枚紫色的光点，去偶遇他吧�?/div>' +
-    '  <div class="d-sec" style="margin-top:14px">�?�?�?�?/div>' + rows +
-    '  <div class="d-memory"><p>' + q + '</p><span class="src">—�?恋语�?· 记忆碎片</span></div>' +
-    '  <div class="d-coord">COORD: (' + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ') · 更新�?' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + '</div>' +
+    '  <div class="d-sec">�?�?�?�?/div>' +
+    '  <div class="d-desc">' + slot.act + '�?br>他就�?<b>' + locName + '</b> 附近——缩小地图找找那枚紫色的光点，去偶遇他吧�?/div>' +
+    '  <div class="d-sec" style="margin-top:14px">�?�?�?�?/div>' + rows +
+    '  <div class="d-memory"><p>' + q + '</p><span class="src">—�?恋语�?· 记忆碎片</span></div>' +
+    '  <div class="d-coord">COORD: (' + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ') · 更新�?' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + '</div>' +
     '</div>' +
-    '<button class="d-goto" id="dGoto">�?定位到许�?/button>';
+    '<button class="d-goto" id="dGoto">�?定位到许�?/button>';
   detailEl.classList.add('open');
   document.getElementById('dClose').onclick = closeDetail;
   document.getElementById('dGoto').onclick = function () { flyTo({ x: p.x - .5, y: p.y - .5, w: 1, h: 1 }); };
@@ -815,7 +815,7 @@ document.getElementById('btnZoomOut').onclick = function () { zoomAt(canvas.clie
 document.getElementById('btnReset').onclick = function () { closeDetail(); resetView(); };
 document.getElementById('btnMenu').onclick = function () { document.getElementById('listPanel').classList.toggle('show'); };
 
-/* ===== 筛�?===== */
+/* ===== 筛�?===== */
 function applyFilter() {
   if (!selDistricts.size && !selChars.size && !keyword) { visibleIds = null; }
   else {
@@ -876,16 +876,16 @@ function renderList() {
     (groups[L.district] = groups[L.district] || []).push(L); shown++;
   });
   var cp = xumoPos(), charVisible = !charDimmed(cp);
-  if (!shown && !charVisible) { box.innerHTML = '<div class="empty-tip">没有匹配的地�?/div>'; return; }
+  if (!shown && !charVisible) { box.innerHTML = '<div class="empty-tip">没有匹配的地�?/div>'; return; }
   var html = '';
   /* 许墨 · 实时置顶 */
   if (charVisible) {
     var cslot = XUMO.schedule[cp.slot];
-    html += '<div class="district-group"><h3><span class="bar" style="background:#7c3aed"></span>�?此刻 · 1</h3>' +
+    html += '<div class="district-group"><h3><span class="bar" style="background:#7c3aed"></span>�?此刻 · 1</h3>' +
       '<div class="loc-item' + (xmActive ? ' active' : '') + '" data-id="__xumo">' +
       '<div class="ic" style="border:1px solid rgba(124,58,237,.55);overflow:hidden">' +
       (xmAvatarOk ? '<img src="/avatar?v=3" style="width:100%;height:100%;object-fit:cover;display:block">' : XUMO.icon) + '</div>' +
-      '<div class="info"><div class="nm">' + XUMO.name + '<span class="xm">✦实�?/span></div>' +
+      '<div class="info"><div class="nm">' + XUMO.name + '<span class="xm">✦实�?/span></div>' +
       '<div class="tp">' + cslot.act + '</div></div></div></div>';
   }
   Object.keys(DISTRICTS).forEach(function (did) {
@@ -896,7 +896,7 @@ function renderList() {
       var isXumo = (L.relatedTo || []).indexOf('许墨') >= 0;
       html += '<div class="loc-item' + (activeLoc === L ? ' active' : '') + '" data-id="' + L.id + '">' +
         '<div class="ic" style="border:1px solid ' + hexA(L.color, .5) + '">' + L.icon + '</div>' +
-        '<div class="info"><div class="nm">' + L.name + (isXumo ? '<span class="xm">✦许�?/span>' : '') + '</div>' +
+        '<div class="info"><div class="nm">' + L.name + (isXumo ? '<span class="xm">✦许�?/span>' : '') + '</div>' +
         '<div class="tp">' + (TYPE_NAME[L.type] || L.type) + ' · ' + ((L.relatedTo || [])[0] || '公共') + '</div></div></div>';
     });
     html += '</div>';
@@ -926,19 +926,19 @@ function buildLegend() {
   var cRows = Object.keys(CHAR_COLOR).map(function (c) {
     return '<div class="row"><span class="sw" style="background:' + CHAR_COLOR[c] + ';border-radius:50%;width:10px;height:10px"></span>' + c + '</div>';
   }).join('');
-  el.innerHTML = '<div class="lg-title">�?分区 / 角色</div>' + dRows + '<div class="sep"></div>' + cRows +
+  el.innerHTML = '<div class="lg-title">�?分区 / 角色</div>' + dRows + '<div class="sep"></div>' + cRows +
     '<div class="sep"></div><div class="row"><span class="sw" style="background:#7c3aed;border-radius:50%;width:10px;height:10px;box-shadow:0 0 6px #7c3aed"></span>许墨 · 实时位置</div>';
 }
 
 /* ===== 加载数据 ===== */
-fetch('lianyu-map.json?v=2').then(function (r) { return r.json(); }).then(function (d) {
+fetch('lianyu-map.json?v=3').then(function (r) { return r.json(); }).then(function (d) {
   DATA = d;
   LOCATIONS = d.locations;
   d.districts.forEach(function (D) { DISTRICTS[D.id] = D; });
   buildFilters(); buildLegend(); renderList();
   resize(); resetView();
 }).catch(function (err) {
-  document.getElementById('listPanel').innerHTML = '<div class="empty-tip">数据加载失败�? + err + '<br>请确�?lianyu-map.json 与本页面同目�?/div>';
+  document.getElementById('listPanel').innerHTML = '<div class="empty-tip">数据加载失败�? + err + '<br>请确�?lianyu-map.json 与本页面同目�?/div>';
 });
 
 })();
@@ -959,7 +959,7 @@ fetch('lianyu-map.json?v=2').then(function (r) { return r.json(); }).then(functi
   var IMG_KEY = 'lucien_bg_img_' + key;
   var OP_KEY = 'lucien_bg_op_' + key;
 
-  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
+  // 确保背景层存�?  var layer = document.getElementById('bgLayer');
   if (!layer) {
     layer = document.createElement('div');
     layer.id = 'bgLayer';
@@ -981,19 +981,19 @@ fetch('lianyu-map.json?v=2').then(function (r) { return r.json(); }).then(functi
   fab.type = 'button';
   fab.title = '换背景图';
   fab.setAttribute('aria-label', '换背景图');
-  fab.textContent = '🖼�?;
+  fab.textContent = '🖼�?;
 
   var panel = document.createElement('div');
   panel.className = 'lucien-bg-panel';
   panel.innerHTML =
     '<h4>页面背景</h4>' +
-    '<div class="lbg-row"><label>透明�?/label>' +
+    '<div class="lbg-row"><label>透明�?/label>' +
     '<input type="range" min="0" max="100" value="22" id="lbgOp">' +
     '<span class="lbg-val" id="lbgOpVal">22%</span></div>' +
     '<div class="lbg-acts"><button type="button" class="lbg-btn lbg-upload" id="lbgUpload">上传图片</button>' +
     '<button type="button" class="lbg-btn lbg-reset" id="lbgReset">恢复默认</button></div>' +
     '<input type="file" class="lbg-file" id="lbgFile" accept="image/png,image/jpeg,image/webp,image/gif">' +
-    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
+    '<div class="lbg-tip">支持 png / jpg / webp / gif。背景只作用于当前页面，并保存在本机�?/div>';
 
   document.body.appendChild(fab);
   document.body.appendChild(panel);
@@ -1040,7 +1040,7 @@ fetch('lianyu-map.json?v=2').then(function (r) { return r.json(); }).then(functi
         c.getContext('2d').drawImage(img, 0, 0, w, h);
         var dataUrl;
         try { dataUrl = c.toDataURL('image/jpeg', 0.82); }
-        catch (err) { alert('图片格式不支持，请换一�?); return; }
+        catch (err) { alert('图片格式不支持，请换一�?); return; }
         try { localStorage.setItem(IMG_KEY, dataUrl); }
         catch (err) { alert('图片过大，无法在本机保存（请换更小的图）'); return; }
         applyImg(dataUrl);
@@ -1052,7 +1052,7 @@ fetch('lianyu-map.json?v=2').then(function (r) { return r.json(); }).then(functi
     e.target.value = '';
   });
 
-  // 初始�?  try {
+  // 初始�?  try {
     var savedOp = parseInt(localStorage.getItem(OP_KEY) || '22', 10);
     if (isNaN(savedOp)) savedOp = 22;
     opInput.value = savedOp;
