@@ -33,9 +33,9 @@ def _system_prompt_snippet() -> str:
 # 亲和力操作
 # ---------------------------------------------------------------------------
 
-def _add_affinity(action: str, detail: str = "") -> dict:
+def _add_affinity(action: str, detail: str = "", emotion_event: str = None) -> dict:
     from app import _add_affinity as _impl
-    return _impl(action, detail)
+    return _impl(action, detail, emotion_event)
 
 
 # ---------------------------------------------------------------------------

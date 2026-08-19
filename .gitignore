@@ -290,6 +290,11 @@ _vm_check.js
 .idx_check.html
 _tmp_head_deep.html
 deploy_xumo.tar.gz
+.deploy/
+.deploy_tmp/
+.coze
+.coze/
+.snapshots/
 
 # ===== Additional temp files =====
 启动器.bat

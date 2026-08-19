@@ -698,10 +698,31 @@ def _image_proxy_candidates() -> list[str | None]:
     cands.append(None)  # 直连兜底
     return cands
 
+
+def _strip_thinking(text: str) -> str:
+    """剥离推理型模型混入回复的思考过程标签，确保用户只看到最终回答。"""
+    import re as _re
+    # XML style tags (DeepSeek R1 / QwQ / OpenAI o1 etc)
+    text = _re.sub(r'<think>[\s\S]*?</think>', '', text, flags=_re.IGNORECASE).strip()
+    text = _re.sub(r'<thought>[\s\S]*?</thought>', '', text, flags=_re.IGNORECASE).strip()
+    text = _re.sub(r'<thinking>[\s\S]*?</thinking>', '', text, flags=_re.IGNORECASE).strip()
+    text = _re.sub(r'<reasoning>[\s\S]*?</reasoning>', '', text, flags=_re.IGNORECASE).strip()
+    text = _re.sub(r'<reflection>[\s\S]*?</reflection>', '', text, flags=_re.IGNORECASE).strip()
+    # Chinese bracket format
+    text = _re.sub(r'\u3010\u601d\u8003\u3011[\s\S]*?\u3010/\u601d\u8003\u3011', '', text, flags=_re.IGNORECASE).strip()
+    text = _re.sub(r'\u3010\u63a8\u7406\u3011[\s\S]*?\u3010/\u63a8\u7406\u3011', '', text, flags=_re.IGNORECASE).strip()
+    # CoT tags (Claude / Gemini etc)
+    text = _re.sub(r'<cot>[\s\S]*?</cot>', '', text, flags=_re.IGNORECASE).strip()
+    text = _re.sub(r'<scratchpad>[\s\S]*?</scratchpad>', '', text, flags=_re.IGNORECASE).strip()
+    # Clean up excess blank lines
+    text = _re.sub(r'\n{3,}', '\n\n', text).strip()
+    return text
+
+
 async def _call_llm(messages: list, max_tokens: int = None) -> str:
     """通过 httpx 调用 OpenAI 兼容的 chat completions 接口。
 
-    包含上下文长度控制、人设前置、LLM响应缓存、异常兜底与重试。
+    包含上下文长度控制、人设前置、情感指令注入、LLM响应缓存、异常兜底与重试。
     """
     # 确保人设始终在消息最前置
     if messages and messages[0].get("role") != "system":
@@ -710,6 +731,19 @@ async def _call_llm(messages: list, max_tokens: int = None) -> str:
         # 确保系统提示词未被篡改
         if SYSTEM_PROMPT[:50] not in messages[0]["content"][:50]:
             messages[0]["content"] = SYSTEM_PROMPT + "\n\n" + messages[0]["content"]
+    
+    # 注入情感指令到系统提示词
+    try:
+        affinity_data = _load_affinity()
+        emotion_state = affinity_data.get("emotion", _get_default_emotion_state())
+        emotional_instructions = _get_emotional_instructions(emotion_state)
+        
+        # 将情感指令附加到系统提示词
+        if messages and messages[0].get("role") == "system":
+            base_prompt = messages[0]["content"]
+            messages[0]["content"] = base_prompt + f"\n\n【当前情感状态指导】\n{emotional_instructions}"
+    except Exception as e:
+        print(f"[emotion] 情感指令注入异常: {e}", flush=True)
 
     # 检查 LLM 缓存
     cached = _cache_get_llm(messages)
@@ -761,6 +795,8 @@ async def _call_llm(messages: list, max_tokens: int = None) -> str:
                 continue
             raise RuntimeError(f"上游响应格式异常：{str(data)[:300]}")
         if content:
+            # 剥离推理型模型的思考过程标签
+            content = _strip_thinking(content)
             # 缓存成功的响应
             _cache_set_llm(messages, content)
             return content
@@ -971,6 +1007,10 @@ _OWNER_ONLY_VOICE_PATTERNS = [
     re.compile(r"^/api/mailbox/[^/]+/voice$"),
     re.compile(r"^/api/wakeup/voice$"),
     re.compile(r"^/api/recap/[^/]+/voice$"),
+    re.compile(r"^/api/sense/[^/]+/voice$"),        # 明信片语音合成
+    re.compile(r"^/api/milestone/[^/]+/voice$"),    # 里程碑语音合成
+    re.compile(r"^/api/music/upload$"),             # 音乐上传（音频处理）
+    re.compile(r"^/api/music/[^/]+/comment$"),     # 音乐评论（可能涉及语音）
 ]
 
 _OWNER_ONLY_IMAGE_PATTERNS = [
@@ -1444,6 +1484,153 @@ async def tutorial_novoice_page():
 # 聊天记录持久化
 # ---------------------------------------------------------------------------
 CHAT_LOG_FILE = RolePath("chat_log.json")
+
+# ---------------------------------------------------------------------------
+# 用户行为追踪系统 - 用于个性化推荐
+# ---------------------------------------------------------------------------
+USER_BEHAVIOR_FILE = RolePath("user_behavior.json")
+
+
+def _load_user_behavior() -> dict:
+    """加载用户行为数据"""
+    try:
+        with open(USER_BEHAVIOR_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_user_behavior(behavior: dict):
+    """保存用户行为数据"""
+    atomic_json(USER_BEHAVIOR_FILE, behavior)
+
+
+def _track_recommendation_click(app_name: str, source: str = "chat"):
+    """追踪推荐点击行为"""
+    behavior = _load_user_behavior()
+    
+    # 初始化数据结构
+    if "clicks" not in behavior:
+        behavior["clicks"] = {}
+    if "app_usage" not in behavior:
+        behavior["app_usage"] = {}
+    if "time_patterns" not in behavior:
+        behavior["time_patterns"] = {}
+    
+    # 记录点击次数
+    behavior["clicks"][app_name] = behavior["clicks"].get(app_name, 0) + 1
+    
+    # 记录app使用频次
+    behavior["app_usage"][app_name] = behavior["app_usage"].get(app_name, 0) + 1
+    
+    # 记录时段偏好
+    hour = datetime.now().hour
+    time_key = f"{hour // 3 * 3}-{(hour // 3 + 1) * 3 - 1}点"
+    if time_key not in behavior["time_patterns"]:
+        behavior["time_patterns"][time_key] = {}
+    behavior["time_patterns"][time_key][app_name] = behavior["time_patterns"][time_key].get(app_name, 0) + 1
+    
+    # 记录最后更新时间
+    behavior["last_updated"] = datetime.now().isoformat()
+    
+    _save_user_behavior(behavior)
+    print(f"[behavior] 记录推荐点击: {app_name} (来源: {source})", flush=True)
+
+
+def _get_user_preferences() -> dict:
+    """获取用户偏好用于个性化推荐"""
+    behavior = _load_user_behavior()
+    
+    preferences = {
+        "preferred_apps": [],
+        "time_based": {},
+        "click_weights": {}
+    }
+    
+    # 计算app偏好权重
+    app_usage = behavior.get("app_usage", {})
+    total_clicks = sum(app_usage.values()) if app_usage else 1
+    
+    for app, clicks in app_usage.items():
+        weight = clicks / total_clicks if total_clicks > 0 else 0
+        preferences["click_weights"][app] = weight
+        if weight > 0.05:  # 权重超过5%的认为是偏好app
+            preferences["preferred_apps"].append(app)
+    
+    # 整理时段偏好
+    time_patterns = behavior.get("time_patterns", {})
+    current_hour = datetime.now().hour
+    current_time_key = f"{current_hour // 3 * 3}-{(current_hour // 3 + 1) * 3 - 1}点"
+    
+    if current_time_key in time_patterns:
+        current_time_apps = time_patterns[current_time_key]
+        total_time_clicks = sum(current_time_apps.values()) if current_time_apps else 1
+        for app, clicks in current_time_apps.items():
+            preferences["time_based"][app] = clicks / total_time_clicks if total_time_clicks > 0 else 0
+    
+    return preferences
+
+
+@app.post("/api/recommendation/track")
+async def track_recommendation(req: Request):
+    """追踪推荐点击行为API"""
+    try:
+        data = await req.json()
+        app_name = data.get("app")
+        source = data.get("source", "chat")
+        
+        if not app_name:
+            return JSONResponse({"error": "缺少app参数"}, status_code=400)
+        
+        _track_recommendation_click(app_name, source)
+        return {"ok": True, "app": app_name}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/recommendation/preferences")
+async def get_recommendation_preferences():
+    """获取用户推荐偏好API"""
+    try:
+        preferences = _get_user_preferences()
+        return {"preferences": preferences}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/recommendation/feedback")
+async def recommendation_feedback(req: Request):
+    """接收推荐反馈API"""
+    try:
+        data = await req.json()
+        app_name = data.get("app")
+        feedback = data.get("feedback")  # "like" or "dislike"
+        
+        if not app_name or not feedback:
+            return JSONResponse({"error": "缺少必要参数"}, status_code=400)
+        
+        behavior = _load_user_behavior()
+        
+        # 初始化反馈数据
+        if "feedback" not in behavior:
+            behavior["feedback"] = {}
+        if app_name not in behavior["feedback"]:
+            behavior["feedback"][app_name] = {"likes": 0, "dislikes": 0}
+        
+        # 记录反馈
+        if feedback == "like":
+            behavior["feedback"][app_name]["likes"] += 1
+        elif feedback == "dislike":
+            behavior["feedback"][app_name]["dislikes"] += 1
+        
+        behavior["last_updated"] = datetime.now().isoformat()
+        _save_user_behavior(behavior)
+        
+        print(f"[feedback] 记录推荐反馈: {app_name} -> {feedback}", flush=True)
+        return {"ok": True, "app": app_name, "feedback": feedback}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 def _load_chat_log() -> list:
@@ -2481,6 +2668,502 @@ async def screen_analyze(req: Request):
     return {"desc": desc}
 
 
+# ===========================================================================
+# 对话智能推荐 · App 场景与功能（关键词意图匹配，回复内嵌卡片 + 输入栏推荐位）
+# ===========================================================================
+# 每条目：kw 为触发关键词；特殊条目带 scene/mode 字段表示深层跳转：
+#   scene="call"      → 直接拨打许墨电话（openApp('phone') + startCall('许墨')）
+#   scene="mode"      → 切换全屏模式（mode="a" 沉浸共生 / "g" 恋语市世界 / "h" 手谈）
+
+# 推荐系统配置
+_RECOMMENDATION_CONFIG = {
+    "layers": {
+        "keyword": {"weight": 2.0, "enabled": True},
+        "semantic": {"weight": 1.5, "enabled": True},
+        "personalization": {"weight": 1.0, "enabled": True},
+        "time_based": {"weight": 0.8, "enabled": True}
+    },
+    "max_recommendations": 3,
+    "min_confidence": 0.3
+}
+
+REC_CATALOG = {
+    "world":     {"name": "世界·恋语市", "emoji": "🌍", "kw": ["恋语市", "世界", "城市", "逛街", "散步", "小镇", "出门", "转转", "去玩", "地图", "探索", "游玩", "景点"]},
+    "moments":   {"name": "朋友圈", "emoji": "🦋", "kw": ["朋友圈", "动态", "发的消息", "说说", "分享", "看看他发了什么", "社交动态", "更新", "帖子"]},
+    "affinity":  {"name": "心动", "emoji": "💜", "kw": ["心动值", "心动", "亲密度", "好感度", "爱意", "多爱我", "关系", "感情", "亲密"]},
+    "quotes":    {"name": "语录", "emoji": "📜", "kw": ["语录", "收藏的话", "他说过", "名言", "金句", "经典台词", "语录集", "他说的话"]},
+    "memory":    {"name": "记忆手账", "emoji": "🧠", "kw": ["记忆", "手账", "记得", "回忆", "忘了", "记忆碎片", "回忆录", "记忆保存"]},
+    "notes":     {"name": "备忘录", "emoji": "📝", "kw": ["备忘录", "记事", "记下", "备忘", "记一下", "笔记", "记录", "便签"]},
+    "promises":  {"name": "承诺管家", "emoji": "🤝", "kw": ["承诺", "答应", "保证", "说好了", "约定", "誓言", "承诺管理"]},
+    "xumodiary": {"name": "许墨日记", "emoji": "📓", "kw": ["许墨日记", "他的日记", "日记写了什么", "他的记录", "教授日记", "Lucien日记"]},
+    "review":    {"name": "时光总结", "emoji": "📊", "kw": ["总结", "时光总结", "周报", "月报", "年结", "复盘", "回顾", "时光回顾"]},
+    "ledger":    {"name": "墨记账", "emoji": "💰", "kw": ["记账", "账本", "消费", "花费", "花了多少", "财务管理", "支出", "记账本"]},
+    "clock":     {"name": "时钟", "emoji": "⏰", "kw": ["闹钟", "时钟", "起床", "提醒", "定时", "几点", "时间", "时间管理"]},
+    "weather":   {"name": "天气", "emoji": "🌦️", "kw": ["天气", "下雨", "气温", "温度", "阴晴", "冷热", "天气预报", "天气情况"]},
+    "listen":    {"name": "音乐·一起听", "emoji": "🎧", "kw": ["音乐", "听歌", "歌", "一起听", "唱歌", "旋律", "曲子", "bgm", "音乐播放", "歌曲"]},
+    "photos":    {"name": "相册", "emoji": "📷", "kw": ["相册", "照片", "图片", "合影", "拍照", "自拍", "相册", "照片墙", "图片库"]},
+    "img2img":   {"name": "画境", "emoji": "🎨", "kw": ["画画", "画一张", "绘画", "立绘", "卡面", "绘图", "图片生成", "作画", "绘画创作"]},
+    "timebox":   {"name": "时光", "emoji": "⏳", "kw": ["纪念日", "时光", "倒数", "在一起多少天", "多少天", "时光记录", "重要时刻"]},
+    "dates":     {"name": "约会", "emoji": "💞", "kw": ["约会", "约我", "想约", "手账", "想去哪", "约会计划", "约会安排", "浪漫约会"]},
+    "chathist":  {"name": "聊天记录", "emoji": "🕘", "kw": ["聊天记录", "历史记录", "存档", "恢复", "之前的对话", "对话历史", "聊天存档"]},
+    "browser":   {"name": "浏览器", "emoji": "🌐", "kw": ["浏览器", "上网", "网址", "查一下", "搜一下", "网页", "浏览网页", "网络"]},
+    "words":     {"name": "背单词", "emoji": "📚", "kw": ["背单词", "单词", "英语", "记单词", "词汇", "英语学习", "单词记忆"]},
+    "coach":     {"name": "学习陪伴", "emoji": "🎓", "kw": ["学习", "专注", "自习", "打卡", "番茄", "陪伴学习", "学习助手", "专注学习"]},
+    "video":     {"name": "视频总结", "emoji": "🎬", "kw": ["视频总结", "总结视频", "看视频", "视频内容", "视频解析"]},
+    "watch":     {"name": "一起看", "emoji": "📺", "kw": ["一起看", "追剧", "看剧", "视频", "看电影", "观影", "观看视频"]},
+    "solve":     {"name": "解题", "emoji": "✍️", "kw": ["解题", "题目", "数学", "作业", "难题", "不会做", "解题助手", "作业辅导"]},
+    "reading":   {"name": "共读", "emoji": "📖", "kw": ["读书", "看书", "共读", "书", "小说", "阅读", "阅读计划", "书籍"]},
+    "dream":     {"name": "清梦", "emoji": "💤", "kw": ["清梦", "做梦", "梦", "睡", "睡眠", "入梦", "梦境"]},
+    "mind":      {"name": "心智图谱", "emoji": "🧩", "kw": ["心智图谱", "图谱", "思维", "心里想什么", "思维导图", "心智分析"]},
+    "bfly":      {"name": "蝶语花园", "emoji": "🦋", "kw": ["蝶语", "花园", "蝴蝶", "养蝶", "蝴蝶花园", "蝴蝶养殖"]},
+    "pverse":    {"name": "平行宇宙", "emoji": "🌠", "kw": ["平行宇宙", "平行世界", "if线", "另一个我", "平行时空", "多元宇宙"]},
+    "astro":     {"name": "天台观星", "emoji": "🔭", "kw": ["观星", "星星", "星座", "天文", "夜空", "流星", "星空", "天文学"]},
+    "bsfile":    {"name": "黑天鹅档案", "emoji": "🦢", "kw": ["黑天鹅", "档案", "机密", "组织", "black swan", "秘密档案", "组织档案"]},
+    "wardrobe":  {"name": "衣橱", "emoji": "👗", "kw": ["衣橱", "换装", "衣服", "穿搭", "试衣", "服装", "时尚", "穿衣"]},
+    "work":      {"name": "工作助手", "emoji": "💼", "kw": ["工作", "任务", "计划", "办公", "项目", "待办", "工作任务", "办公助手"]},
+    "diary":     {"name": "恋爱日记", "emoji": "💌", "kw": ["恋爱日记", "日记", "写日记", "记录今天", "情感日记", "心情日记"]},
+    "go":        {"name": "手谈", "emoji": "⚫", "kw": ["围棋", "手谈", "下棋", "棋局", "katago", "棋类", "围棋对弈"]},
+    "radio":     {"name": "许墨电台", "emoji": "📻", "kw": ["电台", "广播", "播报", "收音机", "晨间", "节目", "播音", "广播节目"]},
+    "lab":       {"name": "B3实验室", "emoji": "🧪", "kw": ["实验", "实验室", "b3", "研究", "科研", "科学实验", "实验室工作"]},
+    "pet":       {"name": "共养宠物", "emoji": "🐾", "kw": ["宠物", "养宠物", "猫", "小狗", "电子宠物", "喂", "宠物照顾", "宠物养成"]},
+    "letter":    {"name": "许墨来信", "emoji": "✉️", "kw": ["来信", "信", "邮件", "写信", "给他写信", "信件", "邮件往来"]},
+    "wish":      {"name": "许愿池", "emoji": "🪙", "kw": ["许愿", "愿望", "祈祷", "许愿池", "愿望实现", "祈祷祝福"]},
+    "div":       {"name": "占卜屋", "emoji": "🔮", "kw": ["占卜", "塔罗", "运势", "算命", "抽牌", "占卜屋", "命运占卜"]},
+    "spark":     {"name": "灵感闪念", "emoji": "💡", "kw": ["灵感", "闪念", "点子", "想法", "创意", "灵感记录", "想法捕捉"]},
+    "clip":      {"name": "剪贴板", "emoji": "📋", "kw": ["剪贴板", "复制", "粘贴", "接话", "剪贴", "复制粘贴", "内容同步"]},
+    "oracle":    {"name": "决策预言", "emoji": "🎯", "kw": ["决策", "预言", "选择", "犹豫", "拿不定", "决策辅助", "预言分析"]},
+    "habits":    {"name": "共同习惯", "emoji": "✅", "kw": ["习惯", "坚持", "共同习惯", "生活习惯", "习惯养成", "习惯追踪"]},
+    "deep":      {"name": "深度共鸣", "emoji": "🌀", "kw": ["深度共鸣", "观察手记", "共梦", "合著", "记忆碎片", "深度交流", "共鸣连接"]},
+    "timecall":  {"name": "时空热线", "emoji": "📞", "kw": ["时空热线", "热线", "打给他", "接通", "时空通话", "热线电话"]},
+    "debate":    {"name": "双我辩论", "emoji": "⚖️", "kw": ["辩论", "双我", "两个我", "理性感性", "自我辩论", "内心辩论"]},
+    "together":  {"name": "合影日历", "emoji": "📸", "kw": ["合影", "日历", "照片墙", "合影日历", "照片日历", "合影记录"]},
+    "achv":      {"name": "心动成就", "emoji": "🏆", "kw": ["成就", "勋章", "里程碑", "解锁", "成就系统", "成就解锁"]},
+    "sos":       {"name": "情绪急救", "emoji": "🆘", "kw": ["难过", "伤心", "哭", "委屈", "难受", "崩溃", "emo", "急救", "情绪急救"]},
+    "lifeline":  {"name": "人生模拟", "emoji": "🪐", "kw": ["人生", "模拟", "重来", "重活", "人生模拟器", "模拟人生"]},
+    "dreamlab":  {"name": "梦境解码器", "emoji": "🌙", "kw": ["梦境解码", "解梦", "梦见", "梦到", "梦境分析", "解梦器"]},
+    "pmail":     {"name": "平行信箱", "emoji": "📬", "kw": ["平行信箱", "未来的信", "寄给未来", "平行世界信", "未来信件"]},
+    "nradio":    {"name": "深夜电台", "emoji": "🌃", "kw": ["深夜电台", "夜话", "睡前", "晚安电台", "夜间节目", "夜广播"]},
+    "telepathy": {"name": "默契雷达", "emoji": "📡", "kw": ["默契", "雷达", "猜心", "懂不懂我", "心灵感应", "默契测试"]},
+    "fate":      {"name": "命运岔路", "emoji": "🔀", "kw": ["命运", "岔路", "分岔", "命运选择", "人生岔路", "命运分岔"]},
+    "pulse":     {"name": "心跳频谱", "emoji": "💓", "kw": ["心跳", "频谱", "心率", "心跳检测", "心率频谱", "心跳分析"]},
+    "subconscious": {"name": "潜意识密室", "emoji": "🔐", "kw": ["潜意识", "密室", "测谎", "谎言", "说谎", "潜意识探索", "深层心理"]},
+    "capsule":   {"name": "时空胶囊", "emoji": "⏲️", "kw": ["时空胶囊", "胶囊", "寄给未来", "时间胶囊", "未来胶囊"]},
+    "empath":    {"name": "共感温度计", "emoji": "🌡️", "kw": ["共感", "温度计", "情绪温度", "情感温度", "共情测量"]},
+    "noracle":   {"name": "七日预言", "emoji": "🔮", "kw": ["七日", "预言", "未来一周", "周预言", "一周预测", "七日运势"]},
+    "whisper":   {"name": "沉默信使", "emoji": "🤫", "kw": ["沉默信使", "悄悄话", "匿名", "秘密传话", "匿名消息"]},
+    "mixer":     {"name": "心跳调音台", "emoji": "🎛️", "kw": ["调音", "混音", "心跳调音", "音效调节", "心跳音效", "音频调音"]},
+    "rtm":       {"name": "逆向时光机", "emoji": "🕰️", "kw": ["逆向", "时光机", "回到过去", "时光倒流", "时间逆转", "回到从前"]},
+    "fusion":    {"name": "人格融合", "emoji": "🧬", "kw": ["人格", "融合", "合体", "人格整合", "身份融合", "自我融合"]},
+    "theater":   {"name": "潜意识剧场", "emoji": "🎭", "kw": ["剧场", "潜意识", "剧本", "上演", "心理剧场", "潜意识剧场"]},
+    "fateecho":  {"name": "命运回声图谱", "emoji": "🗣️", "kw": ["回声", "命运回声", "图谱", "命运图谱", "回声分析", "命运回响"]},
+    "vault":     {"name": "时光密室", "emoji": "🗄️", "kw": ["密室", "时光", "收藏", "时光收藏", "秘密密室", "时光宝库"]},
+    "pulselab":  {"name": "心跳实验室", "emoji": "🫀", "kw": ["心跳实验室", "心电图", "心率实验", "心跳研究", "心率实验室"]},
+    "rift":      {"name": "次元裂隙", "emoji": "🌀", "kw": ["次元", "裂隙", "跨界", "穿越", "维度穿越", "次元裂缝"]},
+    "wager":     {"name": "命运赌局", "emoji": "🎰", "kw": ["赌局", "赌", "下注", "打赌", "命运赌", "命运赌博"]},
+    "relic":     {"name": "回忆修复工坊", "emoji": "🛠️", "kw": ["回忆修复", "碎片", "修复记忆", "失忆", "记忆修复", "回忆工坊"]},
+    "symbiote":  {"name": "共生体演化", "emoji": "🐚", "kw": ["共生", "演化", "磨合", "共生关系", "共同演化", "关系磨合"]},
+    "extensions": {"name": "AI扩展", "emoji": "🧩", "kw": ["扩展", "插件", "ai扩展", "自定义功能", "功能扩展", "插件系统"]},
+    "sms":       {"name": "短信", "emoji": "💬", "kw": ["短信", "发消息", "未读", "消息", "短信消息", "文本消息"]},
+    "call":      {"name": "通话", "emoji": "📞", "kw": ["打电话", "通话", "拨号", "语音通话", "想听他的声音", "打给你"], "scene": "call"},
+    "mode_a":    {"name": "沉浸共生", "emoji": "🌌", "kw": ["沉浸", "沉浸模式", "全屏", "共生模式"], "scene": "mode", "mode": "a"},
+    "mode_g":    {"name": "恋语市·世界", "emoji": "🌍", "kw": ["去恋语市", "世界模式", "全屏世界"], "scene": "mode", "mode": "g"},
+    # 新增场景和功能扩展
+    "meditation": {"name": "冥想空间", "emoji": "🧘", "kw": ["冥想", "禅修", "静心", "放松", "心灵", "平静"]},
+    "journey":   {"name": "心灵旅程", "emoji": "🚂", "kw": ["旅程", "心灵旅程", "探索", "自我发现", "成长"]},
+    "tarot":     {"name": "每日塔罗", "emoji": "🃏", "kw": ["塔罗", "每日塔罗", "抽卡", "指引", "运势"]},
+    "breathing": {"name": "呼吸练习", "emoji": "🌬️", "kw": ["呼吸", "深呼吸", "调节", "放松呼吸", "气息"]},
+    "gratitude": {"name": "感恩日记", "emoji": "🙏", "kw": ["感恩", "感谢", "感恩日记", "记录感恩", "感恩记录"]},
+    "reflection": {"name": "每日反思", "emoji": "🤔", "kw": ["反思", "每日反思", "总结", "回顾", "自我反思"]},
+    "goals":     {"name": "目标追踪", "emoji": "🎯", "kw": ["目标", "追踪", "目标追踪", "目标管理", "达成"]},
+    "journal":   {"name": "心情日记", "emoji": "📔", "kw": ["心情", "心情日记", "情绪记录", "心情记录", "情感日记"]},
+    "wellness":  {"name": "健康追踪", "emoji": "❤️", "kw": ["健康", "健康追踪", "身体", "运动", "锻炼", "健康数据"]},
+    "finance":   {"name": "理财助手", "emoji": "💹", "kw": ["理财", "投资", "财务", "理财助手", "资产管理"]},
+    "calendar":  {"name": "日程管理", "emoji": "📅", "kw": ["日程", "日历", "日程管理", "时间安排", "计划安排"]},
+    "reminder":  {"name": "智能提醒", "emoji": "🔔", "kw": ["提醒", "智能提醒", "提醒事项", "待办提醒", "通知"]},
+    "habits":    {"name": "习惯养成", "emoji": "🔄", "kw": ["习惯", "养成", "习惯养成", "打卡", "坚持习惯"]},
+    "social":    {"name": "社交助手", "emoji": "👥", "kw": ["社交", "人际关系", "朋友", "社交助手", "人际交往"]},
+    "travel":    {"name": "旅行规划", "emoji": "✈️", "kw": ["旅行", "旅游", "旅行规划", "出行", "游玩"]},
+    "food":      {"name": "美食记录", "emoji": "🍽️", "kw": ["美食", "食物", "美食记录", "餐厅", "菜谱"]},
+    "exercise":  {"name": "运动健身", "emoji": "🏃", "kw": ["运动", "健身", "运动健身", "锻炼", "体育"]},
+    "sleep":     {"name": "睡眠监测", "emoji": "😴", "kw": ["睡眠", "睡眠监测", "睡觉", "休息", "睡眠质量"]},
+    "water":     {"name": "饮水提醒", "emoji": "💧", "kw": ["喝水", "饮水", "饮水提醒", "水分", "补水"]},
+    "mood":      {"name": "情绪追踪", "emoji": "😊", "kw": ["情绪", "情绪追踪", "心情", "情感状态", "情绪变化"]},
+    "idea":      {"name": "创意笔记", "emoji": "💭", "kw": ["创意", "想法", "创意笔记", "灵感记录", "点子"]},
+    "project":   {"name": "项目管理", "emoji": "📋", "kw": ["项目", "项目管理", "项目计划", "项目追踪", "项目任务"]},
+    "book":      {"name": "阅读清单", "emoji": "📚", "kw": ["书", "书籍", "阅读清单", "读书计划", "书单"]},
+    "movie":     {"name": "观影记录", "emoji": "🎬", "kw": ["电影", "影片", "观影记录", "电视剧", "追剧记录"]},
+    "music_rec": {"name": "音乐推荐", "emoji": "🎵", "kw": ["音乐推荐", "推荐音乐", "歌单", "音乐发现", "新歌"]},
+    "podcast":   {"name": "播客订阅", "emoji": "🎙️", "kw": ["播客", " Podcast", "播客订阅", "音频节目", "有声内容"]},
+    "news":      {"name": "新闻资讯", "emoji": "📰", "kw": ["新闻", "资讯", "新闻资讯", "时事", "热点"]},
+    "weather_detail": {"name": "详细天气", "emoji": "🌤️", "kw": ["详细天气", "天气预报", "气温详情", "空气质量", "天气详情"]},
+    "map_search": {"name": "地图搜索", "emoji": "🗺️", "kw": ["地图搜索", "查找地点", "位置", "导航", "路线"]},
+    "translate": {"name": "翻译助手", "emoji": "🌐", "kw": ["翻译", "翻译助手", "语言翻译", "外语", "翻译工具"]},
+    "calculator": {"name": "计算器", "emoji": "🔢", "kw": ["计算", "计算器", "数学计算", "算数", "计算工具"]},
+    "timer":     {"name": "计时器", "emoji": "⏱️", "kw": ["计时", "计时器", "倒计时", "秒表", "计时工具"]},
+    "stopwatch": {"name": "秒表", "emoji": "⏲️", "kw": ["秒表", "计时", "计时工具", "精准计时", "时间测量"]},
+    "scanner":   {"name": "扫描工具", "emoji": "📷", "kw": ["扫描", "扫描工具", "文档扫描", "二维码", "条形码"]},
+    "voice_note": {"name": "语音笔记", "emoji": "🎤", "kw": ["语音", "语音笔记", "录音", "语音记录", "声音笔记"]},
+    "password":  {"name": "密码管理", "emoji": "🔐", "kw": ["密码", "密码管理", "密码本", "账户", "登录密码"]},
+    "storage":   {"name": "存储管理", "emoji": "💾", "kw": ["存储", "存储管理", "文件管理", "云存储", "空间"]},
+    "backup":    {"name": "数据备份", "emoji": "🔄", "kw": ["备份", "数据备份", "恢复", "备份恢复", "数据保护"]},
+    "clean":     {"name": "清理工具", "emoji": "🧹", "kw": ["清理", "清理工具", "垃圾清理", "优化", "系统清理"]},
+    "security":  {"name": "安全中心", "emoji": "🛡️", "kw": ["安全", "安全中心", "隐私", "防护", "系统安全"]},
+    "settings":  {"name": "系统设置", "emoji": "⚙️", "kw": ["设置", "系统设置", "配置", "选项", "偏好设置"]},
+    "help":      {"name": "帮助中心", "emoji": "❓", "kw": ["帮助", "帮助中心", "使用指南", "教程", "使用说明"]},
+    "feedback":  {"name": "意见反馈", "emoji": "💬", "kw": ["反馈", "意见反馈", "建议", "问题反馈", "用户反馈"]},
+    "about":     {"name": "关于我们", "emoji": "ℹ️", "kw": ["关于", "关于我们", "版本", "介绍", "信息"]},
+}
+
+_REC_LABEL = {
+    "call": "给许墨打电话",
+    "mode_a": "进入沉浸共生",
+    "mode_g": "进入恋语市世界",
+    # 新增深层跳转标签
+    "meditation": "开始冥想放松",
+    "breathing": "开始呼吸练习",
+    "tarot": "抽取今日塔罗",
+    "journey": "开启心灵旅程",
+}
+
+# 同义词扩展映射：提升关键词匹配的语义覆盖度
+_SYNONYM_MAP = {
+    # 情绪类
+    "难过": ["伤心", "委屈", "难受", "崩溃", "emo", "不开心", "痛苦", "郁闷"],
+    "开心": ["高兴", "快乐", "愉快", "兴奋", "欢喜", "开心"],
+    "生气": ["愤怒", "不爽", "烦躁", "恼火", "气愤"],
+    "担心": ["焦虑", "紧张", "不安", "忧虑", "害怕"],
+    "累": ["疲惫", "疲倦", "累", "困", "乏力"],
+    
+    # 意图类
+    "想": ["想要", "希望", "渴望", "期待", "打算"],
+    "做": ["制作", "创作", "完成", "执行", "实施"],
+    "看": ["观看", "浏览", "阅读", "查看", "瞧"],
+    "听": ["收听", "聆听", "倾听"],
+    "去": ["前往", "到", "来", "去到"],
+    
+    # 时间类
+    "现在": ["此刻", "目前", "今天", "当下"],
+    "以前": ["过去", "之前", "从前", "往日"],
+    "以后": ["未来", "之后", "将来", "往后"],
+    
+    # 关系类
+    "我们": ["咱们", "我和你", "彼此"],
+    "你": ["您", "亲", "亲爱的"],
+}
+
+
+def _expand_keywords(keywords: list) -> set:
+    """扩展关键词集合，包含同义词"""
+    expanded = set(keywords)
+    for kw in keywords:
+        if kw in _SYNONYM_MAP:
+            expanded.update(_SYNONYM_MAP[kw])
+    return expanded
+
+
+def _kw_hits(text: str, info: dict) -> int:
+    """增强的关键词命中算法：支持同义词扩展、权重衰减、短语匹配"""
+    if not text:
+        return 0
+    
+    text_lower = text.lower()
+    score = 0.0
+    keywords = info.get("kw", [])
+    
+    # 扩展关键词集合
+    expanded_keywords = _expand_keywords(keywords)
+    
+    for kw in expanded_keywords:
+        if not kw:
+            continue
+            
+        kw_lower = kw.lower()
+        
+        # 精确匹配：权重1.0
+        if kw_lower in text_lower:
+            score += 1.0
+            continue
+            
+        # 短语匹配：权重0.8 (至少2个字的词组)
+        if len(kw) >= 2 and kw_lower in text_lower:
+            score += 0.8
+            continue
+            
+        # 部分匹配：权重0.5 (关键词的一部分在文本中)
+        if len(kw) >= 2 and (kw_lower[:2] in text_lower or kw_lower[-2:] in text_lower):
+            score += 0.5
+    
+    # 权重衰减：避免单一关键词过度匹配
+    if score > 3.0:
+        score = 3.0 + (score - 3.0) * 0.3  # 超过3分后增益递减
+    
+    return int(score)
+
+
+def _rec_item(key: str) -> dict | None:
+    info = REC_CATALOG.get(key)
+    if not info:
+        return None
+    if key == "call":
+        return {"app": "phone", "scene": "call", "name": info["name"], "emoji": info["emoji"], "label": _REC_LABEL["call"]}
+    if info.get("scene") == "mode":
+        return {"app": "mode", "scene": "mode", "mode": info["mode"], "name": info["name"], "emoji": info["emoji"], "label": _REC_LABEL[key]}
+    return {"app": key, "name": info["name"], "emoji": info["emoji"], "label": f"打开「{info['name']}」"}
+
+
+def _analyze_conversation_intent_simple(user_text: str, reply: str) -> dict:
+    """简化的对话意图分析：基于规则和关键词，避免频繁LLM调用"""
+    intent = {
+        "emotion": "平静",
+        "topics": [],
+        "intent": "聊天",
+        "recommendation_hints": []
+    }
+    
+    combined_text = (user_text + " " + reply).lower()
+    
+    # 情感分析
+    emotion_keywords = {
+        "难过": ["难过", "伤心", "委屈", "难受", "崩溃", "emo", "不开心", "痛苦", "哭"],
+        "开心": ["开心", "高兴", "快乐", "愉快", "兴奋", "欢喜", "笑", "哈哈"],
+        "生气": ["生气", "愤怒", "不爽", "烦躁", "恼火", "气愤", "讨厌"],
+        "担心": ["担心", "焦虑", "紧张", "不安", "忧虑", "害怕", "怕"],
+        "累": ["累", "疲惫", "疲倦", "困", "乏力", " tired"]
+    }
+    
+    max_emotion_score = 0
+    for emotion, keywords in emotion_keywords.items():
+        score = sum(1 for kw in keywords if kw in combined_text)
+        if score > max_emotion_score:
+            max_emotion_score = score
+            intent["emotion"] = emotion
+    
+    # 意图分析
+    intent_mapping = {
+        "娱乐": ["玩", "游戏", "看剧", "电影", "音乐", "听歌", "娱乐"],
+        "工作": ["工作", "任务", "项目", "办公", "学习", "写", "做"],
+        "学习": ["学习", "读书", "看书", "课程", "复习", "背单词"],
+        "情感": ["想", "爱", "喜欢", "感情", "关系", "心里"],
+        "放松": ["休息", "放松", "睡觉", "睡觉", "休闲", "散步"]
+    }
+    
+    for user_intent, keywords in intent_mapping.items():
+        if any(kw in combined_text for kw in keywords):
+            intent["intent"] = user_intent
+            break
+    
+    # 生成推荐提示
+    if intent["emotion"] == "难过":
+        intent["recommendation_hints"] = ["急救", "日记", "安慰"]
+    elif intent["emotion"] == "累":
+        intent["recommendation_hints"] = ["休息", "音乐", "清梦"]
+    elif intent["intent"] == "娱乐":
+        intent["recommendation_hints"] = ["音乐", "视频", "游戏"]
+    elif intent["intent"] == "工作":
+        intent["recommendation_hints"] = ["工作", "专注", "计划"]
+    elif intent["intent"] == "学习":
+        intent["recommendation_hints"] = ["学习", "背单词", "阅读"]
+    
+    return intent
+
+
+def _calculate_multi_layer_score(user_text: str, reply: str, key: str, info: dict) -> tuple:
+    """多层级评分计算"""
+    config = _RECOMMENDATION_CONFIG
+    total_score = 0.0
+    score_details = {}
+    
+    # 第一层：关键词匹配
+    if config["layers"]["keyword"]["enabled"]:
+        keyword_score = 2 * _kw_hits(user_text, info) + _kw_hits(reply, info)
+        if keyword_score > 0:
+            layer_score = keyword_score * config["layers"]["keyword"]["weight"]
+            total_score += layer_score
+            score_details["keyword"] = layer_score
+    
+    # 第二层：语义理解
+    if config["layers"]["semantic"]["enabled"]:
+        try:
+            intent = _analyze_conversation_intent_simple(user_text, reply)
+            hints = intent.get("recommendation_hints", [])
+            emotion = intent.get("emotion", "")
+            
+            # 情感匹配
+            emotion_boosts = {
+                "难过": ["sos", "diary", "nradio", "subconscious"],
+                "累": ["dreamlab", "listen", "diary", "coach"],
+                "担心": ["oracle", "coach", "radio", "affinity"],
+                "开心": ["moments", "photos", "dates", "together"],
+                "生气": ["debate", "subconscious", "sos"]
+            }
+            
+            if emotion in emotion_boosts and key in emotion_boosts[emotion]:
+                emotion_score = 1.5 * config["layers"]["semantic"]["weight"]
+                total_score += emotion_score
+                score_details["emotion"] = emotion_score
+            
+            # Hint匹配
+            for hint in hints:
+                if hint in info["kw"] or any(hint in kw for kw in info["kw"]):
+                    hint_score = 1.2 * config["layers"]["semantic"]["weight"]
+                    total_score += hint_score
+                    score_details["hint"] = hint_score
+                    break
+                    
+        except Exception as e:
+            print(f"[multi-layer] 语义分析失败: {e}", flush=True)
+    
+    # 第三层：个性化权重
+    if config["layers"]["personalization"]["enabled"]:
+        try:
+            user_prefs = _get_user_preferences()
+            click_weights = user_prefs.get("click_weights", {})
+            preferred_apps = user_prefs.get("preferred_apps", [])
+            
+            if key in click_weights:
+                personal_score = click_weights[key] * 2.0 * config["layers"]["personalization"]["weight"]
+                total_score += personal_score
+                score_details["personal_click"] = personal_score
+            
+            if key in preferred_apps:
+                pref_score = 0.8 * config["layers"]["personalization"]["weight"]
+                total_score += pref_score
+                score_details["personal_pref"] = pref_score
+                
+        except Exception as e:
+            print(f"[multi-layer] 个性化计算失败: {e}", flush=True)
+    
+    # 第四层：时段权重
+    if config["layers"]["time_based"]["enabled"]:
+        try:
+            user_prefs = _get_user_preferences()
+            time_based = user_prefs.get("time_based", {})
+            
+            if key in time_based:
+                time_score = time_based[key] * 1.5 * config["layers"]["time_based"]["weight"]
+                total_score += time_score
+                score_details["time_based"] = time_score
+                
+        except Exception as e:
+            print(f"[multi-layer] 时段权重计算失败: {e}", flush=True)
+    
+    return total_score, score_details
+
+
+def _chat_recommend_multi_layer(user_text: str, reply: str, limit: int = 3) -> list:
+    """完整的多层级推荐系统"""
+    scored = []
+    
+    for key, info in REC_CATALOG.items():
+        total_score, score_details = _calculate_multi_layer_score(user_text, reply, key, info)
+        
+        if total_score > 0:
+            # 记录评分详情用于调试和优化
+            scored.append((total_score, key, score_details))
+    
+    # 按总分排序
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    
+    # 应用最低置信度阈值
+    min_confidence = _RECOMMENDATION_CONFIG["min_confidence"]
+    max_recommendations = _RECOMMENDATION_CONFIG["max_recommendations"]
+    
+    filtered = [(s, k, d) for s, k, d in scored if s >= min_confidence]
+    
+    out, seen = [], set()
+    for score, key, details in filtered[:max_recommendations * 2]:  # 多取一些用于去重
+        item = _rec_item(key)
+        if not item or item["app"] in seen:
+            continue
+        # 添加评分详情到返回结果（可选，用于调试）
+        item["score"] = round(score, 2)
+        item["score_details"] = details
+        out.append(item)
+        seen.add(item["app"])
+        if len(out) >= max_recommendations:
+            break
+    
+    return out
+
+
+def _chat_recommend(user_text: str, reply: str, limit: int = 3) -> list:
+    """多层级推荐：关键词匹配 + 简化语义理解 + 用户行为个性化，返回去重的跳转推荐。"""
+    try:
+        return _chat_recommend_multi_layer(user_text, reply, limit)
+    except Exception as e:
+        print(f"[recommend] 多层级推荐失败，使用简化版本: {e}", flush=True)
+        # 回退到简化版本以防出错
+        scored = []
+        for key, info in REC_CATALOG.items():
+            keyword_score = 2 * _kw_hits(user_text, info) + _kw_hits(reply, info)
+            if keyword_score > 0:
+                scored.append((keyword_score, key))
+        scored.sort(key=lambda x: (-x[0], x[1]))
+        out, seen = [], set()
+        for score, key in scored:
+            item = _rec_item(key)
+            if not item or item["app"] in seen:
+                continue
+            out.append(item)
+            seen.add(item["app"])
+            if len(out) >= limit:
+                break
+        return out
+
+
+def _recbar_items() -> list:
+    """输入栏常驻推荐位：时段锚点 + 最近对话命中 App 提权。"""
+    now = datetime.now()
+    hour = now.hour
+    if hour < 5:
+        bucket = ["nradio", "dreamlab", "sos", "subconscious", "diary"]
+    elif hour < 9:
+        bucket = ["clock", "weather", "words", "coach", "radio"]
+    elif hour < 12:
+        bucket = ["work", "words", "coach", "ledger", "diary"]
+    elif hour < 14:
+        bucket = ["listen", "world", "dates", "photos"]
+    elif hour < 18:
+        bucket = ["solve", "reading", "watch", "video", "go"]
+    elif hour < 21:
+        bucket = ["listen", "radio", "diary", "together", "moments"]
+    else:
+        bucket = ["nradio", "letter", "dreamlab", "diary", "timecall"]
+    base = bucket + ["world", "go", "radio", "diary", "affinity", "quotes"]
+    # 最近对话命中 App 提到最前
+    try:
+        logs = _load_chat_log()
+        recent = " ".join(m.get("content", "") for m in logs[-8:] if m.get("content"))
+    except Exception:
+        recent = ""
+    boosted, seen = [], set()
+    if recent:
+        for key in base:
+            info = REC_CATALOG.get(key)
+            if info and _kw_hits(recent, info) > 0:
+                boosted.append(key)
+                seen.add(key)
+    for key in base:
+        if key not in seen:
+            boosted.append(key)
+    out, used = [], set()
+    for key in boosted:
+        item = _rec_item(key)
+        if not item or item["app"] in used:
+            continue
+        out.append(item)
+        used.add(item["app"])
+        if len(out) >= 6:
+            break
+    return out
+
+
+@app.get("/api/chat/recbar")
+async def chat_recbar():
+    """输入栏推荐位：返回当前建议打开的 App 场景/功能（含深层跳转）。"""
+    return {"recs": _recbar_items()}
+
+
 @app.post("/chat")
 async def chat(req: Request):
     try:
@@ -2569,8 +3252,24 @@ async def chat(req: Request):
                         break  # 取第一个有效改写
         except Exception as _hook_err:
             print(f"[warn] chat_reply 钩子异常: {_hook_err}", flush=True)
+        # 二次清洗：确保思考过程不会泄露到用户界面
+        reply = _strip_thinking(reply)
         detail = user_text[:30]
-        info = _add_affinity("chat", detail)
+        
+        # 情感事件检测：根据用户消息内容判断情感事件类型
+        emotion_event = None
+        
+        # 简单关键词匹配判断情感事件
+        if any(kw in user_text for kw in ["喜欢", "爱", "棒", "厉害", "聪明", "温柔", "好"]):
+            emotion_event = "user_praise"
+        elif any(kw in user_text for kw in ["关心", "担心", "照顾", "累", "辛苦", "休息"]):
+            emotion_event = "user_care"
+        elif any(kw in user_text for kw in ["不对", "错了", "反驳", "质疑", "为什么"]):
+            emotion_event = "user_challenging"
+        elif any(kw in user_text for kw in ["笨", "傻", "讨厌", "烦"]):
+            emotion_event = "conflict"
+            
+        info = _add_affinity("chat", detail, emotion_event)
 
         # 持久化本轮对话（用户消息 + 许墨回复）
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2592,7 +3291,7 @@ async def chat(req: Request):
             _background_tasks.add(bg_task)
             bg_task.add_done_callback(_on_bg_task_done)
 
-        return {"reply": reply, "affinity": info}
+        return {"reply": reply, "affinity": info, "recs": _chat_recommend(user_text, reply)}
     except RuntimeError as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     except Exception as e:
@@ -3564,6 +4263,18 @@ async def _life_tick():
     now_ts = _time.time()
     pool = _life_scene_pool(now.hour, now.weekday() >= 5)
     state = life.get("state")
+    
+    # 情感衰减机制：每小时检查并应用衰减
+    try:
+        affinity_data = _load_affinity()
+        emotion_state = affinity_data.get("emotion", _get_default_emotion_state())
+        updated_emotion = _apply_emotion_decay(emotion_state)
+        if updated_emotion != emotion_state:
+            affinity_data["emotion"] = updated_emotion
+            _save_affinity(affinity_data)
+            print(f"[emotion] 情感状态已更新衰减", flush=True)
+    except Exception as e:
+        print(f"[emotion] 情感衰减处理异常: {e}", flush=True)
 
     in_pool = bool(state) and any(
         p[0] == state.get("place") and p[1] == state.get("scene") for p in pool
@@ -3844,6 +4555,285 @@ async def life_feed(after: float = 0):
 # ---------------------------------------------------------------------------
 AFFINITY_FILE = RolePath("affinity.json")
 
+# ---------------------------------------------------------------------------
+# 多维度情感系统
+# ---------------------------------------------------------------------------
+
+# 情感维度定义（0-100分值）
+EMOTION_DIMENSIONS = {
+    "intimacy": "亲密度",      # 疏离 → 宠溺
+    "emotional_tone": "情绪基调",  # 冷淡 → 热情
+    "expression_style": "表达风格",  # 克制 → 外放
+    "dominance": "主导倾向",   # 顺从 → 强势
+}
+
+# 默认情感状态
+def _get_default_emotion_state() -> dict:
+    """返回情感维度的默认状态"""
+    now = datetime.now()
+    return {
+        "intimacy": 30,        # 默认中等偏低的亲密度
+        "emotional_tone": 50,  # 默认中性情绪基调
+        "expression_style": 40,  # 默认偏克制的表达
+        "dominance": 30,       # 默认偏顺从
+        "last_update": now.isoformat(),
+        "dialogue_modes": [],  # 已解锁的对话模式
+    }
+
+# 情感维度事件影响配置
+EMOTION_EVENTS = {
+    "user_praise": {
+        "intimacy": 5,
+        "emotional_tone": 3,
+        "expression_style": 2,
+        "dominance": -1
+    },
+    "user_neglect": {
+        "intimacy": -3,
+        "emotional_tone": -2,
+        "expression_style": -1,
+        "dominance": 0
+    },
+    "user_care": {
+        "intimacy": 4,
+        "emotional_tone": 2,
+        "expression_style": 1,
+        "dominance": -2
+    },
+    "user_challenging": {
+        "intimacy": -1,
+        "emotional_tone": 1,
+        "expression_style": 2,
+        "dominance": 3
+    },
+    "intimate_moment": {
+        "intimacy": 8,
+        "emotional_tone": 4,
+        "expression_style": 3,
+        "dominance": -2
+    },
+    "conflict": {
+        "intimacy": -5,
+        "emotional_tone": -3,
+        "expression_style": 4,
+        "dominance": 2
+    }
+}
+
+# 对话模式解锁阈值
+def _gentle_condition(emotion_state: dict) -> bool:
+    return emotion_state.get("intimacy", 30) >= 60 and emotion_state.get("emotional_tone", 50) >= 70
+
+def _scholarly_condition(emotion_state: dict) -> bool:
+    return emotion_state.get("emotional_tone", 50) <= 40 and emotion_state.get("expression_style", 40) <= 50
+
+def _possessive_condition(emotion_state: dict) -> bool:
+    return emotion_state.get("intimacy", 30) >= 80 and emotion_state.get("dominance", 30) >= 60
+
+def _playful_condition(emotion_state: dict) -> bool:
+    return emotion_state.get("intimacy", 30) >= 50 and emotion_state.get("expression_style", 40) >= 70
+
+DIALOGUE_MODES = {
+    "gentle": {
+        "name": "温柔模式",
+        "condition": _gentle_condition,
+        "description": "亲密度高且情绪热情时的温柔宠溺模式"
+    },
+    "scholarly": {
+        "name": "学术模式",
+        "condition": _scholarly_condition,
+        "description": "情绪冷静且表达克制时的学术探讨模式"
+    },
+    "possessive": {
+        "name": "占有模式",
+        "condition": _possessive_condition,
+        "description": "亲密度极高且主导性强时的占有欲模式"
+    },
+    "playful": {
+        "name": "调皮模式",
+        "condition": _playful_condition,
+        "description": "亲密度适中且表达外放时的调皮互动模式"
+    }
+}
+
+def _get_coupling_weights(emotion_state: dict) -> dict:
+    """根据当前情感状态计算动态耦合权重矩阵
+    
+    亲密度很低时，即使情绪基调设得很热情，也不该表现得宠溺
+    低亲密度+高热情应该是"客套的礼貌"而不是"甜"
+    """
+    intimacy = emotion_state.get("intimacy", 30)
+    emotional_tone = emotion_state.get("emotional_tone", 50)
+    
+    # 基础权重
+    weights = {
+        "intimacy": 0.4,
+        "emotional_tone": 0.3,
+        "expression_style": 0.2,
+        "dominance": 0.1
+    }
+    
+    # 动态调整：亲密度低时，压制热情和表达外放的影响
+    if intimacy < 30:
+        weights["emotional_tone"] *= 0.5  # 情绪热情度影响力减半
+        weights["expression_style"] *= 0.4  # 表达外放度影响力进一步降低
+        weights["intimacy"] = 0.6  # 亲密度权重提升，主导氛围
+        
+    # 亲密度高时，情绪和表达的影响力增强
+    elif intimacy > 70:
+        weights["emotional_tone"] *= 1.3
+        weights["expression_style"] *= 1.2
+        
+    # 情绪冷淡时，主导倾向影响力增强
+    if emotional_tone < 30:
+        weights["dominance"] *= 1.5
+        
+    # 归一化权重
+    total = sum(weights.values())
+    return {k: v / total for k, v in weights.items()}
+
+def _apply_emotion_coupling(emotion_state: dict, base_changes: dict) -> dict:
+    """应用动态耦合矩阵计算最终的情感变化"""
+    weights = _get_coupling_weights(emotion_state)
+    final_changes = {}
+    
+    for dimension in EMOTION_DIMENSIONS.keys():
+        if dimension in base_changes:
+            # 基础变化 + 耦合影响
+            base_change = base_changes[dimension]
+            coupling_effect = sum(
+                weights.get(d, 0) * base_changes.get(d, 0) 
+                for d in EMOTION_DIMENSIONS.keys() if d != dimension
+            )
+            final_changes[dimension] = base_change + coupling_effect * 0.3
+        else:
+            final_changes[dimension] = 0
+            
+    return final_changes
+
+def _update_emotion_state(emotion_state: dict, changes: dict) -> dict:
+    """更新情感状态，确保数值在0-100范围内"""
+    for dimension, change in changes.items():
+        if dimension in emotion_state:
+            new_value = emotion_state[dimension] + change
+            emotion_state[dimension] = max(0, min(100, new_value))
+    
+    emotion_state["last_update"] = datetime.now().isoformat()
+    
+    # 检查是否解锁新的对话模式
+    current_modes = emotion_state.get("dialogue_modes", [])
+    for mode_id, mode_config in DIALOGUE_MODES.items():
+        if mode_id not in current_modes and mode_config["condition"](emotion_state):
+            current_modes.append(mode_id)
+    emotion_state["dialogue_modes"] = current_modes
+    
+    return emotion_state
+
+def _apply_emotion_decay(emotion_state: dict) -> dict:
+    """应用每小时情感衰减机制"""
+    if not emotion_state.get("last_update"):
+        emotion_state["last_update"] = datetime.now().isoformat()
+        return emotion_state
+        
+    try:
+        last_update = datetime.fromisoformat(emotion_state["last_update"])
+        hours_passed = (datetime.now() - last_update).total_seconds() / 3600
+        
+        if hours_passed < 1:
+            return emotion_state  # 不足一小时不衰减
+            
+        # 衰减率：每小时衰减1-2分，亲密度衰减更慢
+        decay_rates = {
+            "intimacy": 0.5,          # 亲密度衰减最慢
+            "emotional_tone": 1.0,    # 情绪基准衰减
+            "expression_style": 1.5,  # 表达风格衰减较快
+            "dominance": 1.2          # 主导倾向衰减中等
+        }
+        
+        # 应用衰减，确保不低于最低阈值
+        min_values = {
+            "intimacy": 10,           # 亲密度最低保持10分
+            "emotional_tone": 20,     # 情绪最低保持20分
+            "expression_style": 15,   # 表达最低保持15分
+            "dominance": 10           # 主导最低保持10分
+        }
+        
+        for dimension, rate in decay_rates.items():
+            if dimension in emotion_state:
+                decay = rate * hours_passed
+                new_value = emotion_state[dimension] - decay
+                emotion_state[dimension] = max(min_values[dimension], new_value)
+                
+        emotion_state["last_update"] = datetime.now().isoformat()
+        
+    except (ValueError, KeyError) as e:
+        print(f"[emotion] 衰减计算异常: {e}", flush=True)
+        
+    return emotion_state
+
+def _get_emotional_instructions(emotion_state: dict) -> str:
+    """根据当前情感状态生成对话指令"""
+    intimacy = emotion_state.get("intimacy", 30)
+    emotional_tone = emotion_state.get("emotional_tone", 50)
+    expression_style = emotion_state.get("expression_style", 40)
+    dominance = emotion_state.get("dominance", 30)
+    
+    instructions = []
+    
+    # 基于亲密度调整称呼和语气
+    if intimacy < 20:
+        instructions.append("保持疏离的距离感，称呼为'你'，语气礼貌但冷淡")
+    elif intimacy < 40:
+        instructions.append("保持适度的距离感，称呼为'你'，语气温和但有边界")
+    elif intimacy < 60:
+        instructions.append("可以适当亲近，称呼为'你'，语气温暖自然")
+    elif intimacy < 80:
+        instructions.append("关系亲密，可以使用亲昵称呼如'小笨蛋'，语气宠溺温柔")
+    else:
+        instructions.append("极度亲密，称呼更加亲昵，语气充满宠溺和温柔")
+    
+    # 基于情绪基调调整活力和浓度
+    if emotional_tone < 30:
+        instructions.append("情绪表达克制冷静，回应简洁，避免过度热情")
+    elif emotional_tone < 50:
+        instructions.append("情绪表达温和适度，保持理性与感性的平衡")
+    elif emotional_tone < 70:
+        instructions.append("情绪表达较为热情，回应温暖有活力")
+    else:
+        instructions.append("情绪表达热烈，回应充满活力和情感浓度")
+    
+    # 基于表达风格调整emoji和语气词
+    if expression_style < 30:
+        instructions.append("表达简洁克制，避免使用emoji和过多的语气词")
+    elif expression_style < 50:
+        instructions.append("表达适度，可以少量使用emoji和语气词")
+    elif expression_style < 70:
+        instructions.append("表达较为外放，适当使用emoji和语气词增强表达")
+    else:
+        instructions.append("表达外放热情，可以使用emoji、语气词和感叹号")
+    
+    # 基于主导倾向调整互动方式
+    if dominance < 30:
+        instructions.append("顺着用户说话，多使用询问和征询的语气")
+    elif dominance < 50:
+        instructions.append("保持平衡，既顺应用户又能适当引导")
+    elif dominance < 70:
+        instructions.append("适度强势，可以表达自己的观点和偏好")
+    else:
+        instructions.append("主导性强，更主动引导对话，偶尔可以怼回去")
+    
+    # 检查当前激活的对话模式
+    active_modes = []
+    for mode_id, mode_config in DIALOGUE_MODES.items():
+        if mode_id in emotion_state.get("dialogue_modes", []):
+            if mode_config["condition"](emotion_state):
+                active_modes.append(mode_config["name"])
+    
+    if active_modes:
+        instructions.append(f"当前激活的对话模式: {', '.join(active_modes)}")
+    
+    return "\n".join(f"- {inst}" for inst in instructions)
+
 # (阈值, 等级码, 等级名, 称号)
 AFFINITY_LEVELS = [
     (0,    "Lv.1",  "初识", "数据样本"),
@@ -4056,10 +5046,12 @@ def _load_affinity() -> dict:
             data = json.loads(AFFINITY_FILE.read_text(encoding="utf-8"))
             if isinstance(data, dict) and "value" in data:
                 data.setdefault("history", [])
+                # 初始化情感维度数据（向后兼容）
+                data.setdefault("emotion", _get_default_emotion_state())
                 return data
         except (json.JSONDecodeError, OSError):
             pass
-    return {"value": 0, "history": []}
+    return {"value": 0, "history": [], "emotion": _get_default_emotion_state()}
 
 
 def _save_affinity(data: dict):
@@ -4097,8 +5089,23 @@ def _affinity_info(data: dict) -> dict:
     }
 
 
-def _add_affinity(action: str, detail: str = "") -> dict:
-    """内部调用：增加心动值并返回最新状态。"""
+def _adjust_emotion(event_type: str, emotion_state: dict) -> dict:
+    """根据事件类型调整情感状态（应用动态耦合矩阵）"""
+    if event_type not in EMOTION_EVENTS:
+        return emotion_state
+        
+    base_changes = EMOTION_EVENTS[event_type]
+    coupled_changes = _apply_emotion_coupling(emotion_state, base_changes)
+    return _update_emotion_state(emotion_state, coupled_changes)
+
+def _add_affinity(action: str, detail: str = "", emotion_event: str = None) -> dict:
+    """内部调用：增加心动值并返回最新状态。
+    
+    Args:
+        action: 亲密度行为类型
+        detail: 行为详情描述
+        emotion_event: 情感事件类型（如 user_praise, user_neglect 等）
+    """
     if action not in AFFINITY_DELTAS:
         return _affinity_info(_load_affinity())
     # 读-改-写全程持锁：并发请求同时加分时避免互相覆盖丢加分
@@ -4113,6 +5120,13 @@ def _add_affinity(action: str, detail: str = "") -> dict:
             "time": datetime.now().strftime("%m-%d %H:%M"),
         })
         data["history"] = data["history"][-100:]
+        
+        # 处理情感事件调整
+        if emotion_event:
+            emotion_state = data.get("emotion", _get_default_emotion_state())
+            updated_emotion = _adjust_emotion(emotion_event, emotion_state)
+            data["emotion"] = updated_emotion
+            
         _save_affinity(data)
         info = _affinity_info(data)
     info["delta"] = delta
@@ -4135,6 +5149,123 @@ async def add_affinity(req: Request):
     if action not in AFFINITY_DELTAS:
         return JSONResponse({"error": f"未知行为：{action}"}, status_code=400)
     return _add_affinity(action, detail)
+
+
+# ---------------------------------------------------------------------------
+# 情感系统 API 端点
+# ---------------------------------------------------------------------------
+
+@app.get("/api/emotion")
+async def get_emotion():
+    """获取当前情感状态"""
+    data = _load_affinity()
+    emotion_state = data.get("emotion", _get_default_emotion_state())
+    
+    # 计算耦合权重供调试使用
+    weights = _get_coupling_weights(emotion_state)
+    
+    # 检查当前激活的对话模式
+    active_modes = []
+    for mode_id, mode_config in DIALOGUE_MODES.items():
+        if mode_id in emotion_state.get("dialogue_modes", []):
+            if mode_config["condition"](emotion_state):
+                active_modes.append({
+                    "id": mode_id,
+                    "name": mode_config["name"],
+                    "description": mode_config["description"]
+                })
+    
+    return {
+        "dimensions": {
+            "intimacy": emotion_state.get("intimacy", 30),
+            "emotional_tone": emotion_state.get("emotional_tone", 50),
+            "expression_style": emotion_state.get("expression_style", 40),
+            "dominance": emotion_state.get("dominance", 30)
+        },
+        "last_update": emotion_state.get("last_update"),
+        "dialogue_modes": emotion_state.get("dialogue_modes", []),
+        "active_modes": active_modes,
+        "coupling_weights": weights,
+        "instructions": _get_emotional_instructions(emotion_state)
+    }
+
+
+@app.post("/api/emotion/adjust")
+async def adjust_emotion(req: Request):
+    """手动调整情感维度（主要用于调试）"""
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    
+    # 支持两种方式：
+    # 1. 通过事件类型调整：{"event": "user_praise"}
+    # 2. 直接调整维度：{"intimacy": 5, "emotional_tone": -3}
+    
+    if "event" in body:
+        event_type = body.get("event", "").strip()
+        if event_type not in EMOTION_EVENTS:
+            return JSONResponse({"error": f"未知情感事件：{event_type}"}, status_code=400)
+        
+        with file_lock(AFFINITY_FILE):
+            data = _load_affinity()
+            emotion_state = data.get("emotion", _get_default_emotion_state())
+            updated_emotion = _adjust_emotion(event_type, emotion_state)
+            data["emotion"] = updated_emotion
+            _save_affinity(data)
+            
+        return {"success": True, "emotion": updated_emotion}
+    
+    elif any(d in body for d in EMOTION_DIMENSIONS.keys()):
+        changes = {d: body[d] for d in EMOTION_DIMENSIONS.keys() if d in body}
+        
+        with file_lock(AFFINITY_FILE):
+            data = _load_affinity()
+            emotion_state = data.get("emotion", _get_default_emotion_state())
+            updated_emotion = _update_emotion_state(emotion_state, changes)
+            data["emotion"] = updated_emotion
+            _save_affinity(data)
+            
+        return {"success": True, "emotion": updated_emotion}
+    
+    else:
+        return JSONResponse({"error": "请提供 event 或维度调整参数"}, status_code=400)
+
+
+@app.get("/api/emotion/modes")
+async def get_emotion_modes():
+    """获取所有对话模式及其解锁状态"""
+    data = _load_affinity()
+    emotion_state = data.get("emotion", _get_default_emotion_state())
+    
+    modes_info = []
+    for mode_id, mode_config in DIALOGUE_MODES.items():
+        is_unlocked = mode_id in emotion_state.get("dialogue_modes", [])
+        is_active = is_unlocked and mode_config["condition"](emotion_state)
+        
+        modes_info.append({
+            "id": mode_id,
+            "name": mode_config["name"],
+            "description": mode_config["description"],
+            "unlocked": is_unlocked,
+            "active": is_active
+        })
+    
+    return {"modes": modes_info}
+
+
+@app.get("/api/emotion/events")
+async def get_emotion_events():
+    """获取所有可用的情感事件类型"""
+    events_info = []
+    for event_id, changes in EMOTION_EVENTS.items():
+        events_info.append({
+            "id": event_id,
+            "changes": changes,
+            "description": f"情感事件 {event_id}"
+        })
+    
+    return {"events": events_info}
 
 
 # ---------------------------------------------------------------------------
@@ -10839,6 +11970,11 @@ from go_game import router as go_router  # noqa: E402
 
 app.include_router(go_router)
 
+# 大富翁游戏路由（monopoly_game.py）：完整规则引擎 + 许墨台词 + 3D世界集成
+from monopoly_game import router as monopoly_router  # noqa: E402
+
+app.include_router(monopoly_router)
+
 # 八大口袋新功能路由（pocket_apps.py）：电台 / B3实验室 / 宠物 / 来信 / 许愿池 / 占卜 / 闪念 / 剪贴板
 from pocket_apps import router as pocket_router  # noqa: E402
 
@@ -10938,6 +12074,24 @@ app.include_router(extensions_router)
 from ai_extension_builder import router as ai_builder_router  # noqa: E402
 
 app.include_router(ai_builder_router, prefix="/api/extensions")
+
+# 应用市场功能路由（marketplace_apps.py）：
+# 应用分类浏览、搜索筛选、评价评分、AI推荐系统
+from marketplace_apps import router as marketplace_router  # noqa: E402
+
+app.include_router(marketplace_router)
+
+# 智能App构建器路由（smart_app_builder.py）：
+# AI对话式创建、可视化配置、模板系统、代码生成
+from smart_app_builder import router as smart_builder_router  # noqa: E402
+
+app.include_router(smart_builder_router)
+
+# AI视频功能路由（video_apps.py）：
+# 成长记录时光机 / 记忆回放剧场 / 梦境可视化播放器 / 时空旅行日记 / 共同时刻相册 / 虚拟约会场景生成
+from video_apps import router as video_router  # noqa: E402
+
+app.include_router(video_router)
 
 
 # ===========================================================================

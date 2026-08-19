@@ -60,6 +60,7 @@ function build() {
       '<button class="w-fab" data-panel="bag" title="背包 (B)">🎒</button>' +
       '<button class="w-fab" data-panel="skill" title="技能 (K)">🌟</button>' +
       '<button class="w-fab" data-panel="map" title="地图 (M)">🗺️</button>' +
+      '<button class="w-fab" data-panel="monopoly" title="大富翁 (G)">🎲</button>' +
       '<button class="w-fab" data-panel="pulse" title="城市脉搏 (P)">📡</button>' +
       '<button class="w-fab" data-panel="chron" title="世界编年史 (H)">📜</button>' +
       '<button class="w-fab" data-panel="build" title="世界工坊 (C)">🛠️</button>' +
@@ -107,7 +108,7 @@ function build() {
 }
 
 /* ================= 事件 ================= */
-var panelKeys = { j: 'quest', b: 'bag', k: 'skill', m: 'map', c: 'build', p: 'pulse', h: 'chron' };
+var panelKeys = { j: 'quest', b: 'bag', k: 'skill', m: 'map', g: 'monopoly', c: 'build', p: 'pulse', h: 'chron' };
 function bindEvents() {
   /* 引擎回调 */
   E.on('toast', showToast);
@@ -511,6 +512,7 @@ function togglePanel(name) {
   else if (name === 'pulse') html = panelPulse();
   else if (name === 'chron') html = panelChron();
   else if (name === 'transport') html = panelTransport();
+  else if (name === 'monopoly') html = panelMonopoly();
   openModal(html, 'panel-' + name);
   wirePanel(name);
   if (name === 'map') drawBigMap();
@@ -1720,6 +1722,12 @@ function onInteriorHotspot(p, cfg, hotId, hotType, hotLabel) {
     try { E.logWorld('interior_shop', '在「' + (p.name || cfg.name) + '」' + hotLabel + '购物'); } catch (e) {}
     try { openShop(); } catch (e) { interiorToast('🛒 商店功能暂不可用'); }
   } else if (hotType === 'work') {
+    /* 厨房特殊处理 → 一起做饭功能 */
+    if (hotId === 'kitchen') {
+      try { E.logWorld('interior_kitchen', '在「' + (p.name || cfg.name) + '」厨房准备一起做饭'); } catch (e) {}
+      try { openCookingInterface(); } catch (e) { interiorToast('🍳 做饭功能暂不可用'); }
+      return;
+    }
     var expGain = 8 + Math.floor(Math.random() * 8);
     if (E.gainExp) { try { E.gainExp(expGain); } catch (e) {} }
     interiorToast('📚 在「' + hotLabel + '」用心一阵，经验 +' + expGain);
@@ -1758,6 +1766,166 @@ function interiorToast(msg) {
   el.textContent = msg;
   sc.appendChild(el);
   setTimeout(function () { if (el.parentNode) el.remove(); }, 3200);
+}
+
+/* ================= 厨房一起做饭界面 ================= */
+var cookingSession = null;
+var cookingStep = 0;
+
+function openCookingInterface() {
+  closeModal(); // 关闭当前室内界面
+  openModal(
+    '<div class="w-panel w-cooking-panel">' +
+      '<div class="w-panel-title">🍳 厨房一起做饭<div class="w-panel-x" data-close>✕</div></div>' +
+      '<div class="w-cooking-content" id="wCookingContent">' +
+        '<div class="w-cooking-start">' +
+          '<div class="w-form-row"><label>想做什么菜？</label><input class="w-input" id="wcDishName" maxlength="20" placeholder="例如：番茄炒蛋"/></div>' +
+          '<button class="w-btn-main" id="wcStartBtn">开始一起做饭</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>', 'cooking-panel');
+  
+  var box = $('wModalBox');
+  box.querySelector('[data-close]').addEventListener('click', closeModal);
+  box.querySelector('#wcStartBtn').addEventListener('click', startCooking);
+}
+
+function startCooking() {
+  var dishName = $('wcDishName').value.trim();
+  if (!dishName) {
+    interiorToast('请输入菜名');
+    return;
+  }
+  
+  interiorToast('正在和许墨规划做饭步骤...');
+  
+  fetch('/api/kitchen/cooking/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dish_name: dishName })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) {
+      interiorToast(d.error);
+      return;
+    }
+    cookingSession = d.session;
+    cookingStep = 0;
+    renderCookingStep();
+  }).catch(function() {
+    interiorToast('网络异常，请稍后再试');
+  });
+}
+
+function renderCookingStep() {
+  if (!cookingSession) return;
+  
+  var steps = cookingSession.steps || [];
+  var currentStep = cookingSession.current_step || 0;
+  
+  if (currentStep >= steps.length) {
+    renderCookingComplete();
+    return;
+  }
+  
+  var step = steps[currentStep];
+  var progress = Math.round((currentStep / steps.length) * 100);
+  
+  var html = '<div class="w-cooking-step">' +
+    '<div class="w-cooking-progress"><div class="w-cooking-bar" style="width:' + progress + '%"></div></div>' +
+    '<div class="w-cooking-info">' +
+      '<div class="w-cooking-dish">🍳 ' + esc(cookingSession.dish_name) + '</div>' +
+      '<div class="w-cooking-step-num">步骤 ' + (currentStep + 1) + '/' + steps.length + '</div>' +
+    '</div>' +
+    '<div class="w-cooking-action">' +
+      '<div class="w-cooking-actor">' + (step.actor === 'user' ? '👤 你' : (step.actor === 'xumo' ? '💜 许墨' : '🤝 一起')) + '</div>' +
+      '<div class="w-cooking-task">' + esc(step.action) + '</div>' +
+    '</div>' +
+    '<div class="w-cooking-dialogue">💬 ' + esc(step.dialogue) + '</div>' +
+    '<button class="w-btn-main" id="wcNextBtn">完成这一步</button>' +
+  '</div>';
+  
+  $('wCookingContent').innerHTML = html;
+  $('wcNextBtn').addEventListener('click', completeCookingStep);
+}
+
+function completeCookingStep() {
+  if (!cookingSession) return;
+  
+  interiorToast('正在完成步骤...');
+  
+  fetch('/api/kitchen/cooking/step', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: cookingSession.id })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) {
+      interiorToast(d.error);
+      return;
+    }
+    
+    cookingSession = d.session;
+    
+    if (d.feedback) {
+      interiorToast('✨ ' + d.feedback.feedback);
+      if (d.feedback.affinity_delta > 0) {
+        interiorToast('💗 心动值 +' + d.feedback.affinity_delta);
+      }
+    }
+    
+    if (d.is_complete) {
+      renderCookingComplete();
+    } else {
+      renderCookingStep();
+    }
+  }).catch(function() {
+    interiorToast('网络异常，请稍后再试');
+  });
+}
+
+function renderCookingComplete() {
+  if (!cookingSession) return;
+  
+  var html = '<div class="w-cooking-complete">' +
+    '<div class="w-cooking-success">🎉 做饭完成！</div>' +
+    '<div class="w-cooking-dish">🍳 ' + esc(cookingSession.dish_name) + '</div>' +
+    '<div class="w-cooking-score">总得分：' + (cookingSession.score || 0) + '</div>' +
+    '<div class="w-cooking-reward">' + esc(cookingSession.reward || '心动值奖励') + '</div>' +
+    '<button class="w-btn-main" id="wcClaimBtn">领取奖励</button>' +
+  '</div>';
+  
+  $('wCookingContent').innerHTML = html;
+  $('wcClaimBtn').addEventListener('click', claimCookingReward);
+}
+
+function claimCookingReward() {
+  if (!cookingSession) return;
+  
+  interiorToast('正在领取奖励...');
+  
+  fetch('/api/kitchen/cooking/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: cookingSession.id })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) {
+      interiorToast(d.error);
+      return;
+    }
+    
+    if (d.completion) {
+      interiorToast('🎉 ' + d.completion.completion);
+      if (d.completion.final_affinity > 0) {
+        interiorToast('💗 心动值 +' + d.completion.final_affinity);
+      }
+      if (d.completion.memory) {
+        interiorToast('📝 获得记忆：' + d.completion.memory);
+      }
+    }
+    
+    closeModal();
+  }).catch(function() {
+    interiorToast('网络异常，请稍后再试');
+  });
 }
 
 function onBigMapClick(e) {
@@ -2736,6 +2904,7 @@ function wirePanel(name) {
     x.addEventListener('click', function () { closeModal(); });
   });
   if (name === 'set') wireSet();
+  if (name === 'monopoly') wireMonopoly();
   if (name === 'map') {
     var add = $('wPlaceAdd');
     if (add) add.addEventListener('click', function () { openPlaceForm(); });
@@ -2761,6 +2930,482 @@ function wirePanel(name) {
     var bigCv = $('wBigMap');
     if (bigCv) bigCv.addEventListener('click', onBigMapClick);
   }
+}
+
+/* ================= 大富翁游戏面板 ================= */
+var monopolyState = null;
+var monopolyBoard = null;
+
+function panelMonopoly() {
+  var D = window.WORLD_DATA;
+  var config = D.MONOPOLY_CONFIG;
+  
+  // 加载游戏状态
+  fetch('/api/monopoly/state')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      monopolyState = d;
+      if (!d.game_exists) {
+        renderMonopolyStart();
+      } else {
+        renderMonopolyGame(d);
+      }
+    })
+    .catch(function() {
+      showToast('加载游戏状态失败');
+    });
+  
+  return '<div class="w-monopoly-wrap" id="wMonopolyWrap">加载中...</div>';
+}
+
+function renderMonopolyStart() {
+  var D = window.WORLD_DATA;
+  var config = D.MONOPOLY_CONFIG;
+  var npcs = config.available_npcs;
+  
+  var npcOptions = npcs.map(function(npc) {
+    return '<option value="' + npc.id + '">' + npc.emoji + ' ' + npc.name + '</option>';
+  }).join('');
+  
+  var html = 
+    '<div class="w-monopoly-start">' +
+      '<div class="w-monopoly-title">🎲 大富翁 · 与许墨和NPC玩大富翁</div>' +
+      '<div class="w-monopoly-desc">在3D恋语市中体验经典大富翁游戏，购买地产、收租、抽卡，感受许墨的独特魅力。</div>' +
+      
+      '<div class="w-monopoly-players">' +
+        '<div class="w-form-row"><label>玩家名称</label><input type="text" id="wMonPlayerName" value="我" placeholder="输入你的名字"></div>' +
+        '<div class="w-form-row"><label>选择对手</label>' +
+          '<select id="wMonOpponent1">' + npcOptions + '</select>' +
+        '</div>' +
+        '<div class="w-form-row"><label>第二对手（可选）</label>' +
+          '<select id="wMonOpponent2"><option value="">无</option>' + npcOptions + '</select>' +
+        '</div>' +
+      '</div>' +
+      
+      '<div class="w-monopoly-rules">' +
+        '<div class="w-monopoly-rule-item">💰 初始资金：¥' + config.rules.initial_money + '</div>' +
+        '<div class="w-monopoly-rule-item">🏁 过起点奖励：¥' + config.rules.pass_start_bonus + '</div>' +
+        '<div class="w-monopoly-rule-item">🏠 地产购买：基于城市POI价格</div>' +
+        '<div class="w-monopoly-rule-item">🎲 机会卡：随机奖励或惩罚</div>' +
+        '<div class="w-monopoly-rule-item">🔒 坐牢：暂停2回合</div>' +
+      '</div>' +
+      
+      '<button class="w-btn-main" id="wMonStart">开始游戏</button>' +
+    '</div>';
+  
+  var wrap = $('wMonopolyWrap');
+  if (wrap) wrap.innerHTML = html;
+  
+  var startBtn = $('wMonStart');
+  if (startBtn) {
+    startBtn.addEventListener('click', startMonopolyGame);
+  }
+}
+
+function renderMonopolyGame(state) {
+  var html = 
+    '<div class="w-monopoly-game">' +
+      '<div class="w-monopoly-header">' +
+        '<div class="w-monopoly-title">🎲 大富翁游戏</div>' +
+        '<div class="w-monopoly-turn">第 ' + state.turn_count + ' 回合</div>' +
+      '</div>' +
+      
+      '<div class="w-monopoly-board" id="wMonBoard">游戏棋盘加载中...</div>' +
+      
+      '<div class="w-monopoly-players-info" id="wMonPlayersInfo">玩家信息加载中...</div>' +
+      
+      '<div class="w-monopoly-controls" id="wMonControls">' +
+        '<button class="w-btn-main" id="wMonRoll">🎲 掷骰子</button>' +
+        '<button class="w-btn-secondary" id="wMonBuy">🏠 购买地产</button>' +
+        '<button class="w-btn-secondary" id="wMonBuild">🔨 建房</button>' +
+        '<button class="w-btn-secondary" id="wMonEnd">⏭️ 结束回合</button>' +
+      '</div>' +
+      
+      '<div class="w-monopoly-dialogue" id="wMonDialogue"></div>' +
+      '<div class="w-monopoly-log" id="wMonLog"></div>' +
+    '</div>';
+  
+  var wrap = $('wMonopolyWrap');
+  if (wrap) wrap.innerHTML = html;
+  
+  renderMonopolyBoard(state);
+  renderMonopolyPlayers(state);
+  renderMonopolyLog(state.game_log);
+  
+  wireMonopolyControls(state);
+}
+
+function renderMonopolyBoard(state) {
+  var board = state.board;
+  var boardHtml = '<div class="w-monopoly-grid">';
+  
+  board.forEach(function(space, index) {
+    var isCurrent = false;
+    state.players.forEach(function(player) {
+      if (player.position === index && !player.bankrupt) {
+        isCurrent = true;
+      }
+    });
+    
+    var ownerInfo = '';
+    if (space.owner) {
+      var owner = state.players.find(function(p) { return p.id === space.owner; });
+      if (owner) {
+        ownerInfo = '<div class="w-monopoly-owner" style="background:' + owner.color + '">' + owner.name.charAt(0) + '</div>';
+      }
+    }
+    
+    var playerTokens = '';
+    state.players.forEach(function(player) {
+      if (player.position === index && !player.bankrupt) {
+        playerTokens += '<div class="w-monopoly-token" style="background:' + player.color + '">' + player.name.charAt(0) + '</div>';
+      }
+    });
+    
+    boardHtml += 
+      '<div class="w-monopoly-space' + (isCurrent ? ' current' : '') + '" data-index="' + index + '">' +
+        '<div class="w-monopoly-space-icon">' + (space.icon || '📍') + '</div>' +
+        '<div class="w-monopoly-space-name">' + space.name + '</div>' +
+        ownerInfo +
+        playerTokens +
+        (space.houses > 0 ? '<div class="w-monopoly-houses">🏠' + space.houses + '</div>' : '') +
+      '</div>';
+  });
+  
+  boardHtml += '</div>';
+  
+  var boardEl = $('wMonBoard');
+  if (boardEl) boardEl.innerHTML = boardHtml;
+}
+
+function renderMonopolyPlayers(state) {
+  var playersHtml = '<div class="w-monopoly-players-list">';
+  
+  state.players.forEach(function(player, index) {
+    var isCurrent = index === state.current_player;
+    playersHtml += 
+      '<div class="w-monopoly-player-card' + (isCurrent ? ' current' : '') + (player.bankrupt ? ' bankrupt' : '') + '" style="border-left: 4px solid ' + player.color + '">' +
+        '<div class="w-monopoly-player-name">' + player.name + (isCurrent ? ' 🎯' : '') + (player.bankrupt ? ' 💔' : '') + '</div>' +
+        '<div class="w-monopoly-player-money">💰 ¥' + player.money + '</div>' +
+        '<div class="w-monopoly-player-props">🏠 ' + player.properties.length + ' 处地产</div>' +
+        (player.status === 'jail' ? '<div class="w-monopoly-player-jail">🔒 坐牢 ' + player.jail_rounds + ' 回合</div>' : '') +
+      '</div>';
+  });
+  
+  playersHtml += '</div>';
+  
+  var playersEl = $('wMonPlayersInfo');
+  if (playersEl) playersEl.innerHTML = playersHtml;
+}
+
+function renderMonopolyLog(log) {
+  if (!log || log.length === 0) return;
+  
+  var logHtml = '<div class="w-monopoly-log-list">';
+  log.slice(-10).reverse().forEach(function(entry) {
+    logHtml += '<div class="w-monopoly-log-item">[' + entry.timestamp + '] ' + entry.description + '</div>';
+  });
+  logHtml += '</div>';
+  
+  var logEl = $('wMonLog');
+  if (logEl) logEl.innerHTML = logHtml;
+}
+
+function wireMonopolyControls(state) {
+  var rollBtn = $('wMonRoll');
+  var buyBtn = $('wMonBuy');
+  var buildBtn = $('wMonBuild');
+  var endBtn = $('wMonEnd');
+  
+  if (rollBtn) {
+    rollBtn.addEventListener('click', function() {
+      var currentPlayer = state.players[state.current_player];
+      if (currentPlayer.type === 'ai') {
+        showToast('这是AI玩家的回合');
+        return;
+      }
+      
+      fetch('/api/monopoly/roll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: currentPlayer.id })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          if (d.dialogue) {
+            showMonopolyDialogue(d.dialogue);
+          }
+          refreshMonopolyState();
+        } else {
+          showToast(d.error || '掷骰子失败');
+        }
+      })
+      .catch(function() { showToast('网络错误'); });
+    });
+  }
+  
+  if (buyBtn) {
+    buyBtn.addEventListener('click', function() {
+      var currentPlayer = state.players[state.current_player];
+      var currentSpace = state.board[currentPlayer.position];
+      
+      if (!currentSpace || currentSpace.type !== 'normal' || currentSpace.owner) {
+        showToast('当前位置无法购买');
+        return;
+      }
+      
+      fetch('/api/monopoly/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          player_id: currentPlayer.id,
+          property_id: currentSpace.id
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          if (d.dialogue) {
+            showMonopolyDialogue(d.dialogue);
+          }
+          showToast('购买成功！');
+          refreshMonopolyState();
+        } else {
+          showToast(d.error || '购买失败');
+        }
+      })
+      .catch(function() { showToast('网络错误'); });
+    });
+  }
+  
+  if (buildBtn) {
+    buildBtn.addEventListener('click', function() {
+      var currentPlayer = state.players[state.current_player];
+      if (currentPlayer.properties.length === 0) {
+        showToast('你没有地产可以建房');
+        return;
+      }
+      
+      // 简化：选择第一个地产建房
+      var propertyId = currentPlayer.properties[0];
+      
+      fetch('/api/monopoly/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          player_id: currentPlayer.id,
+          property_id: propertyId
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          showToast('建房成功！');
+          refreshMonopolyState();
+        } else {
+          showToast(d.error || '建房失败');
+        }
+      })
+      .catch(function() { showToast('网络错误'); });
+    });
+  }
+  
+  if (endBtn) {
+    endBtn.addEventListener('click', function() {
+      var currentPlayer = state.players[state.current_player];
+      
+      fetch('/api/monopoly/end_turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: currentPlayer.id })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          if (d.dialogue) {
+            showMonopolyDialogue(d.dialogue);
+          }
+          if (d.end_result.game_over) {
+            showMonopolyGameOver(d.end_result.winner);
+          } else {
+            refreshMonopolyState();
+            // 如果下一位是AI，自动执行
+            if (d.end_result.next_player.type === 'ai') {
+              setTimeout(executeAiTurn, 1000);
+            }
+          }
+        } else {
+          showToast(d.error || '结束回合失败');
+        }
+      })
+      .catch(function() { showToast('网络错误'); });
+    });
+  }
+}
+
+function executeAiTurn() {
+  fetch('/api/monopoly/state')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.game_exists || d.game_state !== 'playing') return;
+      
+      var currentPlayer = d.players[d.current_player];
+      if (currentPlayer.type !== 'ai') return;
+      
+      // AI掷骰子
+      fetch('/api/monopoly/roll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: currentPlayer.id })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(rollResult) {
+        if (rollResult.success) {
+          if (rollResult.dialogue) {
+            showMonopolyDialogue(rollResult.dialogue);
+          }
+          
+          // AI决策：如果可以购买就购买
+          if (rollResult.landing_result && rollResult.landing_result.events) {
+            var buyEvent = rollResult.landing_result.events.find(function(e) { return e.type === 'can_buy'; });
+            if (buyEvent && currentPlayer.money >= buyEvent.price) {
+              return fetch('/api/monopoly/buy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  player_id: currentPlayer.id,
+                  property_id: buyEvent.property.id
+                })
+              });
+            }
+          }
+          return Promise.resolve({ ok: true, json: function() { return {}; } });
+        }
+        return Promise.resolve({ ok: false });
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(buyResult) {
+        // AI结束回合
+        return fetch('/api/monopoly/end_turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: currentPlayer.id })
+        });
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(endResult) {
+        if (endResult.success) {
+          if (endResult.dialogue) {
+            showMonopolyDialogue(endResult.dialogue);
+          }
+          if (endResult.end_result.game_over) {
+            showMonopolyGameOver(endResult.end_result.winner);
+          } else {
+            refreshMonopolyState();
+            // 继续下一位AI
+            if (endResult.end_result.next_player.type === 'ai') {
+              setTimeout(executeAiTurn, 1000);
+            }
+          }
+        }
+      })
+      .catch(function() { console.error('AI turn error'); });
+    })
+    .catch(function() { console.error('AI turn state error'); });
+}
+
+function startMonopolyGame() {
+  var playerName = $('wMonPlayerName').value || '我';
+  var opponent1 = $('wMonOpponent1').value;
+  var opponent2 = $('wMonOpponent2').value;
+  
+  if (!opponent1) {
+    showToast('请选择至少一个对手');
+    return;
+  }
+  
+  var players = [
+    { id: 'player', name: playerName, type: 'human' },
+    { id: opponent1, name: getNameById(opponent1), type: 'ai', character_id: opponent1 }
+  ];
+  
+  if (opponent2) {
+    players.push({ id: opponent2, name: getNameById(opponent2), type: 'ai', character_id: opponent2 });
+  }
+  
+  fetch('/api/monopoly/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ players: players })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      showToast('游戏开始！');
+      renderMonopolyGame(d.game_state);
+    } else {
+      showToast(d.error || '游戏启动失败');
+    }
+  })
+  .catch(function() { showToast('网络错误'); });
+}
+
+function getNameById(id) {
+  var D = window.WORLD_DATA;
+  var config = D.MONOPOLY_CONFIG;
+  var npc = config.available_npcs.find(function(n) { return n.id === id; });
+  return npc ? npc.name : id;
+}
+
+function refreshMonopolyState() {
+  fetch('/api/monopoly/state')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.game_exists) {
+        renderMonopolyGame(d);
+      }
+    })
+    .catch(function() { showToast('刷新状态失败'); });
+}
+
+function showMonopolyDialogue(dialogue) {
+  var dialogueEl = $('wMonDialogue');
+  if (dialogueEl) {
+    dialogueEl.innerHTML = '<div class="w-monopoly-dialogue-text">' + dialogue + '</div>';
+    dialogueEl.style.display = 'block';
+    setTimeout(function() {
+      dialogueEl.style.display = 'none';
+    }, 4000);
+  }
+}
+
+function showMonopolyGameOver(winner) {
+  var winnerName = winner ? winner.player.name : '未知';
+  var html = 
+    '<div class="w-monopoly-gameover">' +
+      '<div class="w-monopoly-gameover-title">🎉 游戏结束</div>' +
+      '<div class="w-monopoly-gameover-winner">获胜者：' + winnerName + '</div>' +
+      '<div class="w-monopoly-gameover-assets">总资产：¥' + (winner ? winner.total_assets : 0) + '</div>' +
+      '<button class="w-btn-main" id="wMonRestart">再来一局</button>' +
+      '<button class="w-btn-secondary" data-close>返回</button>' +
+    '</div>';
+  
+  var wrap = $('wMonopolyWrap');
+  if (wrap) wrap.innerHTML = html;
+  
+  var restartBtn = $('wMonRestart');
+  if (restartBtn) {
+    restartBtn.addEventListener('click', function() {
+      fetch('/api/monopoly', { method: 'DELETE' })
+        .then(function() { renderMonopolyStart(); })
+        .catch(function() { showToast('重置失败'); });
+    });
+  }
+}
+
+function wireMonopoly() {
+  // 大富翁面板的事件绑定在渲染函数中处理
 }
 
 /* ================= 商店 ================= */

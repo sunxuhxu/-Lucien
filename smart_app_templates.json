@@ -1,0 +1,417 @@
+{
+  "app_types": {
+    "chat": {
+      "name": "聊天对话类",
+      "description": "自定义对话场景和角色扮演",
+      "icon": "💬",
+      "color": "#8b5cf6",
+      "questions": [
+        "你希望创建什么样的对话场景？请描述一下背景和设定",
+        "主要角色有哪些？他们有什么性格特点？",
+        "对话的主要话题或目的是什么？",
+        "需要什么特殊的对话功能吗？比如情感分析、上下文记忆等"
+      ],
+      "template_fields": ["scenario", "characters", "topics", "features"],
+      "default_config": {
+        "scenario": "咖啡店偶遇",
+        "characters": [
+          {
+            "name": "许墨",
+            "personality": "温柔、博学、神秘",
+            "avatar": "👨‍🔬"
+          }
+        ],
+        "topics": ["日常生活", "学术讨论", "情感交流"],
+        "features": ["情感分析", "上下文记忆", "个性化回应"]
+      }
+    },
+    "tool": {
+      "name": "工具实用类",
+      "description": "待办事项、笔记、计算器等实用工具",
+      "icon": "🔧",
+      "color": "#10b981",
+      "questions": [
+        "你希望创建什么类型的工具？",
+        "这个工具需要什么核心功能？",
+        "用户如何与这个工具交互？",
+        "需要数据保存和导入导出功能吗？"
+      ],
+      "template_fields": ["tool_type", "core_features", "interaction", "data_management"],
+      "default_config": {
+        "tool_type": "待办事项",
+        "core_features": ["添加任务", "完成任务", "删除任务", "优先级设置"],
+        "interaction": "点击操作",
+        "data_management": "本地保存"
+      }
+    },
+    "game": {
+      "name": "游戏娱乐类",
+      "description": "小游戏、问答、互动娱乐等",
+      "icon": "🎮",
+      "color": "#f59e0b",
+      "questions": [
+        "你想创建什么类型的游戏？",
+        "游戏的核心玩法是什么？",
+        "如何计分或判定胜负？",
+        "需要多人互动还是单人体验？"
+      ],
+      "template_fields": ["game_type", "gameplay", "scoring", "multiplayer"],
+      "default_config": {
+        "game_type": "问答游戏",
+        "gameplay": "回答问题获得积分",
+        "scoring": "正确答案+10分，错误答案不扣分",
+        "multiplayer": false
+      }
+    },
+    "data": {
+      "name": "数据分析类",
+      "description": "数据统计、图表展示、报告生成等",
+      "icon": "📊",
+      "color": "#3b82f6",
+      "questions": [
+        "你希望分析什么类型的数据？",
+        "需要什么样的数据可视化？",
+        "报告应该包含哪些内容？",
+        "数据从哪里来？如何更新？"
+      ],
+      "template_fields": ["data_type", "visualization", "report_content", "data_source"],
+      "default_config": {
+        "data_type": "通用数据",
+        "visualization": ["柱状图", "折线图", "饼图"],
+        "report_content": ["数据概览", "趋势分析", "对比分析"],
+        "data_source": "手动输入"
+      }
+    }
+  },
+  "templates": {
+    "chat": [
+      {
+        "id": "template_chat_roleplay",
+        "name": "角色扮演对话",
+        "description": "创建一个自定义角色扮演场景",
+        "icon": "🎭",
+        "difficulty": "简单",
+        "estimated_time": "5分钟",
+        "config": {
+          "scenario": "咖啡店偶遇",
+          "characters": [
+            {
+              "name": "许墨",
+              "personality": "温柔、博学、神秘",
+              "avatar": "👨‍🔬"
+            }
+          ],
+          "topics": ["日常生活", "学术讨论", "情感交流"],
+          "features": ["情感分析", "上下文记忆"]
+        },
+        "preview": {
+          "title": "咖啡店里的相遇",
+          "description": "在午后的咖啡店里，你偶遇了正在看书的许墨..."
+        }
+      },
+      {
+        "id": "template_chat_story",
+        "name": "互动故事",
+        "description": "创建分支剧情的互动故事",
+        "icon": "📖",
+        "difficulty": "中等",
+        "estimated_time": "10分钟",
+        "config": {
+          "scenario": "校园恋爱故事",
+          "characters": [
+            {
+              "name": "主角",
+              "personality": "活泼、善良",
+              "avatar": "👩"
+            }
+          ],
+          "topics": ["校园生活", "友情", "成长"],
+          "features": ["分支选择", "剧情存档", "多结局"]
+        },
+        "preview": {
+          "title": "校园里的青春故事",
+          "description": "在恋语大学的校园里，一段关于青春和成长的故事..."
+        }
+      },
+      {
+        "id": "template_chat_counseling",
+        "name": "心理咨询对话",
+        "description": "模拟心理咨询对话场景",
+        "icon": "🧠",
+        "difficulty": "困难",
+        "estimated_time": "15分钟",
+        "config": {
+          "scenario": "心理咨询室",
+          "characters": [
+            {
+              "name": "咨询师",
+              "personality": "专业、耐心、温暖",
+              "avatar": "👨‍⚕️"
+            }
+          ],
+          "topics": ["情绪管理", "压力缓解", "自我认知"],
+          "features": ["情感分析", "专业建议", "跟进记录"]
+        },
+        "preview": {
+          "title": "温暖的心理咨询",
+          "description": "在专业的心理咨询室里，获得情绪上的支持和指导..."
+        }
+      }
+    ],
+    "tool": [
+      {
+        "id": "template_tool_todo",
+        "name": "待办事项",
+        "description": "简单的待办事项管理工具",
+        "icon": "✅",
+        "difficulty": "简单",
+        "estimated_time": "3分钟",
+        "config": {
+          "tool_type": "待办事项",
+          "core_features": ["添加任务", "完成任务", "删除任务", "优先级设置"],
+          "interaction": "点击操作",
+          "data_management": "本地保存"
+        },
+        "preview": {
+          "title": "每日任务清单",
+          "description": "管理你的日常任务，提高工作效率..."
+        }
+      },
+      {
+        "id": "template_tool_notes",
+        "name": "笔记工具",
+        "description": "简单易用的笔记记录工具",
+        "icon": "📝",
+        "difficulty": "简单",
+        "estimated_time": "5分钟",
+        "config": {
+          "tool_type": "笔记",
+          "core_features": ["创建笔记", "编辑笔记", "搜索笔记", "分类管理"],
+          "interaction": "文本编辑",
+          "data_management": "本地保存 + 导出"
+        },
+        "preview": {
+          "title": "个人笔记助手",
+          "description": "记录你的想法和灵感，随时查看和编辑..."
+        }
+      },
+      {
+        "id": "template_tool_calendar",
+        "name": "日程管理",
+        "description": "个人日程和提醒工具",
+        "icon": "📅",
+        "difficulty": "中等",
+        "estimated_time": "8分钟",
+        "config": {
+          "tool_type": "日程管理",
+          "core_features": ["添加日程", "设置提醒", "查看日历", "重复事件"],
+          "interaction": "日历视图",
+          "data_management": "本地保存 + 云同步"
+        },
+        "preview": {
+          "title": "智能日程助手",
+          "description": "管理你的时间安排，不错过重要事项..."
+        }
+      },
+      {
+        "id": "template_tool_expense",
+        "name": "记账工具",
+        "description": "个人收支记录和统计",
+        "icon": "💰",
+        "difficulty": "中等",
+        "estimated_time": "10分钟",
+        "config": {
+          "tool_type": "记账",
+          "core_features": ["记录收支", "分类统计", "预算管理", "图表展示"],
+          "interaction": "表单输入",
+          "data_management": "本地保存 + 导出报表"
+        },
+        "preview": {
+          "title": "个人财务管家",
+          "description": "记录日常收支，掌握财务状况..."
+        }
+      }
+    ],
+    "game": [
+      {
+        "id": "template_game_quiz",
+        "name": "问答游戏",
+        "description": "创建知识问答游戏",
+        "icon": "❓",
+        "difficulty": "简单",
+        "estimated_time": "5分钟",
+        "config": {
+          "game_type": "问答",
+          "gameplay": "回答问题获得积分",
+          "scoring": "正确答案+10分，错误答案不扣分",
+          "multiplayer": false
+        },
+        "preview": {
+          "title": "知识挑战赛",
+          "description": "测试你的知识储备，挑战高分记录..."
+        }
+      },
+      {
+        "id": "template_game_guess",
+        "name": "猜谜游戏",
+        "description": "文字猜谜游戏",
+        "icon": "🧩",
+        "difficulty": "简单",
+        "estimated_time": "5分钟",
+        "config": {
+          "game_type": "猜谜",
+          "gameplay": "根据提示猜测答案",
+          "scoring": "越快猜对得分越高",
+          "multiplayer": false
+        },
+        "preview": {
+          "title": "趣味猜谜",
+          "description": "根据提示猜出答案，锻炼思维能力..."
+        }
+      },
+      {
+        "id": "template_game_memory",
+        "name": "记忆翻牌",
+        "description": "经典记忆翻牌游戏",
+        "icon": "🃏",
+        "difficulty": "中等",
+        "estimated_time": "8分钟",
+        "config": {
+          "game_type": "记忆游戏",
+          "gameplay": "翻开卡片寻找配对",
+          "scoring": "最少步数完成获胜",
+          "multiplayer": false
+        },
+        "preview": {
+          "title": "记忆挑战",
+          "description": "测试你的记忆力，找到所有配对卡片..."
+        }
+      },
+      {
+        "id": "template_game_rpg",
+        "name": "文字冒险",
+        "description": "文字冒险角色扮演游戏",
+        "icon": "⚔️",
+        "difficulty": "困难",
+        "estimated_time": "20分钟",
+        "config": {
+          "game_type": "文字冒险",
+          "gameplay": "选择选项推进剧情",
+          "scoring": "根据选择获得不同结局",
+          "multiplayer": false
+        },
+        "preview": {
+          "title": "冒险之旅",
+          "description": "在一个神秘的世界中，你的选择决定命运..."
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": "template_data_stats",
+        "name": "数据统计",
+        "description": "基础数据统计和图表展示",
+        "icon": "📈",
+        "difficulty": "简单",
+        "estimated_time": "5分钟",
+        "config": {
+          "data_type": "通用数据",
+          "visualization": ["柱状图", "折线图", "饼图"],
+          "report_content": ["数据概览", "趋势分析", "对比分析"],
+          "data_source": "手动输入"
+        },
+        "preview": {
+          "title": "数据统计分析",
+          "description": "可视化展示数据，生成分析报告..."
+        }
+      },
+      {
+        "id": "template_data_habit",
+        "name": "习惯追踪",
+        "description": "个人习惯数据追踪和分析",
+        "icon": "🎯",
+        "difficulty": "中等",
+        "estimated_time": "10分钟",
+        "config": {
+          "data_type": "习惯数据",
+          "visualization": ["进度条", "日历热图", "趋势图"],
+          "report_content": ["完成率", "连续天数", "最佳表现"],
+          "data_source": "每日打卡"
+        },
+        "preview": {
+          "title": "习惯追踪器",
+          "description": "记录你的习惯养成过程，可视化进度..."
+        }
+      },
+      {
+        "id": "template_data_health",
+        "name": "健康数据",
+        "description": "个人健康数据记录和分析",
+        "icon": "❤️",
+        "difficulty": "中等",
+        "estimated_time": "12分钟",
+        "config": {
+          "data_type": "健康数据",
+          "visualization": ["趋势图", "对比图", "健康评分"],
+          "report_content": ["健康指标", "趋势分析", "建议"],
+          "data_source": "手动输入 + 设备同步"
+        },
+        "preview": {
+          "title": "健康数据分析",
+          "description": "记录健康指标，获得专业分析建议..."
+        }
+      },
+      {
+        "id": "template_data_financial",
+        "name": "财务分析",
+        "description": "个人财务数据分析和规划",
+        "icon": "💹",
+        "difficulty": "困难",
+        "estimated_time": "15分钟",
+        "config": {
+          "data_type": "财务数据",
+          "visualization": ["收支图表", "资产分布", "投资回报"],
+          "report_content": ["收支分析", "资产配置", "投资建议"],
+          "data_source": "银行导入 + 手动输入"
+        },
+        "preview": {
+          "title": "财务智慧分析",
+          "description": "全面分析财务状况，提供投资建议..."
+        }
+      }
+    ]
+  },
+  "code_templates": {
+    "basic_structure": "# -*- coding: utf-8 -*-\n\"\"\"{app_name} - {app_description}\"\"\"\nimport json\nimport uuid\nfrom datetime import datetime\nfrom pathlib import Path\n\nfrom fastapi import APIRouter, Request\nfrom fastapi.responses import JSONResponse\n\nfrom role_data import RolePath\nfrom store_common import atomic_json, file_lock\n\nrouter = APIRouter()\n\nAPP_FILE = \"{app_name}.json\"\n\n# 应用配置\nAPP_CONFIG = {config_json}\n\n@router.get(\"/api/{app_name}\")\nasync def get_app():\n    \"\"\"获取应用状态\"\"\"\n    return {\"status\": \"ok\", \"config\": APP_CONFIG}",
+    "chat_template": "# 聊天对话类应用特定模板\n@router.post(\"/api/{app_name}/message\")\nasync def send_message(req: Request):\n    \"\"\"发送消息并获取回复\"\"\"\n    body = await req.json()\n    message = body.get(\"message\", \"\")\n    # 实现对话逻辑\n    response = \"这是示例回复\"\n    return {\"response\": response}",
+    "tool_template": "# 工具类应用特定模板\n@router.get(\"/api/{app_name}/items\")\nasync def get_items():\n    \"\"\"获取项目列表\"\"\"\n    data = _load(APP_FILE, {\"items\": []})\n    return data\n\n@router.post(\"/api/{app_name}/items\")\nasync def create_item(req: Request):\n    \"\"\"创建新项目\"\"\"\n    body = await req.json()\n    data = _load(APP_FILE, {\"items\": []})\n    new_item = {{\"id\": _uid(), \"content\": body.get(\"content\", \"\"), \"created_at\": _now()}}\n    data[\"items\"].append(new_item)\n    _save(APP_FILE, data)\n    return new_item",
+    "game_template": "# 游戏类应用特定模板\n@router.post(\"/api/{app_name}/start\")\nasync def start_game():\n    \"\"\"开始游戏\"\"\"\n    game_state = {{\"score\": 0, \"started\": True, \"started_at\": _now()}}\n    return game_state\n\n@router.post(\"/api/{app_name}/action\")\nasync def game_action(req: Request):\n    \"\"\"游戏动作\"\"\"\n    body = await req.json()\n    action = body.get(\"action\", \"\")\n    # 实现游戏逻辑\n    result = {{\"success\": True, \"new_score\": 10}}\n    return result",
+    "data_template": "# 数据分析类应用特定模板\n@router.get(\"/api/{app_name}/data\")\nasync def get_data():\n    \"\"\"获取数据\"\"\"\n    data = _load(APP_FILE, {\"records\": [], \"stats\": {}})\n    return data\n\n@router.post(\"/api/{app_name}/data\")\nasync def add_data(req: Request):\n    \"\"\"添加数据记录\"\"\"\n    body = await req.json()\n    data = _load(APP_FILE, {\"records\": [], \"stats\": {}})\n    new_record = {{\"id\": _uid(), \"values\": body.get(\"values\", {}), \"timestamp\": _now()}}\n    data[\"records\"].append(new_record)\n    _save(APP_FILE, data)\n    return new_record\n\n@router.get(\"/api/{app_name}/analysis\")\nasync def get_analysis():\n    \"\"\"获取数据分析\"\"\"\n    # 实现分析逻辑\n    return {{\"trends\": [], \"insights\": []}}"
+  },
+  "ui_components": {
+    "chat_ui": {
+      "type": "chat_interface",
+      "components": ["message_list", "input_box", "send_button"],
+      "styling": "modern",
+      "features": ["auto_scroll", "typing_indicator", "timestamp"]
+    },
+    "tool_ui": {
+      "type": "tool_interface",
+      "components": ["item_list", "add_button", "edit_dialog", "delete_button"],
+      "styling": "clean",
+      "features": ["search", "filter", "sort"]
+    },
+    "game_ui": {
+      "type": "game_interface",
+      "components": ["game_area", "score_display", "controls", "instructions"],
+      "styling": "engaging",
+      "features": ["animations", "sound_effects", "progress_bar"]
+    },
+    "data_ui": {
+      "type": "data_interface",
+      "components": ["chart_area", "data_table", "filter_panel", "export_button"],
+      "styling": "professional",
+      "features": ["interactive_charts", "real_time_updates", "customizable_views"]
+    }
+  }
+}

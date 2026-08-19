@@ -42,22 +42,22 @@ var BIOME_STYLE = {
 /* ===== POI（兴趣点 / 建筑） ===== */
 /* type: build(建筑方块) | mark(地标点) | area(区域) */
 var POIS = [
-  { id: 'home',       name: '你的公寓',     x: 100, y: 78, w: 3, h: 3, type: 'build', icon: '🏠', color: '#8b6bb8' },
-  { id: 'cafe',       name: '街角咖啡店',   x: 88,  y: 74, w: 4, h: 3, type: 'build', icon: '☕', color: '#b0703c' },
-  { id: 'lab',        name: '脑科学研究院', x: 83,  y: 67, w: 5, h: 4, type: 'build', icon: '🧪', color: '#5f6fb0' },
-  { id: 'univ',       name: '恋语大学',     x: 75,  y: 61, w: 5, h: 4, type: 'build', icon: '🎓', color: '#4f8f7a' },
-  { id: 'library',    name: '旧图书馆',     x: 87,  y: 80, w: 4, h: 3, type: 'build', icon: '📚', color: '#9a7c54' },
-  { id: 'market',     name: '日夜超市',     x: 97,  y: 76, w: 3, h: 3, type: 'build', icon: '🛒', color: '#c05a6a' },
-  { id: 'xflat',      name: '教工公寓',     x: 86,  y: 76, w: 3, h: 3, type: 'build', icon: '🏢', color: '#7a7fb0' },
-  { id: 'clocktower', name: '中央钟楼',     x: 92,  y: 72, w: 2, h: 2, type: 'build', icon: '🕰️', color: '#a08a5c', tall: true },
-  { id: 'park',       name: '梧桐公园',     x: 99,  y: 66, w: 8, h: 7, type: 'area',  icon: '🌳', color: '#5d9b53' },
-  { id: 'lighthouse', name: '北岬灯塔',     x: 112, y: 48, w: 2, h: 3, type: 'build', icon: '🗼', color: '#d0d6e0', tall: true },
-  { id: 'temple',     name: '神庙遗迹',     x: 42,  y: 58, w: 5, h: 4, type: 'area',  icon: '⛩️', color: '#7d8a6a' },
-  { id: 'darklab',    name: '废弃实验室',   x: 64,  y: 39, w: 4, h: 3, type: 'build', icon: '🚪', color: '#5a4a6a', hidden: true },
-  { id: 'pier',       name: '临海栈桥',     x: 122, y: 84, w: 2, h: 8, type: 'bridge', icon: '🌉', color: '#a9825c' },
-  { id: 'mine',       name: '北岭矿脉',     x: 58,  y: 34, w: 4, h: 3, type: 'area',  icon: '⛏️', color: '#8a8f98' },
-  { id: 'shrine',     name: '星辰石碑群',   x: 41,  y: 57, w: 3, h: 3, type: 'area',  icon: '🗿', color: '#8d9c86' },
-  { id: 'garden',     name: '屋顶花园',     x: 90,  y: 75, w: 1, h: 1, type: 'mark',  icon: '🌸', color: '#d98ab0', hidden: true }
+  { id: 'home',       name: '你的公寓',     x: 100, y: 78, w: 3, h: 3, type: 'build', icon: '🏠', color: '#8b6bb8', monopoly_price: 1200, monopoly_rent: 120 },
+  { id: 'cafe',       name: '街角咖啡店',   x: 88,  y: 74, w: 4, h: 3, type: 'build', icon: '☕', color: '#b0703c', monopoly_price: 1500, monopoly_rent: 150 },
+  { id: 'lab',        name: '脑科学研究院', x: 83,  y: 67, w: 5, h: 4, type: 'build', icon: '🧪', color: '#5f6fb0', monopoly_price: 1800, monopoly_rent: 180 },
+  { id: 'univ',       name: '恋语大学',     x: 75,  y: 61, w: 5, h: 4, type: 'build', icon: '🎓', color: '#4f8f7a', monopoly_price: 1600, monopoly_rent: 160 },
+  { id: 'library',    name: '旧图书馆',     x: 87,  y: 80, w: 4, h: 3, type: 'build', icon: '📚', color: '#9a7c54', monopoly_price: 1400, monopoly_rent: 140 },
+  { id: 'market',     name: '日夜超市',     x: 97,  y: 76, w: 3, h: 3, type: 'build', icon: '🛒', color: '#c05a6a', monopoly_price: 1300, monopoly_rent: 130 },
+  { id: 'xflat',      name: '教工公寓',     x: 86,  y: 76, w: 3, h: 3, type: 'build', icon: '🏢', color: '#7a7fb0', monopoly_price: 1100, monopoly_rent: 110 },
+  { id: 'clocktower', name: '中央钟楼',     x: 92,  y: 72, w: 2, h: 2, type: 'build', icon: '🕰️', color: '#a08a5c', tall: true, monopoly_price: 2000, monopoly_rent: 200 },
+  { id: 'park',       name: '梧桐公园',     x: 99,  y: 66, w: 8, h: 7, type: 'area',  icon: '🌳', color: '#5d9b53', monopoly_price: 1700, monopoly_rent: 170 },
+  { id: 'lighthouse', name: '北岬灯塔',     x: 112, y: 48, w: 2, h: 3, type: 'build', icon: '🗼', color: '#d0d6e0', tall: true, monopoly_price: 1900, monopoly_rent: 190 },
+  { id: 'temple',     name: '神庙遗迹',     x: 42,  y: 58, w: 5, h: 4, type: 'area',  icon: '⛩️', color: '#7d8a6a', monopoly_price: 1000, monopoly_rent: 100 },
+  { id: 'darklab',    name: '废弃实验室',   x: 64,  y: 39, w: 4, h: 3, type: 'build', icon: '🚪', color: '#5a4a6a', hidden: true, monopoly_price: 800, monopoly_rent: 80 },
+  { id: 'pier',       name: '临海栈桥',     x: 122, y: 84, w: 2, h: 8, type: 'bridge', icon: '🌉', color: '#a9825c', monopoly_price: 900, monopoly_rent: 90 },
+  { id: 'mine',       name: '北岭矿脉',     x: 58,  y: 34, w: 4, h: 3, type: 'area',  icon: '⛏️', color: '#8a8f98', monopoly_price: 850, monopoly_rent: 85 },
+  { id: 'shrine',     name: '星辰石碑群',   x: 41,  y: 57, w: 3, h: 3, type: 'area',  icon: '🗿', color: '#8d9c86', monopoly_price: 750, monopoly_rent: 75 },
+  { id: 'garden',     name: '屋顶花园',     x: 90,  y: 75, w: 1, h: 1, type: 'mark',  icon: '🌸', color: '#d98ab0', hidden: true, monopoly_price: 600, monopoly_rent: 60 }
 ];
 
 /* ===== 物品 ===== */
@@ -900,7 +900,7 @@ var INTERIORS = {
     hotspots: [
       { id: 'bed',      type: 'rest',  label: '小憩',   icon: '🛏️', x: 18, y: 68 },
       { id: 'desk',     type: 'work',  label: '书桌',   icon: '📚', x: 62, y: 52 },
-      { id: 'kitchen',  type: 'work',  label: '厨房',   icon: '🍳', x: 82, y: 72 },
+      { id: 'kitchen',  type: 'work',  label: '一起做饭', icon: '🍳', x: 82, y: 72 },
       { id: 'xumo',     type: 'npc',   label: '许墨',   icon: '💜', x: 45, y: 45 }
     ]
   },
@@ -959,7 +959,7 @@ var INTERIORS = {
     prompt_hint: '教工公寓楼内走廊客厅，米色墙面，木质门牌，绿植盆栽，午后斜阳透过楼道窗',
     hotspots: [
       { id: 'living',   type: 'rest',  label: '客厅',   icon: '🛋️', x: 30, y: 60 },
-      { id: 'kitchen', type: 'work',  label: '厨房',   icon: '🍳', x: 60, y: 65 },
+      { id: 'kitchen', type: 'work',  label: '一起做饭', icon: '🍳', x: 60, y: 65 },
       { id: 'study',   type: 'work',  label: '书房',   icon: '📚', x: 78, y: 50 },
       { id: 'door',    type: 'npc',   label: '许墨门口', icon: '💜', x: 45, y: 55 }
     ]
@@ -1056,8 +1056,119 @@ var INTERIORS = {
   }
 };
 
+/* ===== 大富翁游戏配置 ===== */
+/* 基于3D世界POI构建大富翁棋盘，使用现有地图位置作为地产 */
+var MONOPOLY_CONFIG = {
+  /* 游戏棋盘：基于POI顺序排列 */
+  board_order: [
+    'start',      // 起点 - 中央钟楼
+    'cafe',       // 街角咖啡店
+    'lab',        // 脑科学研究院
+    'univ',       // 恋语大学
+    'library',    // 旧图书馆
+    'market',     // 日夜超市
+    'xflat',      // 教工公寓
+    'park',       // 梧桐公园
+    'lighthouse', // 北岬灯塔
+    'temple',     // 神庙遗迹
+    'darklab',    // 废弃实验室
+    'pier',       // 临海栈桥
+    'mine',       // 北岭矿脉
+    'shrine',     // 星辰石碑群
+    'garden',     // 屋顶花园
+    'home'        // 你的公寓
+  ],
+  
+  /* 特殊位置配置 */
+  special_spaces: {
+    'start': {
+      name: '起点',
+      icon: '🏁',
+      description: '每次经过起点获得¥2000',
+      effect: 'pass_start'
+    },
+    'chance1': {
+      name: '机会',
+      icon: '🎲',
+      description: '抽取机会卡',
+      effect: 'chance_card'
+    },
+    'chance2': {
+      name: '机会',
+      icon: '🎲',
+      description: '抽取机会卡',
+      effect: 'chance_card'
+    },
+    'jail': {
+      name: '监狱',
+      icon: '🔒',
+      description: '暂停行动2回合',
+      effect: 'go_jail'
+    },
+    'free_parking': {
+      name: '免费停车',
+      icon: '🅿️',
+      description: '安全地带',
+      effect: 'none'
+    }
+  },
+  
+  /* 机会卡配置 */
+  chance_cards: [
+    { id: 'c1', text: '获得许墨的学术资助', effect: 'money', value: 1500 },
+    { id: 'c2', text: '发现古老文献，出售获得收益', effect: 'money', value: 1000 },
+    { id: 'c3', text: '雨天路滑，医药费支出', effect: 'money', value: -500 },
+    { id: 'c4', text: '咖啡店打折优惠', effect: 'money', value: 300 },
+    { id: 'c5', text: '学术会议奖金', effect: 'money', value: 800 },
+    { id: 'c6', text: '移动到起点，获得过路费', effect: 'move', position: 0 },
+    { id: 'c7', text: '前进3步', effect: 'move', steps: 3 },
+    { id: 'c8', text: '后退2步', effect: 'move', steps: -2 },
+    { id: 'c9', text: '免费在任意地产建房', effect: 'free_house' },
+    { id: 'c10', text: '坐牢一回合', effect: 'jail', rounds: 1 }
+  ],
+  
+  /* 许墨特色台词模板 */
+  xumo_dialogues: {
+    game_start: '规则很简单，但结果的随机性，正是研究的乐趣所在。',
+    roll_dice: '概率分布会告诉我们下一步的故事。',
+    move: '移动的轨迹，有时候比终点更有意思。',
+    buy_property: '投资决策需要理性分析，但直觉也很重要。',
+    pay_rent: '这叫"租金"，本质上是一种资源再分配。',
+    receive_rent: '这是系统性的必然结果，不是吗？',
+    chance_card: '随机变量，总是能带来意外的发现。',
+    go_jail: '暂时的限制，有时是策略的一部分。',
+    leave_jail: '重新回到棋盘上，感觉如何？',
+    win: '你的决策逻辑很优秀，值得学习。',
+    lose: '失败是学习过程的一部分，这次我学到了很多。',
+    opponent_turn: '观察对手，也是一种研究方法。',
+    money_low: '资源管理是游戏的精髓，需要更谨慎。',
+    property_auction: '竞价博弈，很经典的实验场景。'
+  },
+  
+  /* 可用NPC配置 */
+  available_npcs: [
+    { id: 'xumo', name: '许墨', emoji: '🧪', color: '#7c3aed', difficulty: 'hard' },
+    { id: 'xiaoman', name: '小满', emoji: '🌻', color: '#eab308', difficulty: 'easy' },
+    { id: 'bai', name: '白教授', emoji: '📚', color: '#0ea5e9', difficulty: 'medium' }
+  ],
+  
+  /* 游戏规则配置 */
+  rules: {
+    initial_money: 15000,
+    pass_start_bonus: 2000,
+    max_houses: 4,
+    house_cost_ratio: 0.5,  // 房屋价格为地产价格的50%
+    rent_ratio: 0.1,         // 基础租金为价格的10%
+    house_rent_bonus: 0.5,  // 每个房屋增加50%租金
+    hotel_rent_bonus: 2.0,  // 每个酒店增加200%租金
+    jail_rounds: 2,
+    max_players: 4,
+    min_players: 2
+  }
+};
+
 /* 暴露 INTERIORS 到 window.WORLD_DATA，前端 world-ui.js 通过 D.INTERIORS 访问 */
-Object.assign(window.WORLD_DATA, { INTERIORS: INTERIORS });
+Object.assign(window.WORLD_DATA, { INTERIORS: INTERIORS, MONOPOLY_CONFIG: MONOPOLY_CONFIG });
 
 /* 暴露到 G（world-engine 通过 window.WORLD_DATA 访问） */
 /* （数据本身已是顶层 var，挂在 IIFE 内 → 通过 window.WORLD_DATA 暴露） */

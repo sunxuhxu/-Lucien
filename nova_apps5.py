@@ -307,6 +307,219 @@ async def kitchen_history():
 
 
 # ===========================================================================
+# 1.5 厨房一起做饭功能
+# ===========================================================================
+@router.post("/api/kitchen/cooking/start")
+async def cooking_start(req: Request):
+    """开始一起做饭会话"""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    dish_name = str(body.get("dish_name", "")).strip()[:30]
+    if not dish_name:
+        return JSONResponse({"error": "要做什么菜呢？"}, status_code=400)
+    
+    memories = _agg_memories(4)
+    affy = _agg_affinity_value()
+    
+    # 生成做饭步骤
+    sys_prompt = (
+        f"{_persona_core()}\n\n"
+        "【厨房一起做饭】你和'她'要一起做一道菜。你负责规划步骤，她负责执行。\n"
+        f"菜名：{dish_name}\n"
+        f"她的记忆：{json.dumps(memories, ensure_ascii=False)[:400]}\n"
+        f"心动值：{affy}\n\n"
+        '输出 JSON：{"steps":[{"actor":"user|xumo","action":"具体动作描述（20字内）","dialogue":"许墨说的话（30字内）"}],'
+        '"total_time":预计总分钟数,"difficulty":1-5整数难度,"reward":"完成后的心动奖励描述（30字内）"}'
+    )
+    try:
+        rep = await _llm_json(
+            [{"role": "system", "content": sys_prompt},
+             {"role": "user", "content": f"规划做{dish_name}的步骤，只输出 JSON。"}], max_tokens=800)
+    except Exception:
+        rep = {}
+    
+    # 默认步骤
+    steps = rep.get("steps", [])
+    if not isinstance(steps, list) or len(steps) == 0:
+        steps = [
+            {"actor": "user", "action": "洗净食材", "dialogue": "先把这些食材洗干净，小心水不要太凉。"},
+            {"actor": "xumo", "action": "切配食材", "dialogue": "我来切，你看着就好，别伤到手。"},
+            {"actor": "user", "action": "调制调料", "dialogue": "现在来调个味道，试试这个比例。"},
+            {"actor": "xumo", "action": "下锅烹饪", "dialogue": "火候我来控制，你负责尝味道。"},
+            {"actor": "both", "action": "摆盘上菜", "dialogue": "最后一步，我们一起把它摆得漂亮些。"}
+        ]
+    
+    session = {
+        "id": _nid(),
+        "dish_name": dish_name,
+        "started_at": _ts(),
+        "steps": steps,
+        "current_step": 0,
+        "completed": False,
+        "score": 0,
+        "total_time": rep.get("total_time", 15),
+        "difficulty": rep.get("difficulty", 3),
+        "reward": rep.get("reward", "心动值+5，获得专属菜谱记忆")
+    }
+    
+    data = _load(KT_FILE, {"dishes": [], "checkins": [], "cooking_sessions": []})
+    data.setdefault("cooking_sessions", []).insert(0, session)
+    data["cooking_sessions"] = data["cooking_sessions"][:20]
+    _save(KT_FILE, data)
+    
+    return {"session": session}
+
+
+@router.post("/api/kitchen/cooking/step")
+async def cooking_step(req: Request):
+    """执行做饭步骤"""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    session_id = str(body.get("session_id", "")).strip()
+    if not session_id:
+        return JSONResponse({"error": "会话ID无效"}, status_code=400)
+    
+    data = _load(KT_FILE, {"dishes": [], "checkins": [], "cooking_sessions": []})
+    session = next((s for s in data.get("cooking_sessions", []) if s.get("id") == session_id), None)
+    if not session:
+        return JSONResponse({"error": "会话不存在"}, status_code=404)
+    
+    if session.get("completed"):
+        return JSONResponse({"error": "这个做饭已经完成了"}, status_code=400)
+    
+    current_step = session.get("current_step", 0)
+    steps = session.get("steps", [])
+    
+    if current_step >= len(steps):
+        return JSONResponse({"error": "所有步骤已完成"}, status_code=400)
+    
+    step = steps[current_step]
+    session["current_step"] = current_step + 1
+    
+    # 生成步骤反馈
+    memories = _agg_memories(4)
+    affy = _agg_affinity_value()
+    
+    sys_prompt = (
+        f"{_persona_core()}\n\n"
+        "【厨房一起做饭·步骤反馈】她刚完成了一个做饭步骤，你给出温暖的反馈。\n"
+        f"菜名：{session.get('dish_name')}\n"
+        f"她刚才做的：{step.get('action')}\n"
+        f"她的记忆：{json.dumps(memories, ensure_ascii=False)[:400]}\n"
+        f"心动值：{affy}\n\n"
+        '输出 JSON：{"feedback":"40字内温暖反馈","affinity_delta":0-5整数心动变化","tip":"20字内下个小建议"}'
+    )
+    
+    try:
+        rep = await _llm_json(
+            [{"role": "system", "content": sys_prompt},
+             {"role": "user", "content": "给出反馈，只输出 JSON。"}], max_tokens=500)
+    except Exception:
+        rep = {}
+    
+    rep.setdefault("feedback", "做得很好，继续保持。")
+    rep.setdefault("affinity_delta", 1)
+    rep.setdefault("tip", "注意火候控制。")
+    
+    # 计算总分
+    session["score"] = session.get("score", 0) + rep.get("affinity_delta", 1)
+    
+    # 检查是否完成
+    is_complete = session["current_step"] >= len(steps)
+    if is_complete:
+        session["completed"] = True
+        session["completed_at"] = _ts()
+        _affinity("cooking_complete", f"一起做饭：{session.get('dish_name')}")
+    
+    _save(KT_FILE, data)
+    
+    return {
+        "step_completed": current_step,
+        "total_steps": len(steps),
+        "feedback": rep,
+        "is_complete": is_complete,
+        "session": session
+    }
+
+
+@router.get("/api/kitchen/cooking/status")
+async def cooking_status(req: Request):
+    """获取当前做饭状态"""
+    session_id = req.query_params.get("session_id", "").strip()
+    if not session_id:
+        return JSONResponse({"error": "会话ID无效"}, status_code=400)
+    
+    data = _load(KT_FILE, {"dishes": [], "checkins": [], "cooking_sessions": []})
+    session = next((s for s in data.get("cooking_sessions", []) if s.get("id") == session_id), None)
+    if not session:
+        return JSONResponse({"error": "会话不存在"}, status_code=404)
+    
+    return {"session": session}
+
+
+@router.post("/api/kitchen/cooking/complete")
+async def cooking_complete(req: Request):
+    """完成做饭并领取奖励"""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    session_id = str(body.get("session_id", "")).strip()
+    if not session_id:
+        return JSONResponse({"error": "会话ID无效"}, status_code=400)
+    
+    data = _load(KT_FILE, {"dishes": [], "checkins": [], "cooking_sessions": []})
+    session = next((s for s in data.get("cooking_sessions", []) if s.get("id") == session_id), None)
+    if not session:
+        return JSONResponse({"error": "会话不存在"}, status_code=404)
+    
+    if not session.get("completed"):
+        return JSONResponse({"error": "还没完成所有步骤呢"}, status_code=400)
+    
+    # 生成完成奖励
+    memories = _agg_memories(4)
+    affy = _agg_affinity_value()
+    
+    sys_prompt = (
+        f"{_persona_core()}\n\n"
+        "【厨房一起做饭·完成】你们一起完成了一道菜，他给出温暖的总结。\n"
+        f"菜名：{session.get('dish_name')}\n"
+        f"总得分：{session.get('score', 0)}\n"
+        f"她的记忆：{json.dumps(memories, ensure_ascii=False)[:400]}\n"
+        f"心动值：{affy}\n\n"
+        '输出 JSON：{"completion":"60字内温暖的完成感言","final_affinity":5-15整数最终心动奖励","memory":"50字内关于这次做饭的专属记忆"}'
+    )
+    
+    try:
+        rep = await _llm_json(
+            [{"role": "system", "content": sys_prompt},
+             {"role": "user", "content": "给出完成总结，只输出 JSON。"}], max_tokens=600)
+    except Exception:
+        rep = {}
+    
+    rep.setdefault("completion", "做得很好，这是我们共同的回忆。")
+    rep.setdefault("final_affinity", 8)
+    rep.setdefault("memory", f"一起做{session.get('dish_name')}的温暖午后")
+    
+    session["reward_claimed"] = True
+    session["reward"] = rep
+    _save(KT_FILE, data)
+    
+    # 实际增加心动值
+    final_affinity = rep.get("final_affinity", 8)
+    _affinity("cooking_reward", f"完成一起做饭：{session.get('dish_name')}")
+    
+    return {
+        "completion": rep,
+        "session": session
+    }
+
+
+# ===========================================================================
 # 2. 镜像学习：他越来越像你
 # ===========================================================================
 @router.post("/api/mirror/scan")

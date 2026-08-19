@@ -114,6 +114,19 @@ img { max-width: 100%; display: block; }
 .start-card ul li { font-size: 14px; padding: 4px 0; padding-left: 20px; position: relative; color: color-mix(in srgb, var(--fg) 75%, transparent); }
 .start-card ul li::before { content: ''; position: absolute; left: 0; top: 12px; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
 
+/* ===== 界面与体验 ===== */
+.uiux-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.uiux-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); transition: all var(--transition); position: relative; overflow: hidden; }
+.uiux-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary), var(--accent)); transform: scaleX(0); transform-origin: left; transition: transform var(--transition); }
+.uiux-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+.uiux-card:hover::before { transform: scaleX(1); }
+.uiux-card-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: #fff; }
+.uiux-card h3 { font-size: 18px; margin-bottom: 8px; font-weight: 700; }
+.uiux-card p { font-size: 14px; color: color-mix(in srgb, var(--fg) 65%, transparent); line-height: 1.6; margin-bottom: 12px; }
+.uiux-card ul { list-style: none; }
+.uiux-card ul li { font-size: 13px; padding: 4px 0; padding-left: 18px; position: relative; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+.uiux-card ul li::before { content: ''; position: absolute; left: 0; top: 10px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+
 /* ===== 分类导航（粘性） ===== */
 .cat-nav-wrap { position: sticky; top: var(--nav-h); z-index: 50; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
 .cat-nav { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 12px 24px; max-width: var(--max-w); margin: 0 auto; }
@@ -320,6 +333,7 @@ img { max-width: 100%; display: block; }
       许墨 · 使用教程
     </a>
     <ul class="nav-links" id="navLinks">
+      <li><a href="#uiux">界面与体验</a></li>
       <li><a href="#start">快速开始</a></li>
       <li><a href="#chat">对话互动</a></li>
       <li><a href="#phone">许墨的手机</a></li>
@@ -373,6 +387,61 @@ img { max-width: 100%; display: block; }
   </div>
 </header>
 
+<!-- ===== 界面与体验 ===== -->
+<section class="section" id="uiux">
+  <div class="section-header">
+    <span class="section-tag">Interface & Experience</span>
+    <h2 class="section-title">界面与体验</h2>
+    <p class="section-desc">优雅的设计语言与流畅的交互体验</p>
+  </div>
+  <div class="uiux-grid">
+    <div class="uiux-card">
+      <div class="uiux-card-icon"><img src="/static/img/icons/t/st_power.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
+      <h3>界面视觉更新</h3>
+      <p>采用优雅紫罗兰色彩系统，配合渐变背景和深度阴影，营造温馨陪伴氛围</p>
+      <ul>
+        <li>色彩系统：紫罗兰主色调，温暖粉色点缀</li>
+        <li>渐变背景：多层径向渐变，柔和视觉层次</li>
+        <li>阴影深度：五级阴影系统，立体空间感</li>
+        <li>圆角设计：统一圆角规范，亲和友好</li>
+      </ul>
+    </div>
+    <div class="uiux-card">
+      <div class="uiux-card-icon"><img src="/static/img/icons/t/st_chat.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
+      <h3>交互体验优化</h3>
+      <p>丰富的动画效果和细腻的交互反馈，让每一次操作都充满温度</p>
+      <ul>
+        <li>触摸互动：立绘触摸动画，角色互动反馈</li>
+        <li>悬停效果：按钮悬停缩放，卡片光影变化</li>
+        <li>过渡动画：流畅的页面切换和状态转换</li>
+        <li>微交互：气泡提示、表情反馈、状态动画</li>
+      </ul>
+    </div>
+    <div class="uiux-card">
+      <div class="uiux-card-icon"><img src="/static/img/icons/t/st_power.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
+      <h3>导航/菜单改进</h3>
+      <p>清晰的应用内导航体系，便捷的操作入口，快速访问常用功能</p>
+      <ul>
+        <li>应用导航：顶部导航栏，返回按钮和标题</li>
+        <li>操作菜单：快捷操作按钮，功能入口整合</li>
+        <li>面包屑：层级导航，当前位置清晰</li>
+        <li>快速访问：常用功能快捷入口</li>
+      </ul>
+    </div>
+    <div class="uiux-card">
+      <div class="uiux-card-icon"><img src="/static/img/icons/t/st_chat.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
+      <h3>移动端适配</h3>
+      <p>完善的移动端支持，触摸手势优化，响应式布局适配各种设备</p>
+      <ul>
+        <li>触摸手势：滑动、长按、多点触控支持</li>
+        <li>响应式布局：自适应不同屏幕尺寸</li>
+        <li>移动端优化：触摸区域优化，操作便捷</li>
+        <li>性能优化：移动端动画性能调优</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <!-- ===== 快速开始 ===== -->
 <section class="section" id="start">
   <div class="section-header">
@@ -396,21 +465,23 @@ img { max-width: 100%; display: block; }
       <div class="start-card-num">02</div>
       <div class="start-card-icon"><img src="/static/img/icons/t/st_chat.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
       <h3>开始对话</h3>
-      <p>在左侧对话框中输入文字与许墨聊天。许墨会以他特有的温柔语气回应你</p>
+      <p>在左侧对话框中输入文字与许墨聊天。许墨会以他特有的温柔语气回应你，支持触摸互动和流畅的过渡动画</p>
       <ul>
-        <li>文字输入：直接在输入框打字</li>
-        <li>重置对话：点击右上角刷新按钮</li>
+        <li>文字输入：直接在输入框打字，支持触摸操作</li>
+        <li>重置对话：点击右上角刷新按钮，带有过渡动画</li>
+        <li>角色互动：触摸立绘可触发角色互动反馈</li>
       </ul>
     </div>
     <div class="start-card">
       <div class="start-card-num">03</div>
       <div class="start-card-icon"><img src="/static/img/icons/t/st_phone.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
       <h3>探索手机</h3>
-      <p>右侧手机界面上有 60+ 个应用图标，分为对话、手机、陪伴、媒体、学习、创想、口袋、新星、心理、故事、世界、生活等类别。点击任意图标即可进入对应功能</p>
+      <p>右侧手机界面上有 60+ 个应用图标，分为对话、手机、陪伴、媒体、学习、创想、口袋、新星、心理、故事、世界、生活等类别。点击任意图标即可进入对应功能，带有流畅的过渡动画</p>
       <ul>
         <li>核心区：世界、朋友圈、心动、语录等</li>
-        <li>底部 Dock：短信、瞬间、好感</li>
+        <li>底部 Dock：电话、短信、瞬间、好感</li>
         <li>设置：个性化许墨的参数</li>
+        <li>导航优化：顶部导航栏提供返回按钮和标题</li>
       </ul>
     </div>
   </div>
@@ -426,7 +497,8 @@ img { max-width: 100%; display: block; }
 <!-- ===== 功能分类导航（粘性） ===== -->
 <div class="cat-nav-wrap">
   <nav class="cat-nav" id="catNav" aria-label="功能分类导航">
-    <a href="#chat" class="cat-nav-item active"><img src="/static/img/icons/t/cn_chat.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async">对话互动</a>
+    <a href="#uiux" class="cat-nav-item active"><img src="/static/img/icons/t/st_power.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async">界面与体验</a>
+    <a href="#chat" class="cat-nav-item"><img src="/static/img/icons/t/cn_chat.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async">对话互动</a>
     <a href="#phone" class="cat-nav-item"><img src="/static/img/icons/t/cn_phone.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async">许墨的手机</a>
     <a href="#daily" class="cat-nav-item"><img src="/static/img/icons/t/cn_daily.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async">日常陪伴</a>
     <a href="#media" class="cat-nav-item"><img src="/static/img/icons/t/cn_media.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async">媒体共创</a>
@@ -448,7 +520,7 @@ img { max-width: 100%; display: block; }
     <div class="icon-box" style="background: linear-gradient(135deg, #7C3AED, #6366F1);"><img src="/static/img/icons/t/sec_chat.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div>
     <h2>对话互动</h2>
   </div>
-  <p class="feature-section-desc">与许墨交流的核心方式——文字对话、屏幕分享、聊天历史与短信，多维度沟通体验</p>
+  <p class="feature-section-desc">与许墨交流的核心方式——文字对话、屏幕分享、聊天历史与短信电话，多维度沟通体验</p>
   <div class="feature-grid">
     <div class="feature-card">
       <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #7C3AED, #A78BFA);"><img src="/static/img/icons/t/chat_text.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>文字对话</h3><span class="app-name">/chat</span></div></div>
@@ -514,14 +586,22 @@ img { max-width: 100%; display: block; }
       <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #8B5CF6, #C4B5FD);"><img src="/static/img/icons/t/xumodiary.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>许墨日记</h3><span class="app-name">xumodiary</span></div></div>
       <p>许墨的专属日历与日记，记录他的日程安排和你们的共同计划。查看某天的安排，添加约会和纪念日</p>
     </div>
+    <div class="feature-card">
+      <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #059669, #10B981);"><img src="/static/img/icons/t/ledger.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>墨记</h3><span class="app-name">ledger</span></div></div>
+      <p>日常收支记账工具。许墨可以帮你分析消费习惯，给出理财建议——当然，是教授级别的</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #3B82F6, #60A5FA);"><img src="/static/img/icons/t/clock.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>时钟</h3><span class="app-name">clock</span></div></div>
+      <p>手机主屏上的数字时钟，显示当前时间和日期。许墨的作息状态也会在此呈现——他此刻是在研究、阅读还是休息？</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #F59E0B, #FCD34D);"><img src="/static/img/icons/t/weather.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>天气</h3><span class="app-name">weather</span></div></div>
+      <p>查看当前天气状况。许墨会根据天气提醒你添衣带伞——他总是会这样细心</p>
+    </div>
 <div class="feature-card">
       <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #7C3AED, #A78BFA);"><img src="/static/img/icons/t/t_review.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>时光总结</h3><span class="app-name">review</span></div></div>
       <p>让许墨为你写总结。输入时间范围（今日、本周、本月、本年），许墨会根据你们的互动生成结构化报告，包括关键语录、成长里程碑和思考题</p>
       <div class="tips">/api/review/generate 生成总结，/api/review/list 查看历史记录</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #3B82F6, #60A5FA);"><img src="/static/img/icons/t/ledger.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>墨记</h3><span class="app-name">ledger</span></div></div>
-      <p>日常收支记账工具。许墨可以帮你分析消费习惯，给出理财建议——当然，是教授级别的</p>
     </div>
     <div class="feature-card">
       <div class="feature-card-head"><div class="feature-card-icon" style="background: linear-gradient(135deg, #3B82F6, #60A5FA);"><img src="/static/img/icons/t/clock.png?v=3" alt="" aria-hidden="true" loading="lazy" decoding="async"></div><div><h3>时钟</h3><span class="app-name">clock</span></div></div>

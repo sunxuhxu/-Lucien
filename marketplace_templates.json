@@ -1,0 +1,212 @@
+{
+  "categories": [
+    {
+      "id": "creative",
+      "name": "创意",
+      "icon": "✨",
+      "description": "创意互动和浪漫体验",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "life",
+      "name": "生活",
+      "icon": "🏠",
+      "description": "日常生活和贴心助手",
+      "color": "#10b981"
+    },
+    {
+      "id": "study",
+      "name": "学习",
+      "icon": "📖",
+      "description": "学习辅导和知识管理",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "game",
+      "name": "游戏",
+      "icon": "🎮",
+      "description": "小游戏和娱乐互动",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "tool",
+      "name": "工具",
+      "icon": "🔧",
+      "description": "实用工具和效率提升",
+      "color": "#64748b"
+    }
+  ],
+  "official_apps": [
+    {
+      "id": "official_dream",
+      "name": "清梦",
+      "category": "creative",
+      "description": "在许墨的梦境中与他相遇，体验不同的梦境场景",
+      "icon": "🌙",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.8,
+      "downloads": 5200,
+      "reviews": [],
+      "tags": ["梦境", "互动", "浪漫"],
+      "config": {
+        "type": "creative",
+        "module": "creative_apps",
+        "function": "dream"
+      },
+      "screenshot": "/static/screenshots/dream.jpg",
+      "version": "1.0.0",
+      "size": "2.5MB"
+    },
+    {
+      "id": "official_wardrobe",
+      "name": "衣橱换装",
+      "category": "life",
+      "description": "为许墨搭配不同的服装，生成换装立绘",
+      "icon": "👔",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.6,
+      "downloads": 4800,
+      "reviews": [],
+      "tags": ["换装", "立绘", "时尚"],
+      "config": {
+        "type": "life",
+        "module": "life_apps",
+        "function": "wardrobe"
+      },
+      "screenshot": "/static/screenshots/wardrobe.jpg",
+      "version": "1.2.0",
+      "size": "3.8MB"
+    },
+    {
+      "id": "official_study",
+      "name": "监督背单词",
+      "category": "study",
+      "description": "许墨监督你背单词，科学记忆曲线",
+      "icon": "📚",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.5,
+      "downloads": 3500,
+      "reviews": [],
+      "tags": ["学习", "单词", "记忆"],
+      "config": {
+        "type": "features",
+        "module": "features",
+        "function": "words"
+      },
+      "screenshot": "/static/screenshots/study.jpg",
+      "version": "1.0.0",
+      "size": "1.2MB"
+    },
+    {
+      "id": "official_oracle",
+      "name": "决策预言家",
+      "category": "creative",
+      "description": "让许墨为你的人生决策提供预测和建议",
+      "icon": "🔮",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.7,
+      "downloads": 4100,
+      "reviews": [],
+      "tags": ["预测", "决策", "神秘"],
+      "config": {
+        "type": "wonder",
+        "module": "wonder_apps",
+        "function": "oracle"
+      },
+      "screenshot": "/static/screenshots/oracle.jpg",
+      "version": "1.1.0",
+      "size": "2.1MB"
+    },
+    {
+      "id": "official_habits",
+      "name": "习惯养成管家",
+      "category": "tool",
+      "description": "许墨帮你培养好习惯，科学追踪进度",
+      "icon": "✅",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.4,
+      "downloads": 2900,
+      "reviews": [],
+      "tags": ["习惯", "追踪", "自我提升"],
+      "config": {
+        "type": "wonder",
+        "module": "wonder_apps",
+        "function": "habits"
+      },
+      "screenshot": "/static/screenshots/habits.jpg",
+      "version": "1.0.0",
+      "size": "1.8MB"
+    },
+    {
+      "id": "official_timecall",
+      "name": "时空热线",
+      "category": "creative",
+      "description": "拨打不同时间线上的许墨，体验不同时期的他",
+      "icon": "📞",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.9,
+      "downloads": 6100,
+      "reviews": [],
+      "tags": ["时空", "对话", "浪漫"],
+      "config": {
+        "type": "nova",
+        "module": "nova_apps",
+        "function": "timecall"
+      },
+      "screenshot": "/static/screenshots/timecall.jpg",
+      "version": "1.3.0",
+      "size": "4.2MB"
+    },
+    {
+      "id": "official_debate",
+      "name": "双我辩论",
+      "category": "creative",
+      "description": "与不同状态的许墨进行辩论，探讨人生话题",
+      "icon": "⚖️",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.5,
+      "downloads": 3200,
+      "reviews": [],
+      "tags": ["辩论", "思考", "深度"],
+      "config": {
+        "type": "nova",
+        "module": "nova_apps",
+        "function": "debate"
+      },
+      "screenshot": "/static/screenshots/debate.jpg",
+      "version": "1.0.0",
+      "size": "2.8MB"
+    },
+    {
+      "id": "official_achievements",
+      "name": "心动成就",
+      "category": "life",
+      "description": "解锁与许墨相处的成就记录",
+      "icon": "🏆",
+      "author": "官方",
+      "source": "official",
+      "rating": 4.3,
+      "downloads": 2800,
+      "reviews": [],
+      "tags": ["成就", "收集", "纪念"],
+      "config": {
+        "type": "nova",
+        "module": "nova_apps",
+        "function": "achievements"
+      },
+      "screenshot": "/static/screenshots/achievements.jpg",
+      "version": "1.0.0",
+      "size": "1.5MB"
+    }
+  ],
+  "featured_categories": ["creative", "life"],
+  "promoted_apps": ["official_timecall", "official_dream", "official_wardrobe"],
+  "tag_suggestions": ["浪漫", "实用", "学习", "娱乐", "工具", "创意", "互动", "生活"]
+}
