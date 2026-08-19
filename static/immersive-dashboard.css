@@ -1,0 +1,307 @@
+/*
+ * Immersive dashboard v6
+ * Structural source of truth for mode A. The dashboard remains one module;
+ * user-created widgets are the only individually arranged dashboard items.
+ */
+
+body.mode-a:not(.app-open) .desktop,
+body.mode-a .chat-panel { display: none !important; }
+
+body.mode-a #uiImmersivePanel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 4px 0 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: #f8f5fc;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.mode-a #uiImmersiveDesk {
+  padding: 0 4px 0 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Readability on the scene: keep the shell frameless, but give exposed type
+   enough contrast and keep secondary copy above the dark-mode threshold. */
+body.mode-a #uiImmersivePanel .ui-imm-head,
+body.mode-a #uiImmersiveDesk .ui-imm-desk-head {
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0,0,0,.9),0 0 20px rgba(10,7,18,.72);
+}
+body.mode-a #uiImmersivePanel .ui-imm-kicker,
+body.mode-a #uiImmersivePanel .ui-imm-clock span,
+body.mode-a #uiImmersiveDesk .ui-imm-desk-head span {
+  color: rgba(255,255,255,.88) !important;
+}
+body.mode-a #uiImmersiveDesk .ui-imm-desk-head span { font-size: 10px !important; }
+body.mode-a #uiImmersiveDesk .ui-imm-desk-head h2 { font-size: 19px !important; }
+
+body.mode-a #uiImmersivePanel .ui-imm-relation-copy > span,
+body.mode-a #uiImmersivePanel .ui-imm-relation-copy > small,
+body.mode-a #uiImmersivePanel .ui-imm-stats button > span,
+body.mode-a #uiImmersivePanel .ui-imm-stats button > small,
+body.mode-a #uiImmersivePanel .ui-imm-section-title b,
+body.mode-a #uiImmersivePanel .ui-imm-metric span,
+body.mode-a #uiImmersivePanel .ui-imm-metric small,
+body.mode-a #uiImmersivePanel .ui-imm-insight small,
+body.mode-a #uiImmersivePanel .ui-imm-insight p {
+  color: rgba(249,246,252,.78) !important;
+}
+
+body.mode-a #uiImmersiveDesk .ui-imm-desk-card { overflow: auto; }
+body.mode-a #uiImmersiveDesk .ui-imm-desk-card > header > span { color: #f9f6fc; font-size: 12px; }
+body.mode-a #uiImmersiveDesk .ui-imm-desk-card > header small { color: rgba(249,246,252,.72); font-size: 10px; }
+body.mode-a #uiImmersiveDesk .ui-imm-desk-card > header button { color: rgba(255,255,255,.82); font-size: 11px; }
+body.mode-a #uiImmersiveDesk textarea,
+body.mode-a #uiImmersiveDesk input { font-size: 12px; }
+body.mode-a #uiImmersiveDesk .ui-imm-note > small,
+body.mode-a #uiImmersiveDesk .ui-imm-curve > small,
+body.mode-a #uiImmersiveDesk .ui-imm-word-main > small,
+body.mode-a #uiImmersiveDesk .ui-imm-music-copy small,
+body.mode-a #uiImmersiveDesk .ui-imm-music-controls span { color: rgba(249,246,252,.7); font-size: 10px; }
+body.mode-a #uiImmersiveDesk .ui-imm-todo li,
+body.mode-a #uiImmersiveDesk .ui-imm-anime li,
+body.mode-a #uiImmersiveDesk .ui-imm-calendar li { color: rgba(255,255,255,.84); font-size: 11px; }
+body.mode-a #uiImmersiveDesk .ui-imm-reading > p,
+body.mode-a #uiImmersiveDesk .ui-imm-account > p,
+body.mode-a #uiImmersiveDesk .ui-imm-home-scene p { color: rgba(249,246,252,.76); font-size: 11px; }
+body.mode-a #uiImmersiveDesk .ui-imm-word-main p { font-size: 12px; }
+body.mode-a #uiImmersiveDesk .ui-imm-word-actions button,
+body.mode-a #uiImmersiveDesk .ui-imm-account-actions a,
+body.mode-a #uiImmersiveDesk .ui-imm-account-actions button,
+body.mode-a #uiImmersiveDesk .ui-imm-marriage > button,
+body.mode-a #uiImmersiveDesk .ui-imm-home-actions button { color: rgba(255,255,255,.84); font-size: 10px; }
+body.mode-a #uiImmersiveDesk .ui-imm-curve text,
+body.mode-a #uiImmersiveDesk .ui-imm-calendar-days span,
+body.mode-a #uiImmersiveDesk #uiImmHomeRooms span { fill: rgba(249,246,252,.72); color: rgba(249,246,252,.76); font-size: 9px; }
+body.mode-a #xumoHomeA .xa-actions button span { color: rgba(255,255,255,.9); font-size: 10px; }
+
+/* The dock itself is frameless; each compact action uses the same glass
+   material as the dashboard and desk components. */
+body.mode-a #xumoHomeA .xa-actions {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.mode-a #xumoHomeA .xa-actions button,
+body.mode-a #xumoHomeA .xa-actions button:hover {
+  width: 72px !important;
+  height: 72px !important;
+  min-width: 72px !important;
+  min-height: 72px !important;
+  padding: 4px !important;
+  border: 1px solid rgba(239,232,248,.22) !important;
+  border-radius: 16px !important;
+  background: linear-gradient(145deg,rgba(39,32,58,.84),rgba(17,13,29,.76)) !important;
+  box-shadow: 0 12px 30px rgba(3,2,10,.28),inset 0 1px 0 rgba(255,255,255,.09) !important;
+  backdrop-filter: blur(22px) saturate(1.18) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.18) !important;
+  transform: none !important;
+}
+body.mode-a #xumoHomeA .xa-actions button { opacity: .86; transition: opacity .18s ease !important; }
+body.mode-a #xumoHomeA .xa-actions button:hover,
+body.mode-a #xumoHomeA .xa-actions button:focus-visible {
+  opacity: 1;
+  border-color: rgba(239,232,248,.3) !important;
+  background: linear-gradient(145deg,rgba(49,40,70,.9),rgba(22,17,36,.82)) !important;
+}
+body.mode-a #xumoHomeA .xa-actions button i { font-size: 30px !important; line-height: 1; filter: drop-shadow(0 2px 5px rgba(0,0,0,.62)); }
+body.mode-a #xumoHomeA .xa-actions button svg { width: 28px !important; height: 28px !important; filter: drop-shadow(0 2px 5px rgba(0,0,0,.62)); }
+body.mode-a #xumoHomeA .xa-actions button span { font-size: 11px; }
+
+/* Stronger glass belongs to the individual components, not their outer
+   dashboard/desk shells. This keeps the frameless composition readable over
+   both bright and dark scene artwork. */
+body.mode-a #uiImmersivePanel .ui-imm-relation,
+body.mode-a #uiImmersivePanel .ui-imm-stats > button,
+body.mode-a #uiImmersivePanel .ui-imm-chart-wrap,
+body.mode-a #uiImmersivePanel .ui-imm-metric,
+body.mode-a #uiImmersivePanel .ui-imm-insight,
+body.mode-a #uiImmersivePanel .ui-imm-quick > button,
+body.mode-a #uiImmersiveDesk .ui-imm-desk-card {
+  border-color: rgba(239,232,248,.22) !important;
+  background: linear-gradient(145deg,rgba(39,32,58,.84),rgba(17,13,29,.76)) !important;
+  box-shadow: 0 12px 30px rgba(3,2,10,.28),inset 0 1px 0 rgba(255,255,255,.09) !important;
+  backdrop-filter: blur(22px) saturate(1.18) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.18) !important;
+}
+body.mode-a #uiImmersivePanel .ui-imm-stats > button:hover,
+body.mode-a #uiImmersivePanel .ui-imm-quick > button:hover,
+body.mode-a #uiImmersiveDesk .ui-imm-desk-card:hover {
+  border-color: rgba(239,232,248,.3) !important;
+  background: linear-gradient(145deg,rgba(49,40,70,.9),rgba(22,17,36,.82)) !important;
+}
+
+body.mode-a #uiImmersivePanel .ui-imm-head,
+body.mode-a #uiImmersivePanel .ui-imm-relation,
+body.mode-a #uiImmersivePanel .ui-imm-stats,
+body.mode-a #uiImmersivePanel .ui-imm-chart-wrap,
+body.mode-a #uiImmersivePanel .ui-imm-data-grid,
+body.mode-a #uiImmersivePanel .ui-imm-insight,
+body.mode-a #uiImmersivePanel .ui-imm-quick { flex: 0 0 auto; }
+
+body.mode-a #uiImmersivePanel .ui-imm-relation { min-height: 108px; }
+body.mode-a #uiImmersivePanel .ui-imm-stats button { min-height: 76px; }
+body.mode-a #uiImmersivePanel .ui-imm-quick button { min-height: 44px; }
+
+/* The focus desk is a foreground workspace. Keep free-canvas items behind it,
+   even after a user has raised the dashboard while editing the layout. */
+body.mode-a.imm-desk-open #uiImmersiveDesk.is-open {
+  z-index: 920 !important;
+}
+body.mode-a.imm-desk-open #xumoHomeA .xfc-item[data-xfc-id="dashboard"] {
+  z-index: 8 !important;
+}
+
+@media (min-width:761px) {
+  body.mode-a #uiImmersiveDesk {
+    right: 18px !important;
+    left: auto !important;
+    width: min(390px,32vw) !important;
+    max-height: calc(100dvh - 96px - env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (min-width:761px) and (max-width:1020px) {
+  body.mode-a #uiImmersiveDesk {
+    right: 14px !important;
+    width: min(340px,42vw) !important;
+  }
+}
+
+/* Free-canvas wraps the complete dashboard instead of splitting its children. */
+body.mode-a #xumoHomeA .xfc-item[data-xfc-id="dashboard"] > #uiImmersivePanel {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+}
+
+body.mode-a #xumoHomeA .xfc-item[data-xfc-id="actions"] > .xa-actions {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  justify-content: center !important;
+}
+
+@media (min-width:761px) {
+  body.mode-a #uiImmersivePanel:not(.xfc-content) {
+    position: fixed;
+    z-index: 18;
+    top: 8vh;
+    bottom: 12vh;
+    left: 1.7vw;
+    width: 22vw;
+  }
+}
+
+@media (max-width:760px) {
+  body.mode-a #uiImmersivePanel {
+    position: fixed !important;
+    z-index: 18 !important;
+    top: calc(54px + env(safe-area-inset-top)) !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: 12px !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: 236px !important;
+    gap: 8px;
+    padding: 0 4px 0 0;
+    border-radius: 0;
+    overflow: hidden;
+  }
+  body.mode-a #uiImmersivePanel .ui-imm-head { align-items: center; }
+  body.mode-a #uiImmersivePanel .ui-imm-kicker,
+  body.mode-a #uiImmersivePanel .ui-imm-head h2,
+  body.mode-a #uiImmersivePanel .ui-imm-clock span,
+  body.mode-a #uiImmersivePanel .ui-imm-insight,
+  body.mode-a #uiImmersivePanel .ui-imm-quick { display: none !important; }
+  body.mode-a #uiImmersivePanel .ui-imm-head-actions { width: 100%; align-items: center; justify-content: space-between; }
+  body.mode-a #uiImmersivePanel .ui-imm-clock { order: -1; text-align: left; }
+  body.mode-a #uiImmersivePanel .ui-imm-relation {
+    min-height: 74px;
+    grid-template-columns: 66px minmax(0,1fr);
+    padding: 6px 10px;
+  }
+  body.mode-a #uiImmersivePanel .ui-imm-ring { width: 62px; height: 62px; }
+  body.mode-a #uiImmersivePanel .ui-imm-ring strong { font-size: 17px; }
+  body.mode-a #uiImmersivePanel .ui-imm-relation-copy > span,
+  body.mode-a #uiImmersivePanel .ui-imm-relation-copy > small,
+  body.mode-a #uiImmersivePanel .ui-imm-scene { display: none; }
+  body.mode-a #uiImmersivePanel .ui-imm-relation-copy > strong { margin: 0; font-size: 13px; }
+  body.mode-a #uiImmersivePanel .ui-imm-stats { gap: 6px; }
+  body.mode-a #uiImmersivePanel .ui-imm-stats button { min-height: 58px; padding: 7px; }
+  body.mode-a #uiImmersivePanel .ui-imm-stats button > span { font-size: 10px; }
+  body.mode-a #uiImmersivePanel .ui-imm-stats strong { margin-top: 5px; font-size: 15px; }
+  body.mode-a #xumoHomeA .xa-char {
+    top: auto !important;
+    bottom: calc(72px + env(safe-area-inset-bottom)) !important;
+    left: 50% !important;
+    height: min(47dvh,370px) !important;
+    max-height: 370px !important;
+  }
+  body.mode-a #xumoHomeA .xa-actions {
+    position: fixed !important;
+    z-index: 20 !important;
+    top: auto !important;
+    right: 10px !important;
+    bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+    left: 10px !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit,minmax(48px,1fr)) !important;
+    gap: 8px !important;
+    padding: 0 !important;
+  }
+  body.mode-a #xumoHomeA .xa-actions button {
+    width: 100% !important;
+    height: 68px !important;
+    min-width: 0 !important;
+    min-height: 68px !important;
+    padding: 5px 2px !important;
+  }
+  body.mode-a #xumoHomeA .xa-actions button i { font-size: 28px !important; }
+  body.mode-a #xumoHomeA .xa-actions button svg { width: 26px !important; height: 26px !important; }
+  body.mode-a #xumoHomeA .xa-actions button span {
+    display: block !important;
+    font-size: 10px !important;
+  }
+}
+
+@media (max-width:760px) and (max-height:680px) {
+  body.mode-a #uiImmersivePanel { max-height: 210px !important; }
+  body.mode-a #uiImmersivePanel .ui-imm-stats button > span { font-size: 0; }
+  body.mode-a #xumoHomeA .xa-char { height: 40dvh !important; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  body.mode-a #uiImmersivePanel *,
+  body.mode-a #xumoHomeA .xa-actions * { animation: none !important; transition-duration: .01ms !important; }
+}

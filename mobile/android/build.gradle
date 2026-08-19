@@ -1,0 +1,40 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath 'com.google.gms:google-services:4.4.0'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// The installed SDK provides Build Tools 35/36. Capacitor 6 defaults library
+// modules to 34, so keep every Android module on the available toolchain.
+subprojects {
+    afterEvaluate { subproject ->
+        if (subproject.plugins.hasPlugin('com.android.application') ||
+            subproject.plugins.hasPlugin('com.android.library')) {
+            subproject.android.buildToolsVersion = "36.0.0"
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

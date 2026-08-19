@@ -229,6 +229,7 @@ world_npcs.json
 world_places.json
 world_pulse.json
 xumo_avatar.json
+xumo_charimg.json
 xumo_diary.json
 
 # ===== Additional runtime data =====

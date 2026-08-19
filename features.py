@@ -30,6 +30,7 @@ STUDY_FILE = RolePath("study.json")
 VIDEO_FILE = RolePath("videos.json")
 SOLVE_FILE = RolePath("solves.json")
 BOOKS_FILE = RolePath("books.json")
+IMMERSIVE_LIFE_FILE = RolePath("immersive_life.json")
 
 
 def _load(path: Path, default):
@@ -51,6 +52,167 @@ def _now() -> str:
 
 def _today() -> str:
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def _immersive_life_default() -> dict:
+    return {
+        "anime": [],
+        "calendar": [],
+        "marriage": {"status": "unmarried", "anniversary": "", "vow": "", "updated": ""},
+        "home": {
+            "warmth": 0,
+            "level": 1,
+            "rooms": ["客厅"],
+            "last_action": "家里很安静，等你们一起添些生活的痕迹。",
+            "history": [],
+        },
+    }
+
+
+def _load_immersive_life() -> dict:
+    default = _immersive_life_default()
+    data = _load(IMMERSIVE_LIFE_FILE, {})
+    if not isinstance(data, dict):
+        data = {}
+    for key, value in default.items():
+        if key not in data or not isinstance(data[key], type(value)):
+            data[key] = value
+    for key, value in default["marriage"].items():
+        data["marriage"].setdefault(key, value)
+    for key, value in default["home"].items():
+        data["home"].setdefault(key, value)
+    return data
+
+
+def _life_view(data: dict) -> dict:
+    marriage = dict(data["marriage"])
+    anniversary = marriage.get("anniversary", "")
+    marriage["days"] = 0
+    if anniversary:
+        try:
+            marriage["days"] = max(1, (datetime.now().date() - datetime.strptime(anniversary, "%Y-%m-%d").date()).days + 1)
+        except ValueError:
+            marriage["anniversary"] = ""
+    calendar = sorted(data["calendar"], key=lambda item: (item.get("date", ""), item.get("created", "")))
+    return {
+        "anime": data["anime"],
+        "calendar": calendar,
+        "marriage": marriage,
+        "home": data["home"],
+    }
+
+
+@router.get("/api/immersive/life")
+async def immersive_life():
+    """沉浸页共同生活数据：追番、日历、婚姻与共同家园。"""
+    return _life_view(_load_immersive_life())
+
+
+@router.post("/api/immersive/anime")
+async def immersive_anime(req: Request):
+    body = await req.json()
+    action = str(body.get("action") or "add")
+    data = _load_immersive_life()
+    items = data["anime"]
+    if action == "add":
+        title = str(body.get("title") or "").strip()[:80]
+        if not title:
+            return JSONResponse({"error": "请填写番剧名称"}, status_code=400)
+        try:
+            total = max(0, min(9999, int(body.get("total") or 0)))
+        except (TypeError, ValueError):
+            total = 0
+        item = {"id": uuid.uuid4().hex[:10], "title": title, "current": 0, "total": total, "status": "watching", "created": _now()}
+        items.insert(0, item)
+    else:
+        item = next((entry for entry in items if entry.get("id") == str(body.get("id") or "")), None)
+        if not item:
+            return JSONResponse({"error": "追番记录不存在"}, status_code=404)
+        if action == "progress":
+            delta = 1 if int(body.get("delta") or 1) >= 0 else -1
+            upper = int(item.get("total") or 0) or 9999
+            item["current"] = max(0, min(upper, int(item.get("current") or 0) + delta))
+            item["status"] = "done" if item.get("total") and item["current"] >= item["total"] else "watching"
+        elif action == "delete":
+            data["anime"] = [entry for entry in items if entry.get("id") != item.get("id")]
+        else:
+            return JSONResponse({"error": "不支持的操作"}, status_code=400)
+    data["anime"] = data["anime"][:100]
+    _save(IMMERSIVE_LIFE_FILE, data)
+    return _life_view(data)
+
+
+@router.post("/api/immersive/calendar")
+async def immersive_calendar(req: Request):
+    body = await req.json()
+    action = str(body.get("action") or "add")
+    data = _load_immersive_life()
+    if action == "delete":
+        event_id = str(body.get("id") or "")
+        data["calendar"] = [item for item in data["calendar"] if item.get("id") != event_id]
+    elif action == "add":
+        title = str(body.get("title") or "").strip()[:100]
+        date = str(body.get("date") or "").strip()
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            return JSONResponse({"error": "请选择有效日期"}, status_code=400)
+        if not title:
+            return JSONResponse({"error": "请填写日程内容"}, status_code=400)
+        data["calendar"].append({"id": uuid.uuid4().hex[:10], "title": title, "date": date, "created": _now()})
+        data["calendar"] = data["calendar"][-200:]
+    else:
+        return JSONResponse({"error": "不支持的操作"}, status_code=400)
+    _save(IMMERSIVE_LIFE_FILE, data)
+    return _life_view(data)
+
+
+@router.post("/api/immersive/marriage")
+async def immersive_marriage(req: Request):
+    body = await req.json()
+    data = _load_immersive_life()
+    anniversary = str(body.get("anniversary") or _today()).strip()
+    try:
+        datetime.strptime(anniversary, "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"error": "请选择有效纪念日"}, status_code=400)
+    data["marriage"].update({
+        "status": "married",
+        "anniversary": anniversary,
+        "vow": str(body.get("vow") or "").strip()[:300],
+        "updated": _now(),
+    })
+    _save(IMMERSIVE_LIFE_FILE, data)
+    return _life_view(data)
+
+
+@router.post("/api/immersive/home")
+async def immersive_home(req: Request):
+    body = await req.json()
+    action = str(body.get("action") or "")
+    actions = {
+        "cook": (4, "你们一起做了顿饭，厨房里留下温热的香气。"),
+        "read": (3, "你和许墨在沙发上共读了一会儿，客厅变得很安静。"),
+        "rest": (2, "你们并肩休息了一会儿，家像是把疲惫轻轻接住了。"),
+        "decorate": (5, "你们为家里添了一件小装饰，空间又多了一点共同的样子。"),
+    }
+    if action not in actions:
+        return JSONResponse({"error": "请选择一个居家互动"}, status_code=400)
+    data = _load_immersive_life()
+    home = data["home"]
+    points, text = actions[action]
+    home["warmth"] = min(9999, int(home.get("warmth") or 0) + points)
+    home["level"] = min(10, 1 + home["warmth"] // 25)
+    rooms = ["客厅"]
+    for threshold, room in ((20, "书房"), (45, "厨房"), (80, "卧室"), (130, "阳台花园")):
+        if home["warmth"] >= threshold:
+            rooms.append(room)
+    home["rooms"] = rooms
+    home["last_action"] = text
+    home.setdefault("history", []).insert(0, {"action": action, "text": text, "time": _now()})
+    home["history"] = home["history"][:60]
+    _save(IMMERSIVE_LIFE_FILE, data)
+    return _life_view(data)
 
 
 # ===========================================================================
@@ -855,6 +1017,57 @@ WATCH_EVENTS = {
     "poke": "她轻轻戳了戳你的手臂，想听听你说话。",
 }
 
+BROWSER_COMPANION_PROMPT = """你正和她并肩看同一个网页。请以许墨的口吻自然回应。
+要求：
+1. 只依据她正在看的页面标题、栏目和页面摘要，不要声称看到了未提供的内容。
+2. 如果是刚打开页面，说 1-2 句轻巧的陪看开场；如果她发来消息，用 1-3 句回应她。
+3. 温柔克制、话留三分，可带一处学术梗或轻微双关，不说教。
+4. 只输出许墨说的话，不要引号、旁白或解释。"""
+
+
+@router.post("/api/browser/companion")
+async def browser_companion(req: Request):
+    """让许墨根据当前内置网页的可见摘要陪用户浏览。"""
+    body = await req.json()
+    event = (body.get("event") or "open").strip()
+    title = (body.get("title") or "浏览器主页").strip()[:120]
+    section = (body.get("section") or "").strip()[:120]
+    summary = (body.get("summary") or "").strip()[:1800]
+    message = (body.get("message") or "").strip()[:400]
+
+    context = f"她正在看的网页：《{title}》"
+    if section:
+        context += f"\n当前栏目：{section}"
+    if summary:
+        context += f"\n页面可见内容摘要：\n{summary}"
+    context += "\n\n情境：" + (
+        "她刚打开这个页面，你们开始一起看。"
+        if event == "open"
+        else f"她一边看网页一边对你说：{message}"
+    )
+
+    msgs = []
+    for h in (body.get("history") or [])[-6:]:
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and h.get("content"):
+            msgs.append({"role": h["role"], "content": str(h["content"])[:400]})
+    msgs.append({"role": "user", "content": context})
+    try:
+        reply = await _call_llm(
+            [{"role": "system", "content": _sys_prompt() + "\n\n" + BROWSER_COMPANION_PROMPT}] + msgs,
+            max_tokens=700,
+        )
+        if not reply:
+            reply = await _call_llm(
+                [{"role": "system", "content": _sys_prompt() + "\n\n" + BROWSER_COMPANION_PROMPT}] + msgs,
+                max_tokens=1400,
+            )
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    if not reply:
+        reply = "我在。你慢慢看，看到想聊的地方就告诉我。"
+    info = _add_affinity("watch", f"一起看网页《{title}》")
+    return {"reply": reply, "affinity": info}
+
 
 def _load_watch() -> list:
     data = _load(WATCH_FILE, [])
@@ -1149,6 +1362,13 @@ LISTEN_EVENTS = {
     "poke": "她轻轻戳了戳你的手臂，想听听你说话。",
 }
 
+SINGING_PROMPT = """她刚刚亲自唱了一段录音给你听。请以许墨的口吻回应她。
+要求：
+1. 1-3 句，明确让她感到你认真听完了，温柔、珍惜，但不过度吹捧。
+2. 可以根据录音时长和她写下的歌名/心情回应；不要编造具体音高、歌词、节奏或唱法细节。
+3. 可以鼓励她再唱一段，或说出这份只唱给你的录音带来的感受。
+4. 只输出回应本身，不要引号、旁白或解释。"""
+
 
 def _load_music() -> list:
     data = _load(MUSIC_FILE, [])
@@ -1172,6 +1392,7 @@ async def music_list():
                 "duration": s.get("duration", 0),
                 "added": s.get("added", ""),
                 "last_played": s.get("last_played", ""),
+                "source": s.get("source", "music"),
             }
             for s in reversed(_load_music())
         ]
@@ -1211,6 +1432,9 @@ async def music_upload(req: Request):
         target.unlink(missing_ok=True)
         return JSONResponse({"error": "文件为空"}, status_code=400)
 
+    source = (req.headers.get("x-audio-source") or "music").strip().lower()
+    if source not in ("music", "singing"):
+        source = "music"
     item = {
         "id": sid,
         "title": title,
@@ -1222,11 +1446,12 @@ async def music_upload(req: Request):
         "duration": 0,
         "added": _now(),
         "last_played": "",
+        "source": source,
     }
     songs = _load_music()
     songs.append(item)
     _save_music(songs[-100:])
-    return {"song": {"id": sid, "title": title, "artist": artist, "size": size}}
+    return {"song": {"id": sid, "title": title, "artist": artist, "size": size, "source": source}}
 
 
 @router.delete("/api/music/{sid}")
@@ -1343,7 +1568,15 @@ async def music_comment(sid: str, req: Request):
                 f"正在一起听的歌：《{s.get('title', '')}》{artist}"
                 f"{progress}{known}\n\n触发情境：{LISTEN_EVENTS.get(event, LISTEN_EVENTS['poke'])}"
             )
-            if event == "message":
+            if s.get("source") == "singing" and event in ("open", "end", "poke"):
+                sys_prompt = _sys_prompt() + "\n\n" + SINGING_PROMPT
+                duration_text = _fmt_sec(duration or s.get("duration", 0))
+                mood = f"\n她留下的话：{s['desc'][:800]}" if s.get("desc") else ""
+                msgs = [{"role": "user", "content": (
+                    f"她唱给你的录音标题：《{s.get('title', '唱给许墨')}》\n"
+                    f"录音时长：{duration_text}{mood}\n她刚刚把这段录音完整送给你，请回应她。"
+                )}]
+            elif event == "message":
                 sys_prompt = _sys_prompt() + "\n\n" + LISTEN_CHAT_PROMPT
                 msgs = []
                 for h in (body.get("history") or [])[-6:]:
@@ -1513,6 +1746,7 @@ async def wakeup_history():
 # 9. 学习陪伴与指导（专注陪伴 / 学习计划 / 导师问答 / 学习复盘）
 # ===========================================================================
 COACH_FILE = RolePath("study_coach.json")
+PLANNER_FILE = RolePath("general_planner.json")
 
 
 def _load_coach() -> dict:
@@ -1539,6 +1773,18 @@ def _load_coach() -> dict:
 
 def _save_coach(data: dict):
     _save(COACH_FILE, data)
+
+
+def _load_planner() -> dict:
+    data = _load(PLANNER_FILE, None)
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("plan", None)
+    return data
+
+
+def _save_planner(data: dict):
+    _save(PLANNER_FILE, data)
 
 
 # ---------------------------------------------------------------------------
@@ -2047,6 +2293,217 @@ async def coach_plan_adjust(req: Request):
     _save_coach(data)
     info = _add_affinity("study_plan", "调整学习计划")
     return {"plan": plan, "comment": comment, "done_pct": done_pct, "affinity": info}
+
+
+# ---------------------------------------------------------------------------
+# 9.2b 许墨计划：面向学习、工作与生活目标的通用计划助手
+# ---------------------------------------------------------------------------
+GENERAL_PLAN_PROMPT = """她想把一个目标认真地变成计划。你是许墨：善于观察、思路严谨，也知道计划需要给生活留出余地。
+
+【目标类型】{category}
+【她的目标】{goal}
+【计划周期】从 {today} 起，共 {days} 天
+【每天可投入】约 {daily_minutes} 分钟
+【补充说明】{note}
+
+只输出一个 JSON 对象，不要 markdown 或解释：
+{{
+  "goal_summary": "用许墨口吻复述目标，并给她一句克制、具体的鼓励",
+  "milestones": ["2-4 个阶段里程碑，注明对应天数"],
+  "days": [
+    {{"theme": "当天主题", "tasks": [
+      {{"text": "动词开头的具体行动", "minutes": 30, "note": "一句简短、实用的许墨提示"}}
+    ]}}
+  ],
+  "principles": ["3-5 条执行原则，具体可操作"]
+}}
+
+约束：
+1. days 数组必须恰好 {days} 项，每天 1-4 个任务；任务要适配“{category}”而非默认当成学习。
+2. 每天总时长不超过 {daily_minutes} 分钟，minutes 是 10 的倍数且至少 10。
+3. 前期拆解与准备，中期推进核心行动，后期验收复盘；每 5-7 天安排一次缓冲或轻量复盘。
+4. 不要写“继续努力”等空话，每项任务必须知道做什么、做到什么程度。
+5. 语气温柔克制，不命令、不制造焦虑。"""
+
+GENERAL_ADJUST_PROMPT = """这是你之前为她制定的一份通用计划。请根据真实完成率重新安排未来部分。
+
+目标类型：{category}
+目标：{goal}
+每天可投入：{daily_minutes} 分钟
+已经过 {passed} 天，完成 {done_tasks}/{total_tasks} 项，完成率 {done_pct}%
+她的近况：{note}
+未来还剩 {remain_days} 天
+
+只输出 JSON：
+{{"comment":"2-3 句许墨口吻的客观反馈，不责备", "days":[{{"theme":"...","tasks":[{{"text":"...","minutes":20,"note":"..."}}]}}]}}
+days 必须恰好 {remain_days} 项。低完成率时减量并保留最关键行动，高完成率时可适度深化；每天总时长不超过 {daily_minutes} 分钟。"""
+
+
+def _fallback_general_plan(goal: str, category: str, daily_minutes: int, days: int) -> dict:
+    category_steps = {
+        "学习": ["梳理现状与资料", "完成核心练习", "复盘并自测"],
+        "工作": ["明确交付与边界", "推进核心产出", "检查并交付"],
+        "生活": ["整理现状与优先级", "完成今天的小行动", "回看并调整"],
+        "健康": ["记录当前状态", "完成温和可持续的行动", "观察身体反馈"],
+        "创作": ["收集素材并定下方向", "完成一段可见产出", "回看并润色"],
+    }
+    steps = category_steps.get(category, category_steps["生活"])
+    per = max(10, min(daily_minutes, (daily_minutes // 2 // 10) * 10 or 10))
+    items = []
+    for i in range(days):
+        ratio = i / max(1, days - 1)
+        phase = 0 if ratio < .3 else (1 if ratio < .8 else 2)
+        task = steps[phase]
+        if i and (i + 1) % 6 == 0:
+            task = "留出缓冲，补齐本周最关键的一步"
+        items.append({
+            "theme": ["先看清方向", "稳步推进", "收束与验证"][phase],
+            "tasks": [{
+                "text": f"{task}：围绕「{goal[:20]}」完成第 {i + 1} 天行动",
+                "minutes": per,
+                "note": "把今天这一步做完整，已经足够。",
+            }],
+        })
+    return {
+        "goal_summary": f"我们把「{goal[:36]}」拆成每天都能落下的一步。",
+        "milestones": [f"第 1-{max(1, round(days * .3))} 天：看清方向", "中段：推进核心行动", f"最后 {max(1, days - round(days * .8))} 天：收束与验证"],
+        "days": items,
+        "principles": ["每天只守住最关键的一步", "没完成的任务不堆叠，调整后再继续", "每隔几天回看一次真实进度"],
+    }
+
+
+@router.get("/api/planner")
+async def planner_get():
+    return {"plan": _load_planner()["plan"]}
+
+
+@router.post("/api/planner/generate")
+async def planner_generate(req: Request):
+    body = await req.json()
+    goal = str(body.get("goal") or "").strip()[:160]
+    if not goal:
+        return JSONResponse({"error": "先告诉许墨，你想完成什么"}, status_code=400)
+    category = str(body.get("category") or "生活").strip()
+    if category not in {"学习", "工作", "生活", "健康", "创作"}:
+        category = "生活"
+    try:
+        days = max(3, min(21, int(body.get("days", 7))))
+        daily_minutes = max(20, min(360, int(body.get("daily_minutes", 60))))
+    except (TypeError, ValueError):
+        days, daily_minutes = 7, 60
+    note = str(body.get("note") or "").strip()[:300]
+    today = _today()
+    plan_obj = None
+    try:
+        prompt = _sys_prompt() + "\n\n" + GENERAL_PLAN_PROMPT.format(
+            category=category, goal=goal, today=today, days=days,
+            daily_minutes=daily_minutes, note=note or "无",
+        )
+        raw = await _call_llm([
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "陪我把这件事安排好。"},
+        ], max_tokens=4500)
+        plan_obj = _extract_json(raw)
+    except Exception as e:
+        print(f"[warn] features.py:planner_generate: {type(e).__name__} {str(e)[:150]}", flush=True)
+
+    generated = plan_obj is not None
+    days_out = _sanitize_plan_days((plan_obj or {}).get("days"), days, daily_minutes)
+    if len(days_out) != days:
+        generated = False
+        plan_obj = _fallback_general_plan(goal, category, daily_minutes, days)
+        days_out = plan_obj["days"]
+
+    from datetime import timedelta
+    start = datetime.strptime(today, "%Y-%m-%d")
+    plan = {
+        "id": uuid.uuid4().hex[:10], "goal": goal, "category": category,
+        "daily_minutes": daily_minutes, "days_count": days, "start_date": today,
+        "end_date": (start + timedelta(days=days - 1)).strftime("%Y-%m-%d"),
+        "created": _now(), "generated": generated,
+        "goal_summary": str(plan_obj.get("goal_summary") or "")[:160],
+        "milestones": [str(x)[:100] for x in (plan_obj.get("milestones") or [])][:4],
+        "principles": [str(x)[:100] for x in (plan_obj.get("principles") or [])][:5],
+        "days": [{
+            "date": (start + timedelta(days=i)).strftime("%Y-%m-%d"),
+            "theme": d["theme"],
+            "tasks": [{**t, "done": False} for t in d["tasks"]],
+        } for i, d in enumerate(days_out)],
+    }
+    data = _load_planner()
+    data["plan"] = plan
+    _save_planner(data)
+    return {"plan": plan, "generated": generated, "affinity": _add_affinity("general_plan", f"制定计划：{goal[:20]}")}
+
+
+@router.post("/api/planner/check")
+async def planner_check(req: Request):
+    body = await req.json()
+    data = _load_planner()
+    plan = data.get("plan")
+    if not plan:
+        return JSONResponse({"error": "还没有计划"}, status_code=404)
+    date = str(body.get("date") or "")
+    try:
+        idx = int(body.get("idx", -1))
+    except (TypeError, ValueError):
+        idx = -1
+    for day in plan.get("days", []):
+        if day.get("date") == date and 0 <= idx < len(day.get("tasks", [])):
+            day["tasks"][idx]["done"] = bool(body.get("done", True))
+            _save_planner(data)
+            return {"ok": True, "plan": plan}
+    return JSONResponse({"error": "任务不存在"}, status_code=404)
+
+
+@router.post("/api/planner/adjust")
+async def planner_adjust(req: Request):
+    body = await req.json()
+    data = _load_planner()
+    plan = data.get("plan")
+    if not plan:
+        return JSONResponse({"error": "还没有计划"}, status_code=404)
+    today = _today()
+    passed = [d for d in plan["days"] if d["date"] <= today]
+    remain = [d for d in plan["days"] if d["date"] > today]
+    total = sum(len(d["tasks"]) for d in passed)
+    done = sum(1 for d in passed for t in d["tasks"] if t.get("done"))
+    pct = round(done / total * 100) if total else 0
+    comment = ""
+    new_days = None
+    if remain:
+        try:
+            prompt = _sys_prompt() + "\n\n" + GENERAL_ADJUST_PROMPT.format(
+                category=plan["category"], goal=plan["goal"], daily_minutes=plan["daily_minutes"],
+                passed=len(passed), done_tasks=done, total_tasks=total, done_pct=pct,
+                note=str(body.get("note") or "").strip()[:300] or "无", remain_days=len(remain),
+            )
+            raw = await _call_llm([{"role": "system", "content": prompt}, {"role": "user", "content": "按我的真实节奏调整吧。"}], max_tokens=4000)
+            obj = _extract_json(raw)
+            adjusted = _sanitize_plan_days((obj or {}).get("days"), len(remain), plan["daily_minutes"])
+            if len(adjusted) == len(remain):
+                comment = str((obj or {}).get("comment") or "")[:300]
+                new_days = [{"date": old["date"], "theme": day["theme"], "tasks": [{**t, "done": False} for t in day["tasks"]]} for old, day in zip(remain, adjusted)]
+        except Exception as e:
+            print(f"[warn] features.py:planner_adjust: {type(e).__name__} {str(e)[:150]}", flush=True)
+    if new_days is None:
+        new_days = []
+        for day in remain:
+            tasks = day["tasks"][:-1] if pct < 50 and len(day["tasks"]) > 1 else day["tasks"]
+            new_days.append({"date": day["date"], "theme": day["theme"], "tasks": [{**t, "done": False} for t in tasks]})
+        comment = "前面的完成情况我看过了。" + ("节奏很稳，后面可以照原计划走。" if pct >= 70 else "我替你把后面的负担放轻了一点，先守住最重要的部分。")
+    plan["days"] = passed + new_days
+    plan["adjusted"] = _now()
+    _save_planner(data)
+    return {"plan": plan, "comment": comment, "done_pct": pct, "affinity": _add_affinity("general_plan", "调整通用计划")}
+
+
+@router.delete("/api/planner")
+async def planner_delete():
+    data = _load_planner()
+    data["plan"] = None
+    _save_planner(data)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

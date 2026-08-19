@@ -64,6 +64,7 @@
     'body.mode-a .chat-panel{display:none!important}',
     'body.mode-a .xa-dash{right:4vw;left:auto;transform:none;width:min(520px,42vw);max-height:78vh;overflow:auto;scrollbar-width:thin}',
     '#xaEditBar button{min-height:44px}',
+    '#xaEditBar [data-xa="auto-arrange"]{background:linear-gradient(135deg,rgba(139,92,246,.72),rgba(217,70,239,.58))}',
     '#xumoHomeA .xa-widget:focus-visible,#xaEditBar button:focus-visible{outline:3px solid rgba(255,255,255,.9);outline-offset:3px}',
     '@media(max-width:1020px){body.mode-a .xa-dash{top:calc(62px + env(safe-area-inset-top));right:auto;left:50%;transform:translateX(-50%);width:min(94vw,520px);max-height:calc(100vh - 150px);padding-bottom:calc(18px + env(safe-area-inset-bottom))}}',
     '@media(prefers-reduced-motion:reduce){body.mode-a .xa-dash *,#xaEditBar *{animation:none!important;transition:none!important}}'
@@ -162,8 +163,10 @@
   /* ── DOM: 编辑栏 ── */
   var bar = document.createElement('div');
   bar.id = 'xaEditBar';
+  bar.setAttribute('aria-label', '沉浸布局编辑工具');
   bar.innerHTML = '<button type="button" data-xa="add-app">+ 应用</button>' +
     '<button type="button" data-xa="add-text">+ 文本</button>' +
+    '<button type="button" data-xa="auto-arrange" title="按当前屏幕自动整理沉浸组件">自动排列</button>' +
     '<button type="button" data-xa="reset-layout">重置布局</button>' +
     '<button type="button" data-xa="close-edit" style="background:rgba(244,63,94,.25)">完成</button>';
   document.body.appendChild(bar);
@@ -210,6 +213,8 @@
       var ti = document.getElementById('xaTextInput');
       if(ti) ti.focus();
       panel.classList.add('open');
+    } else if(act === 'auto-arrange'){
+      autoArrange();
     } else if(act === 'reset-layout'){
       var m = curMode();
       ls('xumo_layout_'+m, null);
@@ -241,6 +246,80 @@
     ti.value = '';
     panel.classList.remove('open');
   });
+
+  function clearManualPosition(el){
+    ['position','left','top','right','bottom','margin','zIndex'].forEach(function(prop){ el.style[prop] = ''; });
+    el.classList.remove('xa-moved', 'xa-dragging');
+  }
+
+  /* ── 自动排列：恢复原生响应式布局，自定义组件填充剩余安全区域 ── */
+  function autoArrange(){
+    if(curMode() !== 'a') return;
+    var home = homeEl();
+    if(!home) return;
+
+    home.querySelectorAll('.xa-char, .xa-card, .xa-actions, .xa-draggable').forEach(clearManualPosition);
+    var widgets = Array.prototype.slice.call(home.querySelectorAll('.xa-widget'));
+    widgets.forEach(clearManualPosition);
+    panel.classList.remove('open');
+
+    if(widgets.length){
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var gap = 8;
+      var left = 12;
+      var right = vw - 12;
+      var top = 72;
+      var bottom = vh - 16;
+      var dashboard = document.getElementById('uiImmersivePanel');
+      var actions = home.querySelector('.xa-actions');
+      var dashboardRect = dashboard && dashboard.offsetParent !== null ? dashboard.getBoundingClientRect() : null;
+      var actionsRect = actions && actions.offsetParent !== null ? actions.getBoundingClientRect() : null;
+
+      if(vw <= 760){
+        top = Math.max(dashboardRect ? dashboardRect.bottom + 12 : 260, actionsRect ? actionsRect.bottom + 12 : 0);
+      } else {
+        left = Math.max(dashboardRect ? dashboardRect.right + 16 : 320, Math.round(vw * .69));
+        right = vw - 20;
+        if(actionsRect) bottom = Math.min(bottom, actionsRect.top - 12);
+      }
+
+      if(bottom - top < 72){
+        top = Math.max(64, Math.min(top, vh - 88));
+        bottom = vh - 12;
+      }
+
+      var availableWidth = Math.max(88, right - left);
+      var availableHeight = Math.max(68, bottom - top);
+      var maxRows = Math.max(1, Math.floor((availableHeight + gap) / 82));
+      var columns = Math.max(1, Math.ceil(widgets.length / maxRows));
+      var maxColumns = Math.max(1, Math.floor((availableWidth + gap) / 88));
+      columns = Math.min(columns, maxColumns);
+      var rows = Math.ceil(widgets.length / columns);
+      var cellWidth = (availableWidth - gap * (columns - 1)) / columns;
+      var cellHeight = Math.min(92, Math.max(68, (availableHeight - gap * (rows - 1)) / rows));
+
+      widgets.forEach(function(el, index){
+        el.style.position = 'fixed';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+        el.style.margin = '0';
+        el.style.zIndex = '4';
+        var row = Math.floor(index / columns);
+        var column = index % columns;
+        var width = el.getBoundingClientRect().width || 88;
+        var x = left + column * (cellWidth + gap) + Math.max(0, (cellWidth - width) / 2);
+        var y = top + row * (cellHeight + gap);
+        el.style.left = Math.round(Math.min(right - Math.min(width, availableWidth), x)) + 'px';
+        el.style.top = Math.round(Math.min(vh - 60, y)) + 'px';
+        el.classList.add('xa-moved');
+      });
+    }
+
+    saveLayout();
+    if(window.showToast) window.showToast(widgets.length ? '沉浸组件已自动排列' : '沉浸布局已恢复最佳位置');
+  }
+  window.xaAutoArrange = autoArrange;
 
   /* ── 添加组件到当前模式容器 ── */
   function addWidget(type, data){

@@ -749,20 +749,58 @@ async def _run_extension_test(ext: Dict, user_input: str):
     etype = ext.get("type")
     try:
         if etype == "prompt_template":
-            injection = build_prompt_injection(user_input)
+            cfg = ext.get("config") or {}
+            trigger = cfg.get("trigger", "always")
+            pattern = cfg.get("trigger_pattern", "")
+            matched = _trigger_match(trigger, pattern, user_input)
+            content = (cfg.get("content") or "").strip()
+            position = (cfg.get("inject_position") or "system_suffix").strip()
+            injection = ""
+            if matched and content:
+                marker = f"[扩展·{ext.get('name', '未命名')}]"
+                injection = f"{marker}\n{content}"
             return {
                 "ok": True,
                 "type": "prompt_template",
+                "triggered": matched,
                 "injection": injection,
-                "note": "以下是会注入到 SYSTEM_PROMPT 的内容（已合并所有启用的同类扩展）",
+                "trace": [
+                    {
+                        "step": "触发条件",
+                        "trigger": trigger,
+                        "pattern": pattern,
+                        "matched": matched,
+                    },
+                    {
+                        "step": "提示词注入",
+                        "position": position,
+                        "content_length": len(content) if matched else 0,
+                    },
+                ],
+                "note": "这是当前扩展草稿单独运行的结果，不包含其他已启用扩展。",
             }
         if etype == "tool_chain":
             # 测试时无视 enabled 状态
             result = await run_tool_chain_async(ext, user_input)
-            return {"ok": True, "type": "tool_chain", "result": result, "user_input": user_input}
+            cfg = ext.get("config") or {}
+            matched = _trigger_match(cfg.get("trigger", "always"), cfg.get("trigger_pattern", ""), user_input)
+            return {
+                "ok": True,
+                "type": "tool_chain",
+                "triggered": matched,
+                "result": result,
+                "user_input": user_input,
+                "trace": [{"step": "触发条件", "matched": matched}, {"step": "工具链", "tool_count": len(cfg.get("tools") or [])}],
+            }
         if etype == "workflow":
             result = await _run_workflow(ext, user_input)
-            return {"ok": True, "type": "workflow", "result": result, "user_input": user_input}
+            return {
+                "ok": True,
+                "type": "workflow",
+                "result": result,
+                "user_input": user_input,
+                "trace": result.get("trace", []) if isinstance(result, dict) else [],
+            }
         return JSONResponse({"error": f"未知扩展类型：{etype}"}, status_code=400)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)

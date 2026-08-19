@@ -86,7 +86,10 @@ async def _call_llm(messages: list, max_tokens: int = None) -> str:
 
 async def _llm_json(messages: list, max_tokens: int = 1400) -> dict:
     """调用 LLM 并解析 JSON；失败时带更严格指令重试一次。"""
-    text = await _call_llm(messages, max_tokens=max_tokens)
+    try:
+        text = await _call_llm(messages, max_tokens=max_tokens)
+    except Exception:
+        text = ""
     obj = _extract_json_object(text)
     if obj:
         return obj
@@ -474,7 +477,7 @@ async def telepathy_start(req: Request = None):
         if not isinstance(q.get("options"), list) or len(q.get("options", [])) < 2:
             q["options"] = ["是的", "不是", "看情况", "不确定"]
         questions.append(q)
-    # 兜底：如果有效题目不足3条，用预设题目补齐
+    # 兜底：始终补足完整 5 题，模型临时不可用时也能继续玩。
     _FALLBACK_QUESTIONS = [
         {"q": "深夜失眠时，她会做什么？", "options": ["翻来覆去", "找许墨聊天", "看书", "听音乐"]},
         {"q": "她最怕哪种天气？", "options": ["暴雨天", "大雾天", "酷暑天", "寒冬天"]},
@@ -482,7 +485,7 @@ async def telepathy_start(req: Request = None):
         {"q": "她压力大时倾向于？", "options": ["独自消化", "找人说", "运动发泄", "吃甜食"]},
         {"q": "她觉得最浪漫的事是？", "options": ["一起看星星", "手牵手散步", "深夜长谈", "一起做饭"]},
     ]
-    while len(questions) < 3:
+    while len(questions) < 5:
         idx = len(questions)
         questions.append(dict(_FALLBACK_QUESTIONS[idx % len(_FALLBACK_QUESTIONS)]))
     round_obj = {
@@ -529,7 +532,7 @@ async def telepathy_guess(req: Request):
         f"她的档案：{json.dumps({k: str(v)[:40] for k, v in list(player.items())[:6]}, ensure_ascii=False)}\n"
         f"心动值：{affy}\n"
         f"题目和她的答案（0=A,1=B,2=C,3=D）：{json.dumps(q_a, ensure_ascii=False)}\n\n"
-        '输出 JSON：{"guesses":[0,1,2,3,4],"comment":"60字内许墨的点评（含偏爱情感）"}\n'
+        '输出 JSON：{"guesses":[0,1,2,3,0],"comment":"60字内许墨的点评（含偏爱情感）"}\n'
         "guesses 是你猜她选的选项序号(0-3)。"
     )
     messages = [
@@ -537,7 +540,16 @@ async def telepathy_guess(req: Request):
         {"role": "user", "content": "猜猜她选了什么，只输出 JSON。"}
     ]
     g_data = await _llm_json(messages, max_tokens=1000)
-    guesses = g_data.get("guesses", [0] * len(questions))
+    raw_guesses = g_data.get("guesses", [])
+    guesses = []
+    for i, q in enumerate(questions):
+        option_count = max(1, len(q.get("options", [])))
+        guess = raw_guesses[i] if i < len(raw_guesses) else 0
+        try:
+            guess = int(guess)
+        except (TypeError, ValueError):
+            guess = 0
+        guesses.append(guess if 0 <= guess < option_count else 0)
     # 计算实际匹配数
     matches = sum(1 for i in range(min(len(guesses), len(answers)))
                   if guesses[i] == answers[i])

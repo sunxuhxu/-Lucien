@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+.gradle/
+.gradle-user/
+.android-user/
+android/.gradle/
+android/app/build/
+android/build/
+*.jks
+*.keystore
+keystore.properties

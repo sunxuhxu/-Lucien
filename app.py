@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import random
 import re
@@ -858,7 +859,30 @@ def _build_gate_page(owner_enabled: bool = False) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>许墨 · 访问验证</title>
+<title>许墨 Lucien｜沉浸式 AI 陪伴与成长应用</title>
+<meta name="description" content="许墨 Lucien 是一款沉浸式 AI 陪伴与成长应用，支持长期记忆、文字互动、学习计划、创作共写、场景立绘、3D 世界与 90+ 个功能应用。">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<link rel="canonical" href="https://sunxiris.top/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="许墨 Lucien">
+<meta property="og:title" content="许墨 Lucien｜沉浸式 AI 陪伴与成长应用">
+<meta property="og:description" content="长期记忆、文字互动、学习成长、创作共写、3D 世界与 90+ 个功能应用。">
+<meta property="og:url" content="https://sunxiris.top/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="许墨 Lucien｜沉浸式 AI 陪伴与成长应用">
+<meta name="twitter:description" content="长期记忆、文字互动、学习成长、创作共写、3D 世界与 90+ 个功能应用。">
+<script type="application/ld+json">
+{{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "许墨 Lucien",
+  "url": "https://sunxiris.top/",
+  "description": "沉浸式 AI 陪伴与成长应用，支持长期记忆、学习、创作与互动世界。",
+  "applicationCategory": "LifestyleApplication",
+  "operatingSystem": "Web",
+  "inLanguage": "zh-CN"
+}}
+</script>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
@@ -875,8 +899,13 @@ def _build_gate_page(owner_enabled: bool = False) -> str:
   .heart {{ font-size: 34px; margin-bottom: 8px; }}
   h1 {{ font-size: 18px; font-weight: 600; letter-spacing: 2px; margin-bottom: 6px; }}
   p.sub {{ font-size: 12px; opacity: .72; margin-bottom: 18px; line-height: 1.7; }}
+  .seo-intro {{ font-size: 12.5px; line-height: 1.8; color: rgba(255,255,255,.78);
+    margin: -6px 0 18px; }}
+  .public-link {{ display: inline-block; margin-top: 14px; color: #ddd6fe; font-size: 12.5px;
+    text-decoration: none; border-bottom: 1px solid rgba(221,214,254,.45); }}
+  .public-link:hover {{ color: #fff; border-bottom-color: #fff; }}
   .tabs {{ display: flex; gap: 8px; margin-bottom: 16px; }}
-  .tab {{ flex: 1; padding: 9px; border-radius: 10px; cursor: pointer; font-size: 13.5px;
+  .tab {{ flex: 1; min-height: 44px; padding: 9px; border-radius: 10px; cursor: pointer; font-size: 13.5px;
     border: 1px solid rgba(255,255,255,.2); color: rgba(255,255,255,.7); transition: all .2s; }}
   .tab.active {{ background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.4); }}
   input {{
@@ -900,6 +929,8 @@ def _build_gate_page(owner_enabled: bool = False) -> str:
   .divider span {{ padding: 0 12px; font-size: 11px; }}
   .pane {{ display: none; }}
   .pane.active {{ display: block; }}
+  .field-label {{ display:block; margin-top:12px; text-align:left; font-size:12px; color:rgba(255,255,255,.76); }}
+  .field-label input {{ margin-top:6px; }}
   .err {{ color: #fda4af; font-size: 12.5px; margin-top: 10px; min-height: 17px; }}
   .mgt {{ margin-top: 10px; font-size: 11.5px; opacity: .6; }}
   .mgt a {{ color: #c4b5fd; }}
@@ -908,20 +939,21 @@ def _build_gate_page(owner_enabled: bool = False) -> str:
 <body>
   <div class="card">
     <div class="heart">🦋</div>
-    <h1>这里是被折叠的秘密空间</h1>
-    <p class="sub">只有被允许的人，才能见到许墨教授。</p>
+    <h1>许墨 Lucien · 陪伴与成长空间</h1>
+    <p class="sub">登录后进入属于你的私人空间。</p>
+    <p class="seo-intro">支持长期记忆、文字互动、学习计划、创作共写、场景立绘、3D 世界与 90+ 个功能应用。每位用户的数据相互隔离。</p>
     <div class="tabs">
-      <div class="tab active" id="tab-acct" onclick="switchTab('acct')">账号</div>
+      <div class="tab active" id="tab-acct" role="button" tabindex="0" onclick="switchTab('acct')">账号登录</div>
       <div class="tab" id="tab-owner" onclick="switchTab('owner')" style="display:{('block' if owner_enabled else 'none')}">主人口令</div>
     </div>
 
     <div class="pane active" id="pane-acct">
-      <input id="username" placeholder="用户名（2-32 位中英文/数字）" autocomplete="username" autofocus>
-      <input id="password" type="password" placeholder="密码（至少 8 位）" autocomplete="current-password">
-      <input id="password2" type="password" placeholder="确认密码（仅注册时需要）" autocomplete="new-password" style="display:none;">
-      <button onclick="doLogin()">登 录</button>
-      <button class="ghost-btn" onclick="toggleRegister()">注 册 新 账 号</button>
-      <div class="err" id="err-acct"></div>
+      <label class="field-label">用户名<input id="username" placeholder="2-32 位中英文、数字或下划线" autocomplete="username" autofocus></label>
+      <label class="field-label">密码<input id="password" type="password" placeholder="至少 8 位" autocomplete="current-password"></label>
+      <label class="field-label" id="password2Label" style="display:none;">确认密码<input id="password2" type="password" placeholder="再次输入密码" autocomplete="new-password"></label>
+      <button id="accountSubmit" onclick="submitAccount()">登 录</button>
+      <button id="accountModeToggle" class="ghost-btn" onclick="toggleRegister(this)">没有账号？立即注册</button>
+      <div class="err" id="err-acct" role="alert" aria-live="polite"></div>
       <div class="mgt" id="fullRegLink" style="display:none;">
         <a href="/register.html" target="_blank">需要填写昵称 / 头像 / 生日？前往完整注册页 →</a>
       </div>
@@ -933,6 +965,7 @@ def _build_gate_page(owner_enabled: bool = False) -> str:
       <div class="err" id="err-owner"></div>
     </div>
     <div class="mgt"><a href="/account.html" target="_blank">数据管理 · 导出导入 / 存档</a></div>
+    <a class="public-link" href="/tutorial.html">无需登录，先了解全部功能 →</a>
   </div>
 <script>
 function switchTab(t) {{
@@ -944,25 +977,31 @@ function switchTab(t) {{
 function errAcct(m) {{ document.getElementById('err-acct').textContent = m; }}
 function errOwner(m) {{ document.getElementById('err-owner').textContent = m; }}
 let _registerMode = false;
-function toggleRegister() {{
+function toggleRegister(btn) {{
   _registerMode = !_registerMode;
+  const pw2Label = document.getElementById('password2Label');
   const pw2 = document.getElementById('password2');
-  const btn = event.currentTarget;
+  const submit = document.getElementById('accountSubmit');
+  const password = document.getElementById('password');
   const link = document.getElementById('fullRegLink');
   if (_registerMode) {{
-    pw2.style.display = 'block';
-    pw2.focus();
-    btn.textContent = '↩ 返回登录';
+    pw2Label.style.display = 'block';
+    password.autocomplete = 'new-password';
+    submit.textContent = '创 建 账 号';
+    btn.textContent = '已有账号？返回登录';
     link.style.display = 'block';
     errAcct('');
   }} else {{
-    pw2.style.display = 'none';
+    pw2Label.style.display = 'none';
     pw2.value = '';
-    btn.textContent = '注 册 新 账 号';
+    password.autocomplete = 'current-password';
+    submit.textContent = '登 录';
+    btn.textContent = '没有账号？立即注册';
     link.style.display = 'none';
     errAcct('');
   }}
 }}
+function submitAccount() {{ if (_registerMode) doRegister(); else doLogin(); }}
 async function doLogin() {{
   const u = document.getElementById('username').value.trim();
   const p = document.getElementById('password').value;
@@ -1050,6 +1089,7 @@ _OWNER_ONLY_PATTERNS = _OWNER_ONLY_VOICE_PATTERNS
 # 无需登录即可访问的公开路径（认证接口本身 + 数据管理页面 UI）
 _PUBLIC_PATHS = {
     "/health",
+    "/robots.txt", "/sitemap.xml", "/tutorial.html", "/tutorial_novoice.html",
     "/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/me",
     "/api/verify", "/account.html", "/register.html",
 }
@@ -1285,9 +1325,10 @@ async def auth_login(req: Request, response: Response):
 
 @app.post("/api/auth/logout")
 async def auth_logout(response: Response):
-    """注销当前会话。"""
+    """注销当前会话（普通账号与主人口令会话一并清除）。"""
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE)
+    resp.delete_cookie(AUTH_COOKIE)
     return resp
 
 
@@ -1492,6 +1533,11 @@ async def _static_no_cache(request: Request, call_next):
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "geolocation=(self), microphone=(self)")
+    if request.url.path.startswith("/api/") or request.url.path in {
+        "/account.html", "/register.html", "/extension_editor.html",
+        "/admin_grant.html", "/admin_recharge.html",
+    }:
+        resp.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
     if request.url.scheme == "https":
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
@@ -1565,6 +1611,47 @@ async def tutorial_novoice_page():
     return FileResponse(p, headers={"Cache-Control": "no-store, must-revalidate"})
 
 
+@app.get("/robots.txt")
+async def robots_txt():
+    """公开抓取规则：允许产品与教程页，禁止接口、账户和管理入口。"""
+    body = """User-agent: *
+Allow: /
+Allow: /tutorial.html
+Allow: /tutorial_novoice.html
+Disallow: /api/
+Disallow: /account.html
+Disallow: /register.html
+Disallow: /extension_editor.html
+Disallow: /admin_grant.html
+Disallow: /admin_recharge.html
+
+Sitemap: https://sunxiris.top/sitemap.xml
+"""
+    return Response(content=body, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml")
+async def sitemap_xml():
+    """公开内容站点地图；私有应用与用户页面不进入搜索索引。"""
+    body = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://sunxiris.top/</loc>
+    <lastmod>2026-08-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://sunxiris.top/tutorial.html</loc>
+    <lastmod>2026-08-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>
+"""
+    return Response(content=body, media_type="application/xml; charset=utf-8")
+
+
 # ---------------------------------------------------------------------------
 # 聊天记录持久化
 # ---------------------------------------------------------------------------
@@ -1591,36 +1678,44 @@ def _save_user_behavior(behavior: dict):
     atomic_json(USER_BEHAVIOR_FILE, behavior)
 
 
-def _track_recommendation_click(app_name: str, source: str = "chat"):
-    """追踪推荐点击行为"""
+def _track_recommendation_event(app_name: str, source: str = "chat", event: str = "recommendation_click"):
+    """记录推荐曝光后的点击或普通 App 打开，保留最近事件用于衰减与时段偏好。"""
     behavior = _load_user_behavior()
-    
-    # 初始化数据结构
-    if "clicks" not in behavior:
-        behavior["clicks"] = {}
-    if "app_usage" not in behavior:
-        behavior["app_usage"] = {}
-    if "time_patterns" not in behavior:
-        behavior["time_patterns"] = {}
-    
-    # 记录点击次数
-    behavior["clicks"][app_name] = behavior["clicks"].get(app_name, 0) + 1
-    
-    # 记录app使用频次
-    behavior["app_usage"][app_name] = behavior["app_usage"].get(app_name, 0) + 1
-    
-    # 记录时段偏好
+    behavior.setdefault("version", 2)
+    behavior.setdefault("clicks", {})
+    behavior.setdefault("app_usage", {})
+    behavior.setdefault("time_patterns", {})
+    behavior.setdefault("events", [])
+
+    if event == "recommendation_click":
+        behavior["clicks"][app_name] = behavior["clicks"].get(app_name, 0) + 1
+    if event in ("open", "recommendation_click"):
+        old = behavior["app_usage"].get(app_name, {})
+        if isinstance(old, int):
+            old = {"count": old}
+        old["count"] = int(old.get("count", old.get("usage_count", 0)) or 0) + 1
+        old["last_used"] = datetime.now().isoformat(timespec="seconds")
+        behavior["app_usage"][app_name] = old
+
     hour = datetime.now().hour
     time_key = f"{hour // 3 * 3}-{(hour // 3 + 1) * 3 - 1}点"
-    if time_key not in behavior["time_patterns"]:
-        behavior["time_patterns"][time_key] = {}
-    behavior["time_patterns"][time_key][app_name] = behavior["time_patterns"][time_key].get(app_name, 0) + 1
-    
-    # 记录最后更新时间
+    if event in ("open", "recommendation_click"):
+        behavior["time_patterns"].setdefault(time_key, {})
+        bucket = behavior["time_patterns"][time_key]
+        bucket[app_name] = bucket.get(app_name, 0) + 1
+    behavior["events"].append({
+        "app": app_name, "source": source, "event": event,
+        "time": datetime.now().isoformat(timespec="seconds"),
+    })
+    behavior["events"] = behavior["events"][-600:]
     behavior["last_updated"] = datetime.now().isoformat()
-    
     _save_user_behavior(behavior)
-    print(f"[behavior] 记录推荐点击: {app_name} (来源: {source})", flush=True)
+    print(f"[behavior] {event}: {app_name} (来源: {source})", flush=True)
+
+
+def _track_recommendation_click(app_name: str, source: str = "chat"):
+    """兼容旧调用。"""
+    _track_recommendation_event(app_name, source, "recommendation_click")
 
 
 def _get_user_preferences() -> dict:
@@ -1635,9 +1730,12 @@ def _get_user_preferences() -> dict:
     
     # 计算app偏好权重
     app_usage = behavior.get("app_usage", {})
-    total_clicks = sum(app_usage.values()) if app_usage else 1
+    def _usage_count(raw):
+        return raw.get("count", raw.get("usage_count", 0)) if isinstance(raw, dict) else int(raw or 0)
+    total_clicks = sum(_usage_count(raw) for raw in app_usage.values()) or 1
     
-    for app, clicks in app_usage.items():
+    for app, raw in app_usage.items():
+        clicks = _usage_count(raw)
         weight = clicks / total_clicks if total_clicks > 0 else 0
         preferences["click_weights"][app] = weight
         if weight > 0.05:  # 权重超过5%的认为是偏好app
@@ -1663,13 +1761,16 @@ async def track_recommendation(req: Request):
     try:
         data = await req.json()
         app_name = data.get("app")
-        source = data.get("source", "chat")
+        source = str(data.get("source", "chat"))[:40]
+        event = str(data.get("event", "recommendation_click"))
         
         if not app_name:
             return JSONResponse({"error": "缺少app参数"}, status_code=400)
         
-        _track_recommendation_click(app_name, source)
-        return {"ok": True, "app": app_name}
+        if event not in ("open", "recommendation_click"):
+            return JSONResponse({"error": "不支持的推荐事件"}, status_code=400)
+        _track_recommendation_event(str(app_name)[:80], source, event)
+        return {"ok": True, "app": app_name, "event": event}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -1690,7 +1791,7 @@ async def recommendation_feedback(req: Request):
     try:
         data = await req.json()
         app_name = data.get("app")
-        feedback = data.get("feedback")  # "like" or "dislike"
+        feedback = data.get("feedback")  # like / dislike / dismiss
         
         if not app_name or not feedback:
             return JSONResponse({"error": "缺少必要参数"}, status_code=400)
@@ -1708,6 +1809,10 @@ async def recommendation_feedback(req: Request):
             behavior["feedback"][app_name]["likes"] += 1
         elif feedback == "dislike":
             behavior["feedback"][app_name]["dislikes"] += 1
+        elif feedback == "dismiss":
+            behavior["feedback"][app_name]["dismisses"] = behavior["feedback"][app_name].get("dismisses", 0) + 1
+        else:
+            return JSONResponse({"error": "不支持的反馈类型"}, status_code=400)
         
         behavior["last_updated"] = datetime.now().isoformat()
         _save_user_behavior(behavior)
@@ -2780,6 +2885,7 @@ REC_CATALOG = {
     "world":     {"name": "世界·恋语市", "emoji": "🌍", "kw": ["恋语市", "世界", "城市", "逛街", "散步", "小镇", "出门", "转转", "去玩", "地图", "探索", "游玩", "景点"]},
     "moments":   {"name": "朋友圈", "emoji": "🦋", "kw": ["朋友圈", "动态", "发的消息", "说说", "分享", "看看他发了什么", "社交动态", "更新", "帖子"]},
     "affinity":  {"name": "心动", "emoji": "💜", "kw": ["心动值", "心动", "亲密度", "好感度", "爱意", "多爱我", "关系", "感情", "亲密"]},
+    "ourstory": {"name": "我们的故事", "emoji": "📖", "kw": ["我们的故事", "故事时间线", "共同故事", "回忆故事", "恋爱故事", "一起经历"]},
     "quotes":    {"name": "语录", "emoji": "📜", "kw": ["语录", "收藏的话", "他说过", "名言", "金句", "经典台词", "语录集", "他说的话"]},
     "memory":    {"name": "记忆手账", "emoji": "🧠", "kw": ["记忆", "手账", "记得", "回忆", "忘了", "记忆碎片", "回忆录", "记忆保存"]},
     "notes":     {"name": "备忘录", "emoji": "📝", "kw": ["备忘录", "记事", "记下", "备忘", "记一下", "笔记", "记录", "便签"]},
@@ -2793,10 +2899,12 @@ REC_CATALOG = {
     "photos":    {"name": "相册", "emoji": "📷", "kw": ["相册", "照片", "图片", "合影", "拍照", "自拍", "相册", "照片墙", "图片库"]},
     "img2img":   {"name": "画境", "emoji": "🎨", "kw": ["画画", "画一张", "绘画", "立绘", "卡面", "绘图", "图片生成", "作画", "绘画创作"]},
     "timebox":   {"name": "时光", "emoji": "⏳", "kw": ["纪念日", "时光", "倒数", "在一起多少天", "多少天", "时光记录", "重要时刻"]},
+    "together-shop": {"name": "一起开店", "emoji": "🏪", "kw": ["开店", "店铺", "经营", "营业", "补货", "合伙人", "小店"]},
     "dates":     {"name": "约会", "emoji": "💞", "kw": ["约会", "约我", "想约", "手账", "想去哪", "约会计划", "约会安排", "浪漫约会"]},
     "chathist":  {"name": "聊天记录", "emoji": "🕘", "kw": ["聊天记录", "历史记录", "存档", "恢复", "之前的对话", "对话历史", "聊天存档"]},
     "browser":   {"name": "浏览器", "emoji": "🌐", "kw": ["浏览器", "上网", "网址", "查一下", "搜一下", "网页", "浏览网页", "网络"]},
     "words":     {"name": "背单词", "emoji": "📚", "kw": ["背单词", "单词", "英语", "记单词", "词汇", "英语学习", "单词记忆"]},
+    "planner":   {"name": "许墨计划", "emoji": "🗓️", "kw": ["生成计划", "制定计划", "帮我计划", "帮我规划", "目标拆解", "行动计划", "安排一下", "许墨计划"]},
     "coach":     {"name": "学习陪伴", "emoji": "🎓", "kw": ["学习", "专注", "自习", "打卡", "番茄", "陪伴学习", "学习助手", "专注学习"]},
     "video":     {"name": "视频总结", "emoji": "🎬", "kw": ["视频总结", "总结视频", "看视频", "视频内容", "视频解析"]},
     "watch":     {"name": "一起看", "emoji": "📺", "kw": ["一起看", "追剧", "看剧", "视频", "看电影", "观影", "观看视频"]},
@@ -2851,7 +2959,20 @@ REC_CATALOG = {
     "wager":     {"name": "命运赌局", "emoji": "🎰", "kw": ["赌局", "赌", "下注", "打赌", "命运赌", "命运赌博"]},
     "relic":     {"name": "回忆修复工坊", "emoji": "🛠️", "kw": ["回忆修复", "碎片", "修复记忆", "失忆", "记忆修复", "回忆工坊"]},
     "symbiote":  {"name": "共生体演化", "emoji": "🐚", "kw": ["共生", "演化", "磨合", "共生关系", "共同演化", "关系磨合"]},
+    "codraw":    {"name": "一起画", "emoji": "🖌️", "kw": ["一起画", "共同画画", "接着画", "画布", "合画"]},
+    "cowrite":   {"name": "共写文章", "emoji": "✍️", "kw": ["共写", "写文章", "润色文章", "续写", "写作"]},
+    "dreamloom": {"name": "梦境织机", "emoji": "🌙", "kw": ["梦境织机", "织梦", "共同梦境", "梦的象征"]},
+    "emoweather":{"name": "情绪气象台", "emoji": "🌦️", "kw": ["情绪天气", "心情预报", "情绪气象台", "心情趋势"]},
+    "parallel":  {"name": "平行宇宙探测器", "emoji": "🌀", "kw": ["平行宇宙探测器", "人生分歧", "另一条路", "另一个宇宙"]},
+    "puzzle":    {"name": "记忆拼图", "emoji": "🧩", "kw": ["记忆拼图", "记忆碎片", "拼合故事", "零碎回忆"]},
+    "dradio":    {"name": "心灵共鸣电台", "emoji": "📻", "kw": ["共鸣电台", "心灵电台", "情绪内容", "同频"]},
+    "garden":    {"name": "时间胶囊花园", "emoji": "🌿", "kw": ["胶囊花园", "种下想法", "等待开花", "时间花园"]},
+    "mirror":    {"name": "灵魂镜像室", "emoji": "🪞", "kw": ["灵魂镜像", "心理镜像", "照见自己", "阴影"]},
+    "weaver":    {"name": "命运编织者", "emoji": "🕸️", "kw": ["命运编织", "分支故事", "互动故事", "故事选择"]},
+    "alchemy":   {"name": "情感化学反应", "emoji": "⚗️", "kw": ["情感化学", "情绪元素", "感情反应", "情感混合"]},
+    "compass":   {"name": "星际罗盘", "emoji": "🧭", "kw": ["星际罗盘", "导航建议", "找方向", "现在怎么办"]},
     "extensions": {"name": "AI扩展", "emoji": "🧩", "kw": ["扩展", "插件", "ai扩展", "自定义功能", "功能扩展", "插件系统"]},
+    "phone":     {"name": "电话", "emoji": "📞", "kw": ["电话", "拨号", "通话记录", "给他打电话"]},
     "sms":       {"name": "短信", "emoji": "💬", "kw": ["短信", "发消息", "未读", "消息", "短信消息", "文本消息"]},
     "call":      {"name": "通话", "emoji": "📞", "kw": ["打电话", "通话", "拨号", "语音通话", "想听他的声音", "打给你"], "scene": "call"},
     "mode_a":    {"name": "沉浸共生", "emoji": "🌌", "kw": ["沉浸", "沉浸模式", "全屏", "共生模式"], "scene": "mode", "mode": "a"},
@@ -3140,38 +3261,30 @@ def _calculate_multi_layer_score(user_text: str, reply: str, key: str, info: dic
 
 
 def _chat_recommend_multi_layer(user_text: str, reply: str, limit: int = 3) -> list:
-    """完整的多层级推荐系统"""
-    scored = []
-    
-    for key, info in REC_CATALOG.items():
-        total_score, score_details = _calculate_multi_layer_score(user_text, reply, key, info)
-        
-        if total_score > 0:
-            # 记录评分详情用于调试和优化
-            scored.append((total_score, key, score_details))
-    
-    # 按总分排序
-    scored.sort(key=lambda x: (-x[0], x[1]))
-    
-    # 应用最低置信度阈值
-    min_confidence = _RECOMMENDATION_CONFIG["min_confidence"]
-    max_recommendations = _RECOMMENDATION_CONFIG["max_recommendations"]
-    
-    filtered = [(s, k, d) for s, k, d in scored if s >= min_confidence]
-    
+    """统一推荐引擎：上下文、长期偏好、时段、反馈、冷却和业务域多样性。"""
+    from recommendation_engine import rank_recommendations, record_impressions
+
+    behavior = _load_user_behavior()
+    ranked = rank_recommendations(
+        REC_CATALOG, behavior, user_text=user_text, reply=reply,
+        limit=max(1, min(int(limit or 3), 6)), surface="chat",
+    )
     out, seen = [], set()
-    for score, key, details in filtered[:max_recommendations * 2]:  # 多取一些用于去重
-        item = _rec_item(key)
+    for candidate in ranked:
+        item = _rec_item(candidate["key"])
         if not item or item["app"] in seen:
             continue
-        # 添加评分详情到返回结果（可选，用于调试）
-        item["score"] = round(score, 2)
-        item["score_details"] = details
+        item.update({
+            "score": round(candidate["score"], 2),
+            "confidence": candidate["confidence"],
+            "reason": candidate["reason"],
+            "domain": candidate["domain"],
+        })
         out.append(item)
         seen.add(item["app"])
-        if len(out) >= max_recommendations:
-            break
-    
+    if out:
+        record_impressions(behavior, out, "chat")
+        _save_user_behavior(behavior)
     return out
 
 
@@ -3201,49 +3314,36 @@ def _chat_recommend(user_text: str, reply: str, limit: int = 3) -> list:
 
 
 def _recbar_items() -> list:
-    """输入栏常驻推荐位：时段锚点 + 最近对话命中 App 提权。"""
-    now = datetime.now()
-    hour = now.hour
-    if hour < 5:
-        bucket = ["nradio", "dreamlab", "sos", "subconscious", "diary"]
-    elif hour < 9:
-        bucket = ["clock", "weather", "words", "coach", "radio"]
-    elif hour < 12:
-        bucket = ["work", "words", "coach", "ledger", "diary"]
-    elif hour < 14:
-        bucket = ["listen", "world", "dates", "photos"]
-    elif hour < 18:
-        bucket = ["solve", "reading", "watch", "video", "go"]
-    elif hour < 21:
-        bucket = ["listen", "radio", "diary", "together", "moments"]
-    else:
-        bucket = ["nradio", "letter", "dreamlab", "diary", "timecall"]
-    base = bucket + ["world", "go", "radio", "diary", "affinity", "quotes"]
-    # 最近对话命中 App 提到最前
+    """输入栏常驻推荐位，与聊天卡片共用同一评分和冷却机制。"""
+    from recommendation_engine import rank_recommendations, record_impressions
+
     try:
         logs = _load_chat_log()
-        recent = " ".join(m.get("content", "") for m in logs[-8:] if m.get("content"))
+        recent_user = " ".join(m.get("content", "") for m in logs[-10:] if m.get("role") == "user" and m.get("content"))
+        recent_reply = " ".join(m.get("content", "") for m in logs[-10:] if m.get("role") == "assistant" and m.get("content"))
     except Exception:
-        recent = ""
-    boosted, seen = [], set()
-    if recent:
-        for key in base:
-            info = REC_CATALOG.get(key)
-            if info and _kw_hits(recent, info) > 0:
-                boosted.append(key)
-                seen.add(key)
-    for key in base:
-        if key not in seen:
-            boosted.append(key)
-    out, used = [], set()
-    for key in boosted:
-        item = _rec_item(key)
-        if not item or item["app"] in used:
+        recent_user, recent_reply = "", ""
+    behavior = _load_user_behavior()
+    ranked = rank_recommendations(
+        REC_CATALOG, behavior, user_text=recent_user, reply=recent_reply,
+        limit=6, surface="recbar",
+    )
+    out, seen = [], set()
+    for candidate in ranked:
+        item = _rec_item(candidate["key"])
+        if not item or item["app"] in seen:
             continue
+        item.update({
+            "score": round(candidate["score"], 2),
+            "confidence": candidate["confidence"],
+            "reason": candidate["reason"],
+            "domain": candidate["domain"],
+        })
         out.append(item)
-        used.add(item["app"])
-        if len(out) >= 6:
-            break
+        seen.add(item["app"])
+    if out:
+        record_impressions(behavior, out, "recbar")
+        _save_user_behavior(behavior)
     return out
 
 
@@ -4997,6 +5097,8 @@ AFFINITY_DELTAS = {
     "study_focus": 3,
     # 学习陪伴：制定 / 调整学习计划
     "study_plan": 4,
+    # 许墨计划：制定 / 调整通用目标计划
+    "general_plan": 4,
     # 学习陪伴：向许墨请教学习问题
     "study_ask": 2,
     # 学习陪伴：一起复盘学习
@@ -5194,8 +5296,9 @@ def _add_affinity(action: str, detail: str = "", emotion_event: str = None) -> d
             "delta": delta,
             "detail": detail,
             "time": datetime.now().strftime("%m-%d %H:%M"),
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
         })
-        data["history"] = data["history"][-100:]
+        # 这些记录同时是「我和许墨的故事」的原始章节，不再截断早期时间线。
         
         # 处理情感事件调整
         if emotion_event:
@@ -5212,6 +5315,312 @@ def _add_affinity(action: str, detail: str = "", emotion_event: str = None) -> d
 @app.get("/api/affinity")
 async def get_affinity():
     return _affinity_info(_load_affinity())
+
+
+_OUR_STORY_ACTION_NAMES = {
+    "chat": "一次交谈", "like": "为他的动态心动", "comment": "在朋友圈留下回应",
+    "moment": "一则新的朋友圈", "quote": "收藏他说过的话", "voice": "收藏他的声音",
+    "book_companion": "共读时光", "watch": "一起看", "listen": "一起听",
+    "world": "恋语市相遇", "world_quest": "共同完成一段旅程", "world_ending": "抵达故事结局",
+    "world_place": "在恋语市留下新地点", "world_pulse": "城市生长的一刻", "world_event": "参与城市事件",
+    "anniversary": "记下纪念日", "capsule": "封存时光胶囊", "capsule_open": "来自过去的回信",
+    "relic": "制作回忆卡", "date_plan": "一场约会的序章", "date_log": "约会手账",
+    "date_memory": "重写约会小结", "dream": "共赴一场清梦", "pverse": "观测平行宇宙",
+    "astro": "一起仰望星空", "astro_wish": "向流星许愿", "butterfly": "蝶语花园的相遇",
+    "butterfly_new": "发现新的蝶种", "diary_checkin": "恋爱日记打卡", "diary_entry": "写下恋爱日记",
+    "together": "今日合影", "letter": "收到许墨来信", "wakeup": "被他的声音唤醒",
+    "timecall": "跨越时空的通话", "telepathy": "完成默契实验", "fate": "走过命运岔路",
+    "fate_end": "命运故事完结", "sos": "被他稳稳接住",
+    "cobook": "打开合著的书", "cobook_write": "共同写下一页", "cobook_finish": "合著完稿",
+}
+
+
+def _our_story_chapter(action: str) -> str:
+    if action in {"chat", "like", "comment", "moment", "quote", "voice", "voicemail", "pmail", "letter", "wakeup", "timecall"}:
+        return "心声来往"
+    if action.startswith("world") or action in {"interior_xumo", "astro", "astro_wish", "butterfly", "butterfly_new", "bsfile"}:
+        return "恋语市光影"
+    if action.startswith(("date", "anniversary", "capsule", "relic", "together", "diary", "cohabit", "cobook")):
+        return "共同的时光"
+    if action.startswith(("dream", "pverse", "ifline", "fate", "psyche", "subconscious")):
+        return "梦与另一种可能"
+    if action.startswith(("study", "work", "wardrobe")) or action in {"listen", "watch", "book_companion", "general_plan"}:
+        return "并肩的日常"
+    return "未完待续"
+
+
+_OUR_STORY_ARCHIVES = [
+    # file, container, source, chapter, title fields, detail fields, time fields
+    ("memory.json", None, "长期记忆", "心声来往", ("tag",), ("content",), ("ts",)),
+    ("moments.json", None, "朋友圈", "心声来往", ("content",), ("content", "comments"), ("time",)),
+    ("quotes.json", "quotes", "珍藏语录", "心声来往", (), ("content",), ("time",)),
+    ("voice.json", "voices", "珍藏声音", "心声来往", (), ("content",), ("time",)),
+    ("promises.json", "promises", "共同约定", "共同的时光", ("content", "title"), ("content", "note", "status"), ("created", "ts", "date")),
+    ("timebox.json", "anniversaries", "纪念日", "共同的时光", ("name",), ("name", "date"), ("date", "ts")),
+    ("timebox.json", "capsules", "时光胶囊", "共同的时光", (), ("content", "reply"), ("created", "opened_time", "open_date")),
+    ("timebox.json", "relics", "回忆卡", "共同的时光", ("title",), ("text", "his_line"), ("date", "time")),
+    ("timebox.json", "plans", "约会企划", "共同的时光", ("title",), ("idea", "invite", "schedule", "tip"), ("time",)),
+    ("date_log.json", "dates", "约会手账", "共同的时光", ("place",), ("what", "mood", "memory"), ("date", "created")),
+    ("xumo_diary.json", "days", "许墨日记", "共同的时光", ("date",), ("text",), ("date", "ts")),
+    ("diary.json", "entries", "恋爱日记", "共同的时光", ("title", "date"), ("content", "text", "mood"), ("date", "ts")),
+    ("life_state.json", "timeline", "共同生活", "并肩的日常", ("type",), ("text",), ("ts", "time")),
+    ("world_log.json", "entries", "恋语市经历", "恋语市光影", ("type",), ("text",), ("ts", "day", "time")),
+    ("world_pulse.json", "events", "城市事件", "恋语市光影", ("title",), ("desc", "story", "comment"), ("time",)),
+    ("world_pulse.json", "rumors", "城市传闻", "恋语市光影", ("title",), ("text", "comment"), ("time",)),
+    ("world_pulse.json", "visitors", "恋语市来客", "恋语市光影", ("name",), ("lines",), ("time",)),
+    ("dream.json", "dreams", "共同梦境", "梦与另一种可能", ("title", "wish"), ("wish", "text"), ("ts", "date")),
+    ("astro.json", "logs", "星空故事", "梦与另一种可能", ("constellation",), ("text",), ("ts",)),
+    ("butterfly.json", "frags", "蝶语花园", "梦与另一种可能", ("species_name",), ("text",), ("ts",)),
+    ("cobook.json", "books", "合著的书", "共同创作", ("title",), ("opening", "chapters", "afterword"), ("created", "ts")),
+    ("debate.json", "debates", "双我辩论", "共同创作", ("title", "question"), ("question", "rounds", "verdict", "risk"), ("ts",)),
+    ("dreamlab.json", "dreams", "梦境解码", "梦与另一种可能", ("title", "name"), ("content", "meaning", "analysis", "personal", "prescription"), ("date", "ts")),
+    ("empath.json", "records", "共感记录", "心声来往", ("emotion_label",), ("note", "empathy", "presence", "action"), ("ts", "date")),
+    ("fate.json", "stories", "命运岔路", "梦与另一种可能", ("title", "theme"), ("chapters", "history", "ending"), ("started", "finished")),
+    ("lifeline.json", "lives", "人生模拟", "梦与另一种可能", ("career",), ("history", "ending", "regret"), ("started", "finished")),
+    ("mind.json", "quizzes", "默契实验", "心声来往", ("verdict",), ("detail",), ("ts",)),
+    ("oracle.json", "prophecies", "七日预言", "梦与另一种可能", ("prophecy",), ("meaning", "clue"), ("draw_ts", "draw_date")),
+    ("pmail.json", "letters", "平行来信", "心声来往", ("timeline", "scenario"), ("greeting", "body", "postscript", "replies"), ("date",)),
+    ("together.json", "photos", "合影日历", "共同的时光", ("scene",), ("caption",), ("ts", "date")),
+    ("radio.json", "broadcasts", "许墨电台", "心声来往", ("title", "theme"), ("content", "segments", "intro", "outro"), ("date", "time")),
+    ("radio.json", "episodes", "深夜电台", "心声来往", ("theme", "channel_name"), ("text",), ("ts", "date")),
+    ("subconscious.json", "rounds", "潜意识密室", "梦与另一种可能", (), ("statements", "hint", "guessed"), ("finished_ts", "date")),
+    ("telepathy.json", "rounds", "默契雷达", "心声来往", (), ("questions", "answers", "guesses"), ("date",)),
+    ("timecall.json", "records", "时空热线", "心声来往", ("line_label", "era"), ("summary", "after", "msgs"), ("started",)),
+    ("whisper.json", "threads", "沉默信使", "心声来往", ("emoji",), ("context", "reading", "feeling", "reply_word"), ("ts",)),
+    ("psyche_mood.json", "entries", "情绪共振", "心声来往", ("word",), ("note", "reply"), ("ts", "date")),
+    ("psyche_night.json", "calls", "深夜来电", "心声来往", ("topic",), ("turns", "bye"), ("ts", "date")),
+    ("psyche_observer.json", "done", "观察者挑战", "共同的时光", ("task",), ("notes", "analysis", "story"), ("ts", "date")),
+    ("psyche_relation.json", "reflects", "关系回望", "心声来往", (), ("text",), ("ts",)),
+    ("psyche_specimens.json", "items", "记忆标本", "共同的时光", ("title", "kind_name"), ("content", "his_view"), ("ts",)),
+    ("psyche_cowrite.json", "works", "共同创作", "共同创作", ("title", "genre_name"), ("parts", "afterword"), ("ts",)),
+    ("psyche_dream.json", "sessions", "梦境解析", "梦与另一种可能", (), ("text", "tags", "turns", "answers"), ("ts",)),
+    ("psyche_parallel.json", "lines", "平行世界通讯", "梦与另一种可能", ("name", "title"), ("messages", "letters", "history"), ("ts", "date")),
+    ("psyche_lab.json", "sessions", "人格实验室", "心声来往", ("title", "kind"), ("intro", "questions", "answered"), ("ts",)),
+    ("psyche_relation.json", "log", "关系变化", "心声来往", ("reason",), ("reason", "deltas"), ("ts",)),
+    ("review_summaries.json", None, "时光总结", "共同的时光", ("label", "range"), ("brief", "text"), ("generated_at", "key")),
+    ("study_coach.json", "asks", "学习问答", "并肩的日常", ("q",), ("q", "a"), ("time", "date")),
+    ("study_coach.json", "reviews", "学习复盘", "并肩的日常", ("scope",), ("stats", "text"), ("time", "date")),
+    ("work.json", "sessions", "并肩工作", "并肩的日常", ("title",), ("docs", "thanks"), ("created_ts", "finished_ts")),
+    ("watch.json", None, "一起看", "并肩的日常", ("title",), ("desc",), ("last_watched", "added")),
+    ("music.json", None, "一起听", "并肩的日常", ("title", "artist"), ("desc",), ("last_played", "added")),
+    ("books.json", None, "共同阅读", "并肩的日常", ("title",), ("highlights", "notes"), ("added",)),
+    ("img2img.json", None, "共同画境", "共同创作", ("style_name",), ("extra", "comment", "prompt"), ("time",)),
+    ("avatarify.json", None, "共同卡面", "共同创作", ("theme_name",), ("traits", "comment", "prompt"), ("time",)),
+    ("tts_log.json", "records", "语音生成记录", "心声来往", ("source",), ("content",), ("ts", "time")),
+]
+
+
+def _our_story_json(file_name: str):
+    path = RolePath(file_name)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _our_story_records(data, container: str | None) -> list:
+    if container:
+        if not isinstance(data, dict):
+            return []
+        data = data.get(container)
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    if isinstance(data, dict):
+        record_markers = {"id", "title", "content", "text", "comment", "prompt", "body", "theme_name"}
+        if record_markers.intersection(data.keys()):
+            return [data]
+        records = []
+        for key, value in data.items():
+            if isinstance(value, dict):
+                row = dict(value)
+                row.setdefault("_archive_key", key)
+                records.append(row)
+            elif isinstance(value, str) and value.strip():
+                records.append({"_archive_key": key, "text": value})
+        return records
+    return []
+
+
+def _our_story_value(value, depth: int = 0) -> str:
+    if value is None or depth > 3:
+        return ""
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        parts = [_our_story_value(v, depth + 1) for v in value]
+        return "\n".join(f"· {p}" for p in parts if p)
+    if isinstance(value, dict):
+        ignored = {"id", "image", "img", "url", "color", "hue", "x", "y", "score"}
+        parts = []
+        for key, val in value.items():
+            if key in ignored:
+                continue
+            text = _our_story_value(val, depth + 1)
+            if text:
+                parts.append(f"{key}：{text}")
+        return "\n".join(parts)
+    return str(value)
+
+
+def _our_story_first(row: dict, fields: tuple[str, ...]) -> str:
+    for field in fields:
+        text = _our_story_value(row.get(field))
+        if text:
+            return text
+    return ""
+
+
+def _our_story_detail(row: dict, fields: tuple[str, ...]) -> str:
+    seen, parts = set(), []
+    for field in fields:
+        text = _our_story_value(row.get(field))
+        compact = re.sub(r"\s+", "", text)
+        if text and compact not in seen:
+            seen.add(compact)
+            parts.append(text)
+    return "\n\n".join(parts)
+
+
+def _our_story_time_value(value) -> tuple[str, float]:
+    if isinstance(value, (int, float)):
+        try:
+            dt = datetime.fromtimestamp(float(value))
+            return dt.strftime("%Y-%m-%d %H:%M"), dt.timestamp()
+        except (ValueError, OSError, OverflowError):
+            return str(value), 0.0
+    raw = str(value or "").strip()
+    if not raw:
+        return "时间未记载", 0.0
+    candidates = [raw.replace("Z", "+00:00")]
+    if re.match(r"^\d{2}-\d{2}(?:\s|$)", raw):
+        candidates.append(f"{datetime.now().year}-{raw}")
+    for candidate in candidates:
+        try:
+            dt = datetime.fromisoformat(candidate)
+            return raw, dt.timestamp()
+        except ValueError:
+            continue
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%m-%d %H:%M"):
+        try:
+            dt = datetime.strptime(raw, fmt)
+            if fmt.startswith("%m"):
+                dt = dt.replace(year=datetime.now().year)
+            return raw, dt.timestamp()
+        except ValueError:
+            continue
+    return raw, 0.0
+
+
+def _our_story_archive_events() -> list:
+    events, serial = [], 0
+
+    # 对话按「她的一句话 + 许墨的回应」装订为一则，保留双方原文。
+    logs = _our_story_json("chat_log.json")
+    if isinstance(logs, list):
+        idx = 0
+        while idx < len(logs):
+            row = logs[idx] if isinstance(logs[idx], dict) else {}
+            if row.get("role") == "user":
+                answer = logs[idx + 1] if idx + 1 < len(logs) and isinstance(logs[idx + 1], dict) and logs[idx + 1].get("role") == "assistant" else {}
+                mine = _our_story_value(row.get("content"))
+                his = _our_story_value(answer.get("content"))
+                display_time, sort_time = _our_story_time_value(row.get("ts") or answer.get("ts"))
+                events.append({
+                    "id": f"archive-chat-{serial}", "action": "chat_archive", "source": "聊天记录",
+                    "title": f"一次交谈 · {(mine[:26] + '…') if len(mine) > 26 else (mine or '未命名的话题')}",
+                    "detail": f"你：{mine}" + (f"\n\n许墨：{his}" if his else ""), "time": display_time,
+                    "timestamp": row.get("ts") or "", "chapter": "心声来往", "delta": 0, "_sort": sort_time,
+                })
+                serial += 1
+                idx += 2 if answer else 1
+                continue
+            idx += 1
+
+    for file_name, container, source, chapter, title_fields, detail_fields, time_fields in _OUR_STORY_ARCHIVES:
+        data = _our_story_json(file_name)
+        for row in _our_story_records(data, container):
+            if file_name == "img2img.json" and not row.get("with_xumo"):
+                continue
+            if file_name == "avatarify.json" and row.get("mode") not in {"duo", "couple", "with_xumo"}:
+                continue
+            subject = _our_story_first(row, title_fields) or _our_story_value(row.get("_archive_key"))
+            subject = re.sub(r"\s+", " ", subject).strip()
+            if len(subject) > 34:
+                subject = subject[:34] + "…"
+            detail = _our_story_detail(row, detail_fields) or subject
+            if not detail:
+                continue
+            raw_time = next((row.get(k) for k in time_fields if row.get(k) not in (None, "")), "")
+            display_time, sort_time = _our_story_time_value(raw_time)
+            image = next((row.get(k) for k in ("image", "img", "photo", "cover", "gen") if isinstance(row.get(k), str) and row.get(k)), "")
+            audio = row.get("url") if source in {"珍藏声音", "语音生成记录"} and isinstance(row.get("url"), str) else ""
+            events.append({
+                "id": f"archive-{serial}", "action": "archive", "source": source,
+                "title": source + (f" · {subject}" if subject else ""), "detail": detail,
+                "time": display_time, "timestamp": str(raw_time or ""), "chapter": chapter,
+                "delta": 0, "image": image, "audio": audio, "_sort": sort_time,
+            })
+            serial += 1
+    return events
+
+
+@app.get("/api/our-story")
+async def get_our_story():
+    """把聊天、记忆、日记、约会、世界经历与全部共同事件装订成故事书。"""
+    history = _load_affinity().get("history", [])
+    events = _our_story_archive_events()
+    archive_texts = [
+        (re.sub(r"\W+", "", str(e.get("title", "")) + str(e.get("detail", ""))).lower(), str(e.get("time", ""))[:10])
+        for e in events
+    ]
+    for idx, item in enumerate(history):
+        action = str(item.get("action") or "event")
+        detail = str(item.get("detail") or "").strip()
+        detail_key = re.sub(r"\W+", "", detail).lower()
+        day_key = str(item.get("timestamp") or item.get("time") or "")[:10]
+        if len(detail_key) >= 4 and any(detail_key in text and (not day_key or not day or day_key[-5:] == day[-5:]) for text, day in archive_texts):
+            continue
+        display_time, sort_time = _our_story_time_value(item.get("timestamp") or item.get("time"))
+        events.append({
+            "id": f"story-{idx}", "source": "心动记录",
+            "action": action,
+            "title": _OUR_STORY_ACTION_NAMES.get(action, detail or "我们共同经历的一刻"),
+            "detail": detail,
+            "time": display_time,
+            "timestamp": item.get("timestamp") or "",
+            "chapter": _our_story_chapter(action),
+            "delta": item.get("delta", 0),
+            "_sort": sort_time,
+        })
+
+    # 精确重复只保留内容更完整的一则；没有时间的旧记录保持原有相对顺序。
+    unique = {}
+    for seq, event in enumerate(events):
+        exact = re.sub(r"\W+", "", str(event.get("title", "")) + str(event.get("detail", ""))).lower()
+        key = (str(event.get("time", "")), exact)
+        event["_seq"] = seq
+        if key not in unique or len(str(event.get("detail", ""))) > len(str(unique[key].get("detail", ""))):
+            unique[key] = event
+    events = list(unique.values())
+    events.sort(key=lambda e: (0 if e.get("_sort") else 1, e.get("_sort") or 0, e.get("_seq") or 0))
+    for event in events:
+        event.pop("_sort", None)
+        event.pop("_seq", None)
+    sources = sorted({str(e.get("source") or "共同事件") for e in events})
+    return {
+        "title": "我和许墨的故事",
+        "subtitle": "聊天、记忆、日记、约会与所有共同经历，都在这里继续生长。",
+        "event_count": len(events),
+        "source_count": len(sources),
+        "sources": sources,
+        "events": events,
+    }
 
 
 @app.post("/api/affinity/add")
@@ -5306,6 +5715,48 @@ async def adjust_emotion(req: Request):
     
     else:
         return JSONResponse({"error": "请提供 event 或维度调整参数"}, status_code=400)
+
+
+@app.post("/api/emotion/set")
+async def set_emotion(req: Request):
+    """将一个或多个情感维度设为指定的 0~100 数值。"""
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+
+    values = {}
+    for dimension in EMOTION_DIMENSIONS:
+        if dimension not in body:
+            continue
+        value = body[dimension]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return JSONResponse(
+                {"error": f"{EMOTION_DIMENSIONS[dimension]}必须是 0 到 100 的数字"},
+                status_code=400,
+            )
+        if not math.isfinite(value) or value < 0 or value > 100:
+            return JSONResponse(
+                {"error": f"{EMOTION_DIMENSIONS[dimension]}必须在 0 到 100 之间"},
+                status_code=400,
+            )
+        values[dimension] = round(value)
+
+    if not values:
+        return JSONResponse({"error": "请提供至少一个情感维度"}, status_code=400)
+
+    with file_lock(AFFINITY_FILE):
+        data = _load_affinity()
+        emotion_state = data.get("emotion", _get_default_emotion_state())
+        changes = {
+            dimension: value - emotion_state.get(dimension, value)
+            for dimension, value in values.items()
+        }
+        updated_emotion = _update_emotion_state(emotion_state, changes)
+        data["emotion"] = updated_emotion
+        _save_affinity(data)
+
+    return {"success": True, "emotion": updated_emotion}
 
 
 @app.get("/api/emotion/modes")
@@ -5766,9 +6217,6 @@ async def xumo_avatar_delete(item_id: str):
 XUMO_CHARIMG_FILE = RolePath("xumo_charimg.json")
 XUMO_CHARIMG_DIR = RolePath("static", "charimg")
 
-# 默认立绘：内嵌在 static/home_xumo/ 的官方立绘
-DEFAULT_CHARIMG_PATH = STATIC_DIR / "home_xumo" / "home_cutout.png"
-
 # 支持的场景：key → (中文名, 说明)
 # 这些 key 与前端 <img data-scene="..."> 一一对应；新增场景只需在此追加。
 CHARIMG_SCENES = {
@@ -5791,16 +6239,22 @@ def _charimg_load() -> dict:
                 data.setdefault("version", 1)
                 data.setdefault("uploads", [])  # [{id, name, url, path, mime, ext, time}]
                 scenes = data.setdefault("scenes", {})
-                # 确保所有已知场景都有 active_id（默认 "default"）
+                # 不提供内置立绘；空字符串表示该场景尚未选择上传图。
+                valid_ids = {
+                    u.get("id")
+                    for u in data["uploads"]
+                    if u.get("id") and u.get("path") and Path(u["path"]).exists()
+                }
                 for k in CHARIMG_SCENES:
-                    scenes.setdefault(k, "default")
+                    if scenes.get(k) not in valid_ids:
+                        scenes[k] = ""
                 return data
         except (json.JSONDecodeError, OSError):
             pass
     return {
         "version": 1,
         "uploads": [],
-        "scenes": {k: "default" for k in CHARIMG_SCENES},
+        "scenes": {k: "" for k in CHARIMG_SCENES},
     }
 
 
@@ -5814,28 +6268,21 @@ def _charimg_bump(data: dict) -> dict:
 
 
 def _charimg_find_for_scene(scene: str) -> Path | None:
-    """返回某场景当前生效的立绘文件路径；无则回退默认。"""
+    """返回某场景当前选中的上传立绘；未选择或文件丢失时返回 None。"""
     state = _charimg_load()
-    active_id = state.get("scenes", {}).get(scene, "default")
-    if active_id and active_id != "default":
+    active_id = state.get("scenes", {}).get(scene, "")
+    if active_id:
         for u in state.get("uploads", []):
             if u.get("id") == active_id and u.get("path"):
                 p = Path(u["path"])
                 if p.exists():
                     return p
-    # 回退：默认立绘
-    return DEFAULT_CHARIMG_PATH if DEFAULT_CHARIMG_PATH.exists() else None
+    return None
 
 
 def _charimg_list_uploads(state: dict) -> list:
-    """汇总可选立绘：默认 + 用户上传（剔除已丢失文件）。"""
-    items = [{
-        "id": "default",
-        "kind": "default",
-        "name": "默认立绘",
-        "url": "/charimg?kind=default&v=" + str(state["version"]),
-        "time": "",
-    }]
+    """汇总用户上传的可选立绘（剔除已丢失文件）。"""
+    items = []
     for u in state.get("uploads", []):
         if u.get("path") and Path(u["path"]).exists():
             items.append({
@@ -5852,13 +6299,12 @@ def _charimg_list_uploads(state: dict) -> list:
 async def charimg_serve(scene: str = "", kind: str = ""):
     """按场景返回当前生效立绘；可加 ?v=N 做缓存破坏。
 
-    - ?scene=home    → 返回该场景当前 active 立绘
-    - ?kind=default  → 直接返回默认立绘（用于「不选场景」的展示）
+    - ?scene=home → 返回该场景当前选中的上传立绘
     """
-    if kind == "default" or not scene or scene not in CHARIMG_SCENES:
-        if DEFAULT_CHARIMG_PATH.exists():
-            return FileResponse(DEFAULT_CHARIMG_PATH)
-        return JSONResponse({"error": "默认立绘不存在"}, status_code=404)
+    if kind == "default":
+        return JSONResponse({"error": "不提供内置立绘，请先上传"}, status_code=404)
+    if not scene or scene not in CHARIMG_SCENES:
+        return JSONResponse({"error": "未知场景"}, status_code=400)
     img = _charimg_find_for_scene(scene)
     if img and img.exists():
         return FileResponse(img)
@@ -5880,11 +6326,11 @@ async def charimg_state():
     }
     return {
         "version": state["version"],
-        "scenes": state.get("scenes", {k: "default" for k in CHARIMG_SCENES}),
+        "scenes": state.get("scenes", {k: "" for k in CHARIMG_SCENES}),
         "scene_meta": scene_meta,
         "scene_urls": scene_urls,
         "items": uploads,
-        "default_exists": DEFAULT_CHARIMG_PATH.exists(),
+        "default_exists": False,
     }
 
 
@@ -5946,7 +6392,7 @@ async def charimg_upload(req: Request):
 @app.post("/api/charimg/select")
 async def charimg_select(req: Request):
     """为某个场景选定立绘。
-    body: {scene: "home"|"call"|"immerse", item_id: "default"|upload_id}
+    body: {scene: "home"|"call"|"immerse", item_id: upload_id}
     """
     try:
         body = await req.json()
@@ -5963,16 +6409,14 @@ async def charimg_select(req: Request):
     uploads = state.get("uploads", [])
 
     if item_id == "default":
-        state.setdefault("scenes", {})[scene] = "default"
-        label = f"{CHARIMG_SCENES[scene][0]} · 默认立绘"
-    else:
-        up = next((u for u in uploads if u.get("id") == item_id), None)
-        if not up:
-            return JSONResponse({"error": "该立绘不存在"}, status_code=404)
-        if not Path(up["path"]).exists():
-            return JSONResponse({"error": "立绘文件已丢失"}, status_code=400)
-        state.setdefault("scenes", {})[scene] = item_id
-        label = f"{CHARIMG_SCENES[scene][0]} · {up.get('name', '')}"
+        return JSONResponse({"error": "不提供内置立绘，请上传后选择"}, status_code=400)
+    up = next((u for u in uploads if u.get("id") == item_id), None)
+    if not up:
+        return JSONResponse({"error": "该立绘不存在"}, status_code=404)
+    if not Path(up["path"]).exists():
+        return JSONResponse({"error": "立绘文件已丢失"}, status_code=400)
+    state.setdefault("scenes", {})[scene] = item_id
+    label = f"{CHARIMG_SCENES[scene][0]} · {up.get('name', '')}"
 
     _charimg_bump(state)
     _charimg_save(state)
@@ -5988,9 +6432,9 @@ async def charimg_select(req: Request):
 
 @app.delete("/api/charimg/{item_id}")
 async def charimg_delete(item_id: str):
-    """删除一张上传的立绘。若被某场景引用，该场景回退为默认。"""
+    """删除一张上传的立绘。引用它的场景随即变为空白。"""
     if item_id == "default":
-        return JSONResponse({"error": "默认立绘不可删除"}, status_code=400)
+        return JSONResponse({"error": "内置立绘不存在"}, status_code=404)
     state = _charimg_load()
     kept = [u for u in state.get("uploads", []) if u.get("id") != item_id]
     if len(kept) == len(state.get("uploads", [])):
@@ -6002,12 +6446,12 @@ async def charimg_delete(item_id: str):
         except Exception:
             pass
     state["uploads"] = kept
-    # 把所有引用了被删图的场景重置为默认
+    # 把所有引用了被删图的场景重置为空白
     scenes = state.get("scenes", {})
     reset_scenes = []
     for k in CHARIMG_SCENES:
         if scenes.get(k) == item_id:
-            scenes[k] = "default"
+            scenes[k] = ""
             reset_scenes.append(k)
     if reset_scenes:
         _charimg_bump(state)
@@ -12040,6 +12484,11 @@ app.include_router(creative_router)
 from life_apps import router as life_router  # noqa: E402
 
 app.include_router(life_router)
+
+# 双人经营玩法（shop_apps.py）：和许墨一起开店 / 补货 / 每日营业
+from shop_apps import router as shop_router  # noqa: E402
+
+app.include_router(shop_router)
 
 # 手谈 · 围棋对弈路由（go_game.py）：规则引擎 + 许墨 AI + 台词
 from go_game import router as go_router  # noqa: E402

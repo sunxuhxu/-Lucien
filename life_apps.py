@@ -403,20 +403,72 @@ async def work_doc_sort(doc_id: str, req: Request):
     doc = next((d for d in session.get("docs", []) if d.get("id") == doc_id), None)
     if not doc:
         return JSONResponse({"error": "这份资料不在这批里"}, status_code=404)
-    if doc.get("status") == "sorted":
-        return JSONResponse({"error": "这份资料已经归好类了"}, status_code=400)
+    was_sorted = doc.get("status") == "sorted"
+    previous_category = doc.get("category", "")
+    if was_sorted and previous_category == category:
+        done = sum(1 for d in session.get("docs", []) if d.get("status") == "sorted")
+        return {"doc": doc, "done": done, "total": len(session.get("docs", [])), "unchanged": True}
     doc["status"] = "sorted"
     doc["category"] = category
     doc["sorted_ts"] = _now()
     _save(WORK_FILE, data)
 
-    stats = _load_work_stats()
-    stats["total_sorted"] = stats.get("total_sorted", 0) + 1
-    _save(WORK_STATS_FILE, stats)
+    if not was_sorted:
+        stats = _load_work_stats()
+        stats["total_sorted"] = stats.get("total_sorted", 0) + 1
+        _save(WORK_STATS_FILE, stats)
 
     done = sum(1 for d in session.get("docs", []) if d.get("status") == "sorted")
-    info = _add_affinity("work_organize", f"整理资料 · {doc['title']}")
-    return {"doc": doc, "done": done, "total": len(session.get("docs", [])), "affinity": info}
+    info = _add_affinity("work_organize", f"整理资料 · {doc['title']}") if not was_sorted else {}
+    return {
+        "doc": doc,
+        "done": done,
+        "total": len(session.get("docs", [])),
+        "affinity": info,
+        "reclassified": was_sorted and previous_category != category,
+    }
+
+
+@router.get("/api/work/stats")
+async def work_stats():
+    """Return the compact work summary used by the immersive dashboard."""
+    stats = _load_work_stats()
+    return {
+        **stats,
+        # Keep the dashboard-facing name explicit while retaining the stored
+        # field for older clients and exported data.
+        "total_docs": stats.get("total_sorted", 0),
+    }
+
+
+@router.post("/api/work/auto-sort")
+async def work_auto_sort():
+    """按资料的建议类型批量归档当前批次中尚未整理的文件。"""
+    data = _load_work()
+    session = next((s for s in data.get("sessions", []) if not s.get("finished")), None)
+    if not session:
+        return JSONResponse({"error": "桌上还没有待整理的资料，先开一批新的"}, status_code=400)
+
+    valid_categories = {c["key"] for c in WORK_CATEGORIES}
+    sorted_docs = []
+    for doc in session.get("docs", []):
+        if doc.get("status") == "sorted":
+            continue
+        suggested = doc.get("type") if doc.get("type") in valid_categories else "data"
+        doc["status"] = "sorted"
+        doc["category"] = suggested
+        doc["sorted_ts"] = _now()
+        sorted_docs.append(doc)
+
+    if not sorted_docs:
+        return {"sorted_count": 0, "session": session, "unchanged": True}
+
+    _save(WORK_FILE, data)
+    stats = _load_work_stats()
+    stats["total_sorted"] = stats.get("total_sorted", 0) + len(sorted_docs)
+    _save(WORK_STATS_FILE, stats)
+    info = _add_affinity("work_organize", f"智能整理资料 · {len(sorted_docs)} 份")
+    return {"sorted_count": len(sorted_docs), "session": session, "affinity": info}
 
 
 @router.post("/api/work/doc/{doc_id}/summarize")

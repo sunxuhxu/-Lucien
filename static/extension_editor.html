@@ -40,6 +40,7 @@
     border-radius:var(--radius-md);box-shadow:var(--shadow-sm);
   }
   .header h1{font-size:24px;color:var(--color-primary)}
+  .header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   
   .tabs{display:flex;gap:8px;margin-bottom:20px}
   .tab{
@@ -53,7 +54,9 @@
   .editor-layout{display:grid;grid-template-columns:300px 1fr;gap:20px}
   
   .sidebar{background:var(--color-elev);padding:20px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)}
-  .sidebar h3{margin-bottom:16px;color:var(--color-primary)}
+  .sidebar-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+  .sidebar h3{color:var(--color-primary)}
+  .count-badge{min-width:28px;padding:2px 8px;border-radius:999px;background:var(--color-bg);color:var(--color-text-dim);font-size:12px;text-align:center}
   
   .extension-list{max-height:400px;overflow-y:auto}
   .extension-item{
@@ -65,6 +68,12 @@
   .extension-item.active{background:var(--color-primary);color:white}
   .extension-item h4{font-size:14px;margin-bottom:4px}
   .extension-item p{font-size:12px;opacity:0.8}
+  .extension-item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .extension-item-copy{min-width:0}
+  .extension-item h4{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .status-dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex:0 0 auto;background:var(--color-offline);box-shadow:0 0 0 3px rgba(220,38,38,.10)}
+  .status-dot.on{background:var(--color-online);box-shadow:0 0 0 3px rgba(5,150,105,.12)}
+  .empty-list{padding:28px 12px;text-align:center;color:var(--color-text-faint);font-size:13px;line-height:1.7}
   
   .main-editor{background:var(--color-elev);padding:24px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)}
   
@@ -91,9 +100,26 @@
   .btn-secondary:hover{background:var(--color-border-strong)}
   .btn-success{background:#059669;color:white}
   .btn-success:hover{background:#047857}
+  .btn-danger{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}
+  .btn-danger:hover{background:#ffe4e6}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn:focus-visible,.tab:focus-visible,.extension-item:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid rgba(124,58,237,.28);outline-offset:2px}
+  .editor-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--color-border)}
+  .editor-heading h2{font-size:18px}
+  .editor-state{font-size:12px;color:var(--color-text-faint)}
   
   .config-editor{background:var(--color-card);padding:16px;border-radius:var(--radius-sm);margin-top:16px}
   .config-editor pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:var(--radius-sm);overflow-x:auto;font-family:'Consolas','Monaco',monospace;font-size:13px}
+  .debug-panel{margin-top:20px;padding:18px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:linear-gradient(135deg,rgba(124,58,237,.05),rgba(219,39,119,.04))}
+  .debug-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+  .debug-head h3{font-size:16px;color:var(--color-primary)}
+  .debug-help{font-size:12px;color:var(--color-text-dim);line-height:1.6;margin-bottom:12px}
+  .debug-actions{display:flex;gap:10px;align-items:flex-end}
+  .debug-actions .form-group{flex:1;margin:0}
+  .debug-result{display:none;margin-top:14px;background:#171421;color:#e9e5f2;border-radius:var(--radius-sm);padding:14px;max-height:320px;overflow:auto;font:12px/1.65 Consolas,Monaco,monospace;white-space:pre-wrap;word-break:break-word}
+  .debug-result.visible{display:block}
+  .debug-status{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--color-bg);color:var(--color-text-dim)}
+  .debug-status.ok{background:#d1fae5;color:#047857}.debug-status.fail{background:#ffe4e6;color:#be123c}
   
   .ai-builder{background:linear-gradient(135deg,rgba(124,58,237,.1),rgba(139,92,246,.1));padding:20px;border-radius:var(--radius-md);margin-bottom:20px;border:1px solid var(--color-border)}
   .ai-builder h3{color:var(--color-primary);margin-bottom:12px}
@@ -121,6 +147,12 @@
   .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center}
   .modal.active{display:flex}
   .modal-content{background:var(--color-elev);padding:24px;border-radius:var(--radius-md);max-width:500px;width:90%;box-shadow:var(--shadow-md)}
+  .modal-content p{color:var(--color-text-dim);line-height:1.7;margin-top:10px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .toast-region{position:fixed;right:20px;bottom:20px;z-index:1200;display:grid;gap:10px;width:min(360px,calc(100vw - 40px))}
+  .toast{padding:12px 14px;border-radius:var(--radius-sm);background:#211a31;color:#fff;box-shadow:var(--shadow-md);animation:toast-in .2s var(--ease-out)}
+  .toast.error{background:#9f1239}.toast.success{background:#047857}
+  @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   
   .import-export{display:flex;gap:12px;margin-top:16px}
   .file-input{display:none}
@@ -128,6 +160,8 @@
   @media(max-width:768px){
     .editor-layout{grid-template-columns:1fr}
     .extension-list{max-height:200px}
+    .header{align-items:flex-start;gap:14px;flex-direction:column}.header-actions{width:100%}.header-actions .btn{flex:1;padding:11px 12px}
+    .debug-actions{align-items:stretch;flex-direction:column}.btn-group{flex-wrap:wrap}.btn-group .btn{flex:1}
   }
 
   /* ---- 内置教程导览（前缀 et） ---- */
@@ -152,10 +186,10 @@
 <div class="container">
   <div class="header">
     <h1>🦋 扩展编辑器</h1>
-    <div class="btn-group">
-      <button class="btn btn-secondary" onclick="window.startEditorTour && startEditorTour()">❓ 教程</button>
-      <button class="btn btn-secondary" onclick="showImportExport()">导入/导出</button>
-      <button class="btn btn-primary" onclick="createNewExtension()">+ 新建扩展</button>
+    <div class="header-actions">
+      <button class="btn btn-secondary" type="button" onclick="window.startEditorTour && startEditorTour()">❓ 教程</button>
+      <button class="btn btn-secondary" type="button" onclick="showImportExport()">导入/导出</button>
+      <button class="btn btn-primary" type="button" onclick="createNewExtension()">+ 添加扩展</button>
     </div>
   </div>
   
@@ -168,7 +202,7 @@
   
   <div class="editor-layout">
     <div class="sidebar">
-      <h3>我的扩展</h3>
+      <div class="sidebar-title"><h3>我的扩展</h3><span class="count-badge" id="extensionCount" aria-label="扩展数量">0</span></div>
       <div class="extension-list" id="extensionList">
         <!-- 扩展列表动态生成 -->
       </div>
@@ -177,6 +211,10 @@
     <div class="main-editor">
       <!-- 可视化编辑器 -->
       <div id="editor-panel">
+        <div class="editor-heading">
+          <div><h2 id="editorTitle">添加扩展</h2><span class="editor-state" id="editorState">填写配置后保存</span></div>
+          <button class="btn btn-secondary" id="toggleExtensionBtn" type="button" onclick="toggleExtension()" style="display:none">停用</button>
+        </div>
         <div class="form-group">
           <label>扩展名称</label>
           <input type="text" id="extName" placeholder="输入扩展名称">
@@ -206,14 +244,27 @@
         </div>
         
         <div class="btn-group">
-          <button class="btn btn-secondary" onclick="testExtension()">测试</button>
-          <button class="btn btn-primary" onclick="saveExtension()">保存</button>
+          <button class="btn btn-primary" id="saveExtensionBtn" type="button" onclick="saveExtension()">添加扩展</button>
+          <button class="btn btn-danger" id="deleteExtensionBtn" type="button" onclick="openDeleteModal()" style="display:none">删除扩展</button>
         </div>
         
         <div class="config-editor">
           <h4>配置预览</h4>
           <pre id="configPreview">{}</pre>
         </div>
+
+        <section class="debug-panel" aria-labelledby="debugTitle">
+          <div class="debug-head"><h3 id="debugTitle">调试运行</h3><span class="debug-status" id="debugStatus">尚未运行</span></div>
+          <p class="debug-help">输入一条模拟用户消息，运行当前表单中的草稿配置；无需先保存，也不会修改线上启用状态。</p>
+          <div class="debug-actions">
+            <div class="form-group">
+              <label for="debugInput">模拟用户输入</label>
+              <input type="text" id="debugInput" placeholder="例如：晚安，今天有点睡不着" maxlength="500">
+            </div>
+            <button class="btn btn-secondary" id="debugRunBtn" type="button" onclick="testExtension()">▶ 开始调试</button>
+          </div>
+          <pre class="debug-result" id="debugResult" tabindex="0" aria-live="polite"></pre>
+        </section>
       </div>
       
       <!-- AI对话构建 -->
@@ -295,6 +346,19 @@
   </div>
 </div>
 
+<div class="modal" id="deleteModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+  <div class="modal-content">
+    <h3 id="deleteModalTitle">删除扩展？</h3>
+    <p>扩展“<strong id="deleteExtensionName"></strong>”将被永久删除，此操作无法撤销。</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" type="button" onclick="closeDeleteModal()">取消</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn" type="button" onclick="deleteExtension()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
 <!-- 导入导出模态框 -->
 <div class="modal" id="importExportModal">
   <div class="modal-content">
@@ -310,8 +374,26 @@
 
 <script>
 let currentExtensionId = null;
+let currentExtension = null;
 let conversationId = null;
 let generatedConfig = null;
+
+async function requestJSON(url, options = {}) {
+  const response = await fetch(url, options);
+  let data = {};
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok) throw new Error(data.error || data.detail || `请求失败 (${response.status})`);
+  return data;
+}
+
+function showToast(message, type = '') {
+  const region = document.getElementById('toastRegion');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`.trim();
+  toast.textContent = message;
+  region.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 3200);
+}
 
 // 页面加载时获取扩展列表
 document.addEventListener('DOMContentLoaded', () => {
@@ -343,7 +425,7 @@ function switchTab(tabName) {
     'smart-gen': '智能生成',
     'ai-builder': 'AI对话',
     'nl-generate': '自然语言',
-    'visual': '可视化'
+    'editor': '可视化'
   };
   document.querySelectorAll('.tab').forEach(tab => {
     if(tab.textContent.includes(labels[tabName] || tabName)) tab.classList.add('active');
@@ -352,33 +434,55 @@ function switchTab(tabName) {
   if(panel) panel.style.display = 'block';
 }
 
-function loadExtensions() {
-  fetch('/api/extensions')
-    .then(res => res.json())
-    .then(data => {
+async function loadExtensions() {
+  try {
+      const data = await requestJSON('/api/extensions');
       const list = document.getElementById('extensionList');
       list.innerHTML = '';
+      const extensions = Array.isArray(data.extensions) ? data.extensions : [];
+      document.getElementById('extensionCount').textContent = extensions.length;
+      if (!extensions.length) {
+        list.innerHTML = '<div class="empty-list">还没有扩展<br>点击“添加扩展”开始创建</div>';
+        return;
+      }
       
-      data.extensions.forEach(ext => {
-        const item = document.createElement('div');
+      extensions.forEach(ext => {
+        const item = document.createElement('button');
+        item.type = 'button';
         item.className = 'extension-item';
         item.dataset.id = ext.id;
-        item.innerHTML = `
-          <h4>${ext.name}</h4>
-          <p>${ext.type} - ${ext.enabled ? '✓' : '✗'}</p>
-        `;
+        if (ext.id === currentExtensionId) item.classList.add('active');
+        item.setAttribute('aria-label', `编辑扩展：${ext.name}`);
+        item.style.width = '100%';
+        item.style.textAlign = 'left';
+        item.style.fontFamily = 'inherit';
+        const row = document.createElement('span');
+        row.className = 'extension-item-row';
+        const copy = document.createElement('span');
+        copy.className = 'extension-item-copy';
+        const name = document.createElement('h4');
+        name.textContent = ext.name;
+        const meta = document.createElement('p');
+        meta.textContent = `${TYPE_LABELS[ext.type] || ext.type} · ${ext.enabled ? '已启用' : '已停用'}`;
+        const dot = document.createElement('span');
+        dot.className = `status-dot${ext.enabled ? ' on' : ''}`;
+        dot.setAttribute('aria-hidden', 'true');
+        copy.append(name, meta);
+        row.append(copy, dot);
+        item.appendChild(row);
         item.onclick = () => loadExtension(ext.id);
         list.appendChild(item);
       });
-    });
+  } catch (err) {
+    showToast('加载扩展失败：' + err.message, 'error');
+  }
 }
 
-function loadExtension(extId) {
+async function loadExtension(extId) {
   currentExtensionId = extId;
-  
-  fetch(`/api/extensions/${extId}`)
-    .then(res => res.json())
-    .then(data => {
+  try {
+      const data = await requestJSON(`/api/extensions/${encodeURIComponent(extId)}`);
+      currentExtension = data;
       document.getElementById('extName').value = data.name;
       document.getElementById('extType').value = data.type;
       document.getElementById('extDescription').value = data.description;
@@ -387,6 +491,8 @@ function loadExtension(extId) {
       updateFormFields();
       loadTypeSpecificConfig(data.config);
       updateConfigPreview();
+      updateManagementState();
+      resetDebugResult();
       
       // 高亮选中项
       document.querySelectorAll('.extension-item').forEach(item => {
@@ -395,7 +501,9 @@ function loadExtension(extId) {
           item.classList.add('active');
         }
       });
-    });
+  } catch (err) {
+    showToast('读取扩展失败：' + err.message, 'error');
+  }
 }
 
 function updateFormFields() {
@@ -466,6 +574,7 @@ function updateFormFields() {
   }
   
   container.innerHTML = html;
+  container.querySelectorAll('input, textarea, select').forEach(el => el.addEventListener('input', updateConfigPreview));
   updateConfigPreview();
 }
 
@@ -505,7 +614,7 @@ function buildConfigObject() {
     type: type,
     description: document.getElementById('extDescription').value,
     priority: parseInt(document.getElementById('extPriority').value) || 10,
-    enabled: true,
+    enabled: currentExtensionId && currentExtension ? Boolean(currentExtension.enabled) : true,
     config: {}
   };
   
@@ -541,53 +650,145 @@ function parseJSONField(fieldId) {
   }
 }
 
-function saveExtension() {
+async function saveExtension() {
   const config = buildConfigObject();
   
   if (!config.name) {
-    alert('请输入扩展名称');
+    showToast('请输入扩展名称', 'error');
+    document.getElementById('extName').focus();
     return;
   }
   
   const url = currentExtensionId ? `/api/extensions/${currentExtensionId}` : '/api/extensions';
   const method = currentExtensionId ? 'PUT' : 'POST';
   
-  fetch(url, {
-    method: method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config)
-  })
-  .then(res => res.json())
-  .then(data => {
-    alert('保存成功！');
+  const btn = document.getElementById('saveExtensionBtn');
+  btn.disabled = true;
+  try {
+    const data = await requestJSON(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
     currentExtensionId = data.id;
-    loadExtensions();
-  })
-  .catch(err => alert('保存失败：' + err.message));
+    currentExtension = data;
+    updateManagementState();
+    await loadExtensions();
+    showToast(method === 'POST' ? '扩展已添加' : '扩展已保存', 'success');
+  } catch (err) {
+    showToast('保存失败：' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
-function testExtension() {
+async function testExtension() {
   const config = buildConfigObject();
-  
-  fetch('/api/extensions/test', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config)
-  })
-  .then(res => res.json())
-  .then(data => {
-    alert('测试结果：' + JSON.stringify(data, null, 2));
-  })
-  .catch(err => alert('测试失败：' + err.message));
+  config.user_input = document.getElementById('debugInput').value.trim();
+  const button = document.getElementById('debugRunBtn');
+  const result = document.getElementById('debugResult');
+  const status = document.getElementById('debugStatus');
+  button.disabled = true;
+  button.textContent = '运行中…';
+  status.className = 'debug-status';
+  status.textContent = '正在运行';
+  result.classList.add('visible');
+  result.textContent = '正在校验配置并执行…';
+  try {
+    const data = await requestJSON('/api/extensions/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    status.className = `debug-status ${data.ok === false ? 'fail' : 'ok'}`;
+    status.textContent = data.ok === false ? '运行失败' : (data.triggered === false ? '未触发' : '运行成功');
+    result.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    status.className = 'debug-status fail';
+    status.textContent = '运行失败';
+    result.textContent = err.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = '▶ 开始调试';
+  }
 }
 
 function createNewExtension() {
   currentExtensionId = null;
+  currentExtension = null;
   document.getElementById('extName').value = '';
   document.getElementById('extDescription').value = '';
   document.getElementById('extPriority').value = 10;
   updateFormFields();
   document.querySelectorAll('.extension-item').forEach(item => item.classList.remove('active'));
+  updateManagementState();
+  resetDebugResult();
+  document.getElementById('extName').focus();
+}
+
+function updateManagementState() {
+  const editing = Boolean(currentExtensionId && currentExtension);
+  document.getElementById('editorTitle').textContent = editing ? '编辑扩展' : '添加扩展';
+  document.getElementById('editorState').textContent = editing ? `ID：${currentExtensionId}` : '填写配置后保存';
+  document.getElementById('saveExtensionBtn').textContent = editing ? '保存修改' : '添加扩展';
+  document.getElementById('deleteExtensionBtn').style.display = editing ? '' : 'none';
+  const toggle = document.getElementById('toggleExtensionBtn');
+  toggle.style.display = editing ? '' : 'none';
+  toggle.textContent = currentExtension?.enabled ? '停用' : '启用';
+}
+
+function resetDebugResult() {
+  const result = document.getElementById('debugResult');
+  result.classList.remove('visible');
+  result.textContent = '';
+  const status = document.getElementById('debugStatus');
+  status.className = 'debug-status';
+  status.textContent = '尚未运行';
+}
+
+async function toggleExtension() {
+  if (!currentExtensionId || !currentExtension) return;
+  const action = currentExtension.enabled ? 'disable' : 'enable';
+  const button = document.getElementById('toggleExtensionBtn');
+  button.disabled = true;
+  try {
+    currentExtension = await requestJSON(`/api/extensions/${encodeURIComponent(currentExtensionId)}/${action}`, { method: 'POST' });
+    updateManagementState();
+    await loadExtensions();
+    showToast(currentExtension.enabled ? '扩展已启用' : '扩展已停用', 'success');
+  } catch (err) {
+    showToast('更新状态失败：' + err.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openDeleteModal() {
+  if (!currentExtensionId || !currentExtension) return;
+  document.getElementById('deleteExtensionName').textContent = currentExtension.name;
+  document.getElementById('deleteModal').classList.add('active');
+  document.getElementById('confirmDeleteBtn').focus();
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').classList.remove('active');
+}
+
+async function deleteExtension() {
+  if (!currentExtensionId) return;
+  const button = document.getElementById('confirmDeleteBtn');
+  button.disabled = true;
+  try {
+    await requestJSON(`/api/extensions/${encodeURIComponent(currentExtensionId)}`, { method: 'DELETE' });
+    closeDeleteModal();
+    createNewExtension();
+    await loadExtensions();
+    showToast('扩展已删除', 'success');
+  } catch (err) {
+    showToast('删除失败：' + err.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // AI对话构建
@@ -901,6 +1102,15 @@ document.getElementById('chatInput').addEventListener('keypress', function(e) {
     sendChatMessage();
   }
 });
+document.getElementById('debugInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') testExtension();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeDeleteModal();
+    closeModal();
+  }
+});
 </script>
 
 <!-- 内置教程导览：首次进入自动触发，头部「❓ 教程」可随时重看 -->
@@ -929,10 +1139,10 @@ var STEPS = [
   {c:true, t:'欢迎来到扩展编辑器', x:'在这里你可以为许墨定制专属扩展——自定义提示词模板、工具链和工作流。全程 1 分钟，教你三种创建方式。'},
   {s:'.tabs', t:'三种创建方式', x:'「可视化编辑」逐项填表单；「AI对话构建」和许墨聊天，他帮你问清需求；「自然语言生成」一句话直接出配置。新手推荐先从自然语言生成试起。', p:'bottom'},
   {s:'#editor-panel .form-group', t:'可视化表单', x:'填写扩展名称、选择类型（提示词模板 / 工具链 / 工作流）、写上描述。切换类型时，下方会自动出现对应的专属字段，比如触发关键词、提示词内容等。', p:'bottom'},
-  {s:'#editor-panel .btn-group', t:'先测试，再保存', x:'「测试」会把当前配置发给后端试跑，直接返回触发效果；确认没问题再点「保存」，扩展立即生效。', p:'top'},
+  {s:'.debug-panel', t:'先调试，再保存', x:'输入一条模拟消息即可运行当前草稿，页面会展示触发状态、输出和执行轨迹；调试不会修改线上启用状态。', p:'top'},
   {s:'.config-editor', t:'配置实时预览', x:'你填的每一项都会实时编译成 JSON 显示在这里，保存的就是这份配置。', p:'top'},
-  {s:'.sidebar', t:'我的扩展', x:'左侧列出你已创建的全部扩展，点击即可载入修改；✓ 表示已启用。右上角「+ 新建扩展」随时清空表单从头创建。', p:'right'},
-  {s:'.header .btn-group', t:'导入与导出', x:'「导入/导出」可以把所有扩展备份成 JSON 文件，换设备时一键还原。', p:'bottom'},
+  {s:'.sidebar', t:'我的扩展', x:'左侧列出全部扩展及启用状态，点击即可载入修改；编辑时还能停用或安全删除。右上角「添加扩展」随时清空表单重新创建。', p:'right'},
+  {s:'.header-actions', t:'添加、导入与导出', x:'「添加扩展」新建配置；「导入/导出」可以把所有扩展备份成 JSON 文件，换设备时一键还原。', p:'bottom'},
   {c:true, t:'一切就绪', x:'去「自然语言生成」页签试试输入一句话，比如「深夜时语气更温柔」，看看 AI 生成的扩展吧。之后随时可点右上角「❓ 教程」重看本指南。'}
 ];
 var idx = 0, active = false, timer = null;

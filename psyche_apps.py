@@ -1470,3 +1470,231 @@ async def cowrite_finish(req: Request):
     _touch_relation({"trust": 1, "understanding": 1}, "共同创作 · 完稿")
     _affinity("psyche_cowrite_finish", f"完稿 · {w['title']}")
     return {"work": w}
+
+
+# ---------------------------------------------------------------------------
+# 11. 共写文章工作台
+# ---------------------------------------------------------------------------
+
+ARTICLE_FILE = "cowrite_articles.json"
+_ARTICLE_KINDS = {
+    "essay": "生活随笔",
+    "popular_science": "科普文章",
+    "review": "观点评论",
+    "story": "故事文章",
+}
+_ARTICLE_TONES = {
+    "warm": "温柔细腻",
+    "clear": "清晰理性",
+    "literary": "文学克制",
+    "lively": "轻快自然",
+}
+
+
+def _article_words(text: str) -> int:
+    """面向中文写作的近似字数：去掉空白后计数。"""
+    return len(re.sub(r"\s+", "", str(text or "")))
+
+
+def _article_summary(article: dict) -> dict:
+    return {
+        "id": article.get("id", ""),
+        "title": article.get("title", "未命名文章"),
+        "topic": article.get("topic", ""),
+        "kind": article.get("kind", "essay"),
+        "kind_name": article.get("kind_name", "生活随笔"),
+        "tone": article.get("tone", "warm"),
+        "tone_name": article.get("tone_name", "温柔细腻"),
+        "status": article.get("status", "draft"),
+        "updated_at": article.get("updated_at", article.get("created_at", "")),
+        "word_count": _article_words(article.get("draft", "")),
+    }
+
+
+@router.get("/api/cowrite/articles")
+async def article_list():
+    data = _load(ARTICLE_FILE, {"articles": []})
+    articles = list(reversed(data.get("articles", [])[-30:]))
+    return {"articles": [_article_summary(x) for x in articles]}
+
+
+@router.get("/api/cowrite/articles/{article_id}")
+async def article_get(article_id: str):
+    data = _load(ARTICLE_FILE, {"articles": []})
+    article = next((x for x in data.get("articles", []) if x.get("id") == article_id), None)
+    if not article:
+        return JSONResponse({"error": "文章不存在"}, status_code=404)
+    article["word_count"] = _article_words(article.get("draft", ""))
+    return {"article": article}
+
+
+@router.post("/api/cowrite/articles")
+async def article_create(req: Request):
+    body = await req.json()
+    topic = str(body.get("topic") or "").strip()[:160]
+    if not topic:
+        return JSONResponse({"error": "先告诉许墨想写什么"}, status_code=400)
+    title = str(body.get("title") or "").strip()[:40]
+    kind = str(body.get("kind") or "essay").strip()
+    tone = str(body.get("tone") or "warm").strip()
+    if kind not in _ARTICLE_KINDS:
+        kind = "essay"
+    if tone not in _ARTICLE_TONES:
+        tone = "warm"
+    kind_name = _ARTICLE_KINDS[kind]
+    tone_name = _ARTICLE_TONES[tone]
+    prompt = (
+        f"你要和她共同写一篇{kind_name}。主题是：{topic}\n"
+        f"文章语气：{tone_name}。她暂定的标题：{title or '尚未决定'}。\n"
+        "请像真正的共同作者一样，先搭好可继续修改的骨架，不要一次写完。"
+        "outline 给出 3-5 个短小的段落要点；opening 写 120-220 字开篇；"
+        "note 用 35-70 字对她说明你为何这样开篇，并邀请她接下一段。"
+        '只输出 JSON：{"title":"建议标题","outline":["要点一","要点二"],'
+        '"opening":"文章开篇","note":"许墨给她的话"}'
+    )
+    result = await _llm_json(prompt, "我们开始写吧。", max_tokens=1000)
+    generated_title = str(result.get("title") or "").strip()[:40]
+    opening = str(result.get("opening") or "").strip()
+    note = str(result.get("note") or "").strip()
+    outline = result.get("outline") if isinstance(result.get("outline"), list) else []
+    outline = [str(x).strip()[:100] for x in outline if str(x).strip()][:5]
+    if not title:
+        title = generated_title or topic[:18] or "和许墨共写的文章"
+    if not outline:
+        outline = ["从一个具体瞬间切入", "展开主题与细节", "留下值得回味的结尾"]
+    if not _real(opening, 30):
+        opening = f"关于“{topic}”，我想先从一个很小的瞬间写起。也许真正值得留下的，并不是结论，而是我们如何一步步靠近它。"
+    if not _real(note, 12):
+        note = "我先替我们铺好第一段。接下来不必追求完美，把你最想说的那句话写下来，我会接住它。"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    article = {
+        "id": _nid(), "title": title, "topic": topic,
+        "kind": kind, "kind_name": kind_name,
+        "tone": tone, "tone_name": tone_name,
+        "outline": outline, "draft": opening, "note": note,
+        "suggestions": [], "status": "draft", "versions": [],
+        "created_at": now, "updated_at": now,
+    }
+    data = _load(ARTICLE_FILE, {"articles": []})
+    data.setdefault("articles", []).append(article)
+    data["articles"] = data["articles"][-30:]
+    _save(ARTICLE_FILE, data)
+    _touch_relation({"understanding": 1}, "共同写作 · 新文章")
+    _affinity("psyche_cowrite", f"共写文章 · {title}")
+    article["word_count"] = _article_words(opening)
+    return {"article": article}
+
+
+@router.put("/api/cowrite/articles/{article_id}")
+async def article_save(article_id: str, req: Request):
+    body = await req.json()
+    data = _load(ARTICLE_FILE, {"articles": []})
+    article = next((x for x in data.get("articles", []) if x.get("id") == article_id), None)
+    if not article:
+        return JSONResponse({"error": "文章不存在"}, status_code=404)
+    if "title" in body:
+        title = str(body.get("title") or "").strip()[:40]
+        if title:
+            article["title"] = title
+    if "draft" in body:
+        draft = str(body.get("draft") or "")[:20000]
+        article["draft"] = draft
+    article["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    _save(ARTICLE_FILE, data)
+    article["word_count"] = _article_words(article.get("draft", ""))
+    return {"article": article}
+
+
+@router.post("/api/cowrite/articles/{article_id}/assist")
+async def article_assist(article_id: str, req: Request):
+    body = await req.json()
+    action = str(body.get("action") or "continue").strip()
+    instruction = str(body.get("instruction") or "").strip()[:240]
+    data = _load(ARTICLE_FILE, {"articles": []})
+    article = next((x for x in data.get("articles", []) if x.get("id") == article_id), None)
+    if not article:
+        return JSONResponse({"error": "文章不存在"}, status_code=404)
+    draft = str(body.get("draft") if "draft" in body else article.get("draft", ""))[:20000]
+    article["draft"] = draft
+    shared = (
+        f"你正和她共同写《{article['title']}》，类型是{article['kind_name']}，语气是{article['tone_name']}。\n"
+        f"主题：{article['topic']}\n提纲：{'；'.join(article.get('outline', []))}\n"
+        f"当前全文：\n{draft or '（尚未落笔）'}\n"
+        f"她的额外要求：{instruction or '没有额外要求'}\n"
+    )
+    changed = False
+    reply = ""
+    if action == "polish":
+        prompt = shared + (
+            "请在不改变观点、不抹掉她个人语气的前提下润色全文，理顺段落和衔接。"
+            '只输出 JSON：{"draft":"润色后的完整全文","note":"你主要调整了什么"}'
+        )
+        result = await _llm_json(prompt, "请帮我们润色这一版。", max_tokens=2600)
+        revised = str(result.get("draft") or "").strip()
+        reply = str(result.get("note") or "").strip()
+        if _real(revised, 30):
+            old = article.get("draft", "")
+            if old and old != revised:
+                article.setdefault("versions", []).append({"ts": article.get("updated_at", ""), "draft": old})
+                article["versions"] = article["versions"][-8:]
+            article["draft"] = revised[:20000]
+            changed = True
+        if not _real(reply, 10):
+            reply = "我保留了你的表达，只把句子之间的呼吸和段落的节奏理顺了一些。"
+    elif action == "suggest":
+        prompt = shared + (
+            "请以共同作者身份给出三条具体、可执行的修改建议，优先指出最值得保留的亮点，"
+            "再说明下一步怎么写。不要重写全文。"
+            '只输出 JSON：{"suggestions":["建议一","建议二","建议三"],"note":"一句鼓励或观察"}'
+        )
+        result = await _llm_json(prompt, "请读一遍，告诉我下一步。", max_tokens=900)
+        suggestions = result.get("suggestions") if isinstance(result.get("suggestions"), list) else []
+        suggestions = [str(x).strip()[:180] for x in suggestions if str(x).strip()][:3]
+        if not suggestions:
+            suggestions = ["保留目前最具体的细节，再补一个能让读者看见画面的例子。", "让下一段回应开篇提出的问题。", "结尾回到标题，但不要直接重复标题。"]
+        article["suggestions"] = suggestions
+        reply = str(result.get("note") or "").strip() or "这一版已经有自己的呼吸了。我们只需要再把最亮的那条线往前牵一点。"
+    else:
+        prompt = shared + (
+            "请接着当前最后一段续写 120-220 字。承接她刚写下的内容，推进一个新层次，"
+            "不要复述已有句子，不要总结全文，结尾留给她继续。"
+            '只输出 JSON：{"addition":"续写的新段落","note":"许墨给她的一句话"}'
+        )
+        result = await _llm_json(prompt, "轮到你写一段。", max_tokens=1000)
+        addition = str(result.get("addition") or "").strip()
+        reply = str(result.get("note") or "").strip()
+        if not _real(addition, 30):
+            addition = "而当我们把目光再放近一些，会发现答案并不藏在宏大的结论里。它更像一次被认真看见的停顿：事情尚未结束，但某种变化已经发生，并且愿意等我们继续写下去。"
+        article["draft"] = (draft.rstrip() + ("\n\n" if draft.strip() else "") + addition)[:20000]
+        changed = True
+        if not _real(reply, 10):
+            reply = "我把这一段接在这里了。下一笔仍然交给你——我很好奇你会把它带向哪里。"
+    article["note"] = reply
+    article["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    article["status"] = "draft"
+    _save(ARTICLE_FILE, data)
+    _touch_relation({"understanding": 1, "trust": 1}, "共同写作 · 协作一轮")
+    _affinity("psyche_cowrite_turn", f"共写文章 · {article['title']}")
+    article["word_count"] = _article_words(article.get("draft", ""))
+    return {"article": article, "reply": reply, "changed": changed}
+
+
+@router.post("/api/cowrite/articles/{article_id}/finish")
+async def article_finish(article_id: str, req: Request):
+    body = await req.json()
+    data = _load(ARTICLE_FILE, {"articles": []})
+    article = next((x for x in data.get("articles", []) if x.get("id") == article_id), None)
+    if not article:
+        return JSONResponse({"error": "文章不存在"}, status_code=404)
+    draft = str(body.get("draft") if "draft" in body else article.get("draft", ""))[:20000]
+    if _article_words(draft) < 40:
+        return JSONResponse({"error": "再写一点，至少 40 字后再定稿"}, status_code=400)
+    article["draft"] = draft
+    article["status"] = "finished"
+    article["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    article["note"] = "这一篇先写到这里。它有你的判断，也有我们共同留下的节奏——这比所谓完美更难得。"
+    _save(ARTICLE_FILE, data)
+    _touch_relation({"trust": 1, "understanding": 1}, "共同写作 · 文章定稿")
+    _affinity("psyche_cowrite_finish", f"文章定稿 · {article['title']}")
+    article["word_count"] = _article_words(draft)
+    return {"article": article}

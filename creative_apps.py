@@ -1059,3 +1059,70 @@ async def bsfile_unlock(req: Request):
     return {"file": {**arch, "unlocked": True, "unlocked_at": rec["ts"], "text": text,
                      "image": rec.get("image", "")},
             "cached": False, "affinity": info}
+
+
+# ---------------------------------------------------------------------------
+# 一起画画：许墨根据共同画布的主题与回合给出即时回应
+# ---------------------------------------------------------------------------
+
+CODRAW_THEMES = {
+    "butterfly": "蝶与花",
+    "ginkgo": "银杏小径",
+    "stars": "星空实验",
+    "free": "自由画",
+}
+
+CODRAW_FALLBACKS = {
+    "butterfly": [
+        "我把蝶翼停在你的线条旁边了。没有完全重合——这样它们才像是在彼此靠近。",
+        "你画出的方向很轻。我替它添了一侧翅膀，另一侧的风，留给你。",
+    ],
+    "ginkgo": [
+        "这片叶子落得比预想中慢。也许是因为，它知道有人会把这一刻画下来。",
+        "我添了一点金色。秋天并不只意味着告别，也可以是我们共同保存的光。",
+    ],
+    "stars": [
+        "我在你的轨迹旁标了一颗星。实验结论暂时只有一个：它靠近你时会更亮。",
+        "星星的位置并非随机。至少这一颗，是我有意放在你身边的。",
+    ],
+    "free": [
+        "我顺着你的节奏补了一条线。接下来不用解释，继续画给我看就好。",
+        "画面开始有了自己的呼吸。我没有替你完成它，只是留下了可以继续的方向。",
+    ],
+}
+
+
+@router.post("/api/codraw/respond")
+async def codraw_respond(req: Request):
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+    theme = str(body.get("theme") or "free").strip()
+    if theme not in CODRAW_THEMES:
+        theme = "free"
+    try:
+        strokes = max(0, min(999, int(body.get("strokes") or 0)))
+        turn = max(1, min(99, int(body.get("turn") or 1)))
+    except (TypeError, ValueError):
+        strokes, turn = 0, 1
+
+    prompt = _system_prompt() + f"""
+
+【当前场景：一起画画】你正与她在同一张画布上轮流作画。
+主题是「{CODRAW_THEMES[theme]}」，画面目前约有 {strokes} 笔，这是你第 {turn} 次接画。
+你刚刚已经在她的线条旁补上了一笔。请以许墨的口吻对她说一句 28-58 字的话：
+- 观察细腻、温柔克制，像真的在看两个人共同完成的画；
+- 可以含一点自然的暧昧或科学意象，但不要每次都谈爱情；
+- 不要声称看见具体物体、颜色或构图，因为你只知道主题和笔数；
+- 不加引号、标题、括号或动作描写，只输出他说的话。"""
+    try:
+        text = (await _call_llm([{"role": "user", "content": prompt}], max_tokens=120)).strip()
+        text = re.sub(r"^[\"“]|[\"”]$", "", text).strip()
+        if not text:
+            raise RuntimeError("empty codraw response")
+        return {"text": text[:120], "theme": theme, "turn": turn}
+    except Exception as e:
+        print(f"[warn] creative_apps.py:codraw_respond: {type(e).__name__} {str(e)[:150]}", flush=True)
+        return {"text": random.choice(CODRAW_FALLBACKS[theme]), "theme": theme,
+                "turn": turn, "fallback": True}

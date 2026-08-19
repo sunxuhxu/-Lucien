@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """测试AI自定义扩展功能"""
 import json
+import asyncio
 import sys
 from pathlib import Path
 
@@ -126,6 +127,34 @@ def test_extension_functions():
         print(f"❌ 扩展功能测试失败: {e}")
         return False
 
+def test_draft_prompt_debug():
+    """草稿调试只能运行当前配置，不能混入已保存扩展。"""
+    try:
+        from extensions_apps import _run_extension_test
+
+        draft = {
+            "name": "草稿调试",
+            "type": "prompt_template",
+            "config": {
+                "trigger": "keyword",
+                "trigger_pattern": "晚安",
+                "inject_position": "system_suffix",
+                "content": "请用温柔短句回应。",
+            },
+        }
+        hit = asyncio.run(_run_extension_test(draft, "晚安"))
+        miss = asyncio.run(_run_extension_test(draft, "早上好"))
+        assert hit["triggered"] is True
+        assert "草稿调试" in hit["injection"]
+        assert miss["triggered"] is False
+        assert miss["injection"] == ""
+        assert isinstance(hit["trace"], list)
+        print("✅ 草稿扩展调试结果与触发条件一致")
+        return True
+    except Exception as e:
+        print(f"❌ 草稿扩展调试测试失败: {e}")
+        return False
+
 def test_frontend_files():
     """测试前端文件"""
     try:
@@ -139,11 +168,14 @@ def test_frontend_files():
             # 检查关键内容
             content = extension_editor.read_text(encoding="utf-8")
             key_elements = [
-                "extension_editor",
+                "扩展编辑器",
                 "ai-builder",
                 "nl-generate",
                 "generateFromNL",
-                "startAIConversation"
+                "startAIConversation",
+                "deleteExtension",
+                "debugResult",
+                "toggleExtension"
             ]
             
             for element in key_elements:
@@ -172,6 +204,7 @@ def main():
         ("自然语言生成测试", test_natural_language_generation),
         ("AI对话构建测试", test_ai_builder_conversation),
         ("扩展功能测试", test_extension_functions),
+        ("草稿调试测试", test_draft_prompt_debug),
         ("前端文件测试", test_frontend_files)
     ]
     
