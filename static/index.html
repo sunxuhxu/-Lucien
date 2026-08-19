@@ -17947,7 +17947,7 @@ $('mxSave').addEventListener('click', function(){
   homeA.id = 'xumoHomeA';
   homeA.innerHTML =
     '<div class="xa-scene"></div>' +
-    '<img class="xa-char" data-scene="immerse" src="/charimg?scene=immerse&v=' + (window.__charimgVersion || 1) + '" alt="许墨" draggable="false">' +
+    '<img class="xa-char" data-scene="immerse" src="/charimg?scene=immerse&v=' + (window.__charimgVersion || 1) + '" alt="许墨" draggable="false" onerror="this.onerror=null;this.src=\'/static/home_xumo/home_cutout.png\'">' +
     '<div class="xa-card">' +
       '<img class="xa-avatar" src="/avatar?v=3" alt="" onerror="this.style.display=\'none\'">' +
       '<div class="xa-hi" id="xaHi">晚上好，我在。</div>' +
@@ -24672,8 +24672,8 @@ window.closeTutorial = closeTutorial;
 </script>
 
 <!-- ===== 聊天窗口拖拽缩放：所有聊天窗口可拖动、拉角放大缩小（双击 ⠿ 或 ⟲ 还原，Esc 全部还原） ===== -->
-<link rel="stylesheet" href="/static/premium-ui.css?v=2">
-<script src="/static/premium-ui.js?v=2" defer></script>
+<link rel="stylesheet" href="/static/premium-ui.css?v=5">
+<script src="/static/premium-ui.js?v=5" defer></script>
 <script src="/static/chat-window-kit.js"></script>
 <script>
 ChatWinKit.attachAll(['.chat-panel', '#smsPage', '#caChat', '#wkChat', '#lsChat', '#svChat', '#rdcChat']);
