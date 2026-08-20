@@ -1486,7 +1486,7 @@ body.app-open{ overflow:hidden }
 }
 
 /* —— 模式切换条：可收起为小胶囊（宽屏默认收起，点击 ✦ 展开） —— */
-#xumoModeSw .xa-sw-toggle{display:none;align-items:center;justify-content:center;width:26px;min-height:26px;border:none;border-radius:8px;background:transparent;color:inherit;font-size:13px;cursor:pointer;font-family:inherit}
+#xumoModeSw .xa-sw-toggle{display:none;align-items:center;justify-content:center;min-width:52px;min-height:32px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:inherit;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 #xumoModeSw .xa-sw-toggle:hover{background:rgba(124,58,237,.14)}
 #xumoModeSw.xa-collapsed{gap:0;padding:3px}
 #xumoModeSw.xa-collapsed .xumo-sw-label{display:none}
@@ -11497,15 +11497,17 @@ function charimgBustAllImgs(){
     if (!activeId){
       img.removeAttribute('src');
       img.style.display = 'none';
+      img.style.visibility = 'hidden';
       return;
     }
-    img.onload = function(){ img.style.display = ''; };
-    img.onerror = function(){ img.style.display = 'none'; };
+    img.onload = function(){ img.style.display = ''; img.style.visibility = 'visible'; };
+    img.onerror = function(){ img.style.display = 'none'; img.style.visibility = 'hidden'; };
     img.src = '/charimg?scene=' + s + '&v=' + v;
   });
   // 同步给 mode A 沉浸场景的字符串模板用
   window.__charimgVersion = v;
 }
+window.charimgBustAllImgs = charimgBustAllImgs;
 
 function charimgRenderCurrent(){
   var scene = charimgState.currentScene;
@@ -19755,7 +19757,7 @@ $('mxSave').addEventListener('click', function(){
   homeA.id = 'xumoHomeA';
   homeA.innerHTML =
     '<div class="xa-scene"></div>' +
-    '<img class="xa-char" data-scene="immerse" alt="许墨" draggable="false" style="display:none">' +
+    '<img class="xa-char" data-scene="immerse" alt="" draggable="false" style="display:none;visibility:hidden">' +
     '<div class="xa-card">' +
       '<img class="xa-avatar" src="/avatar?v=3" alt="" onerror="this.style.display=\'none\'">' +
       '<div class="xa-hi" id="xaHi">晚上好，我在。</div>' +
@@ -19770,7 +19772,7 @@ $('mxSave').addEventListener('click', function(){
       '<button type="button" data-act="bgcar" title="沉浸背景轮播开/关"><i>🖼</i><span>背景轮播</span></button>' +
     '</div>';
   document.body.appendChild(homeA);
-  charimgBustAllImgs();
+  if(typeof window.charimgBustAllImgs === 'function') window.charimgBustAllImgs();
 
   var homeB = document.createElement('div');
   homeB.id = 'xumoHomeB';
@@ -21493,12 +21495,12 @@ body.mode-a .xa-vignette{opacity:1}
     var toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'xa-sw-toggle';
-    toggle.textContent = '✦';
+    toggle.textContent = '模式';
     toggle.title = '展开 / 收起模式切换';
     toggle.setAttribute('aria-label', '展开或收起模式切换');
     sw.insertBefore(toggle, sw.firstChild);
 
-    function canCollapse(){ return true; }
+    function canCollapse(){ return window.matchMedia('(max-width:1020px)').matches; }
     function setCollapsed(on){ sw.classList.toggle('xa-collapsed', on); if(on) sw.classList.remove('xa-pop'); }
     setCollapsed(canCollapse());
 
@@ -26780,7 +26782,7 @@ window.xumoOpenModeApps=openPicker;
 </script>
 
 <!-- ===== 聊天窗口拖拽缩放：所有聊天窗口可拖动、拉角放大缩小（双击 ⠿ 或 ⟲ 还原，Esc 全部还原） ===== -->
-<link rel="stylesheet" href="/static/premium-ui.css?v=14">
+<link rel="stylesheet" href="/static/premium-ui.css?v=16">
 <link rel="stylesheet" href="/static/immersive-dashboard.css?v=12">
 <script src="/static/premium-ui.js?v=13" defer></script>
 <script src="/static/chat-window-kit.js"></script>
@@ -26790,7 +26792,11 @@ ChatWinKit.attachAll(['.chat-panel', '#smsPage', '#caChat', '#wkChat', '#lsChat'
 <script src="/static/coze-restore.js?v=2"></script>
 <link rel="stylesheet" href="/static/free-canvas.css?v=10">
 <script src="/static/free-canvas.js?v=8"></script>
-<link rel="stylesheet" href="/static/user-account.css?v=4">
-<script src="/static/user-account.js?v=3" defer></script>
+<link rel="stylesheet" href="/static/user-account.css?v=6">
+<script src="/static/user-account.js?v=4" defer></script>
+<link rel="stylesheet" href="/static/mobile-adapt.css?v=6">
+<script src="/static/mobile-adapt.js?v=6" defer></script>
+<link rel="stylesheet" href="/static/global-bgm.css?v=1">
+<script src="/static/global-bgm.js?v=1" defer></script>
 </body>
 </html>

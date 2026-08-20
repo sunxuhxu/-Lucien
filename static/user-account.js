@@ -29,8 +29,17 @@
       var width=Math.ceil(shell.querySelector('.xumo-account-trigger').getBoundingClientRect().width||44);
       document.documentElement.style.setProperty('--xumo-account-trigger-width',width+'px');
     }
+    function syncHeaderClearance(){
+      var mode=document.getElementById('xumoModeSw');
+      if(!mode||window.innerWidth<=640){document.documentElement.style.removeProperty('--xumo-account-top');return;}
+      var rect=mode.getBoundingClientRect();
+      if(rect.height>0)document.documentElement.style.setProperty('--xumo-account-top',Math.ceil(rect.bottom+8)+'px');
+    }
     syncTriggerWidth();
+    syncHeaderClearance();
     if(window.ResizeObserver){try{new ResizeObserver(syncTriggerWidth).observe(shell);}catch(e){}}
+    if(window.ResizeObserver){try{new ResizeObserver(syncHeaderClearance).observe(document.getElementById('xumoModeSw'));}catch(e){}}
+    window.addEventListener('resize',syncHeaderClearance,{passive:true});
     var trigger=shell.querySelector('.xumo-account-trigger'),logout=shell.querySelector('.xumo-account-logout'),live=shell.querySelector('.xumo-account-live');
     trigger.addEventListener('click',function(){var open=shell.dataset.open!=='true';shell.dataset.open=String(open);trigger.setAttribute('aria-expanded',String(open));if(open)setTimeout(function(){shell.querySelector('[role="menuitem"]').focus();},0);});
     document.addEventListener('click',function(e){if(!shell.contains(e.target))close(shell,trigger);});

@@ -1,0 +1,123 @@
+#xumo-global-bgm {
+  --bgm-accent: #8b5cf6;
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 100050;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(324px, calc(100vw - 36px));
+  min-height: 62px;
+  padding: 9px 12px 9px 9px;
+  color: #f8f7ff;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(35,25,55,.92), rgba(67,43,94,.9));
+  box-shadow: 0 14px 42px rgba(29,16,48,.28);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  font-family: inherit;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+#xumo-global-bgm.bgm-loading { opacity: .72; }
+#xumo-global-bgm.bgm-error { display: none; }
+
+#xumo-global-bgm .bgm-play {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, #a78bfa, var(--bgm-accent));
+  box-shadow: 0 5px 18px rgba(139,92,246,.42);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#xumo-global-bgm button svg {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#xumo-global-bgm .bgm-play:focus-visible,
+#xumo-global-bgm .bgm-mute:focus-visible,
+#xumo-global-bgm input:focus-visible {
+  outline: 2px solid #ddd6fe;
+  outline-offset: 2px;
+}
+
+#xumo-global-bgm .bgm-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#xumo-global-bgm .bgm-title,
+#xumo-global-bgm .bgm-artist {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#xumo-global-bgm .bgm-title { font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+#xumo-global-bgm .bgm-artist { margin-top: 3px; color: rgba(248,247,255,.72); font-size: 12px; }
+
+#xumo-global-bgm .bgm-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+#xumo-global-bgm .bgm-mute {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#xumo-global-bgm .bgm-mute:hover { background: rgba(255,255,255,.1); }
+
+#xumo-global-bgm input[type="range"] {
+  width: 62px;
+  height: 44px;
+  accent-color: #c4b5fd;
+  cursor: pointer;
+}
+
+#xumo-global-bgm button:active { opacity: .68; }
+
+body.mobile-shell-active #xumo-global-bgm {
+  bottom: calc(var(--mobile-tab-total, 64px) + 10px);
+}
+
+@media (max-width: 640px) {
+  #xumo-global-bgm {
+    left: max(10px, env(safe-area-inset-left));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: min(290px, calc(100vw - 20px));
+    min-height: 60px;
+    border-radius: 16px;
+  }
+  #xumo-global-bgm input[type="range"] { width: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #xumo-global-bgm,
+  #xumo-global-bgm .bgm-play { transition: none; animation: none; }
+}

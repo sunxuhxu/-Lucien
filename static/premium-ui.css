@@ -1133,7 +1133,7 @@ body.mode-a #xumoHomeA .xa-actions button span { color: inherit; font-size: 9px;
 
 /* Navigation switch: compact, consistent and legible. */
 #xumoModeSw {
-  z-index: 99995 !important;
+  z-index: 100011 !important;
   border-color: rgba(255,255,255,.72) !important;
   border-radius: 15px !important;
   background: rgba(255,255,255,.72) !important;
@@ -1141,9 +1141,10 @@ body.mode-a #xumoHomeA .xa-actions button span { color: inherit; font-size: 9px;
   backdrop-filter: blur(20px) saturate(1.08) !important;
   -webkit-backdrop-filter: blur(20px) saturate(1.08) !important;
 }
-#xumoModeSw.xa-pop { z-index: 99995 !important; }
-#xumoModeSw button { border-radius: 11px !important; }
+#xumoModeSw.xa-pop { z-index: 100011 !important; }
+#xumoModeSw button { border-radius: 11px !important; color: #5d536d !important; }
 #xumoModeSw button.on, #xumoModeSw button[aria-pressed="true"] { background: var(--ui-gradient-brand) !important; box-shadow: 0 5px 14px rgba(85,52,132,.28) !important; }
+#xumoModeSw button.on, #xumoModeSw button[aria-pressed="true"] { color: #fff !important; }
 
 /* B mode keeps global mode/device controls fixed at the upper-right. Reserve
    their vertical footprint so the companion card starts below them. */
